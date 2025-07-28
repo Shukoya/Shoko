@@ -261,8 +261,8 @@ module EbookReader
       [
         '',
         'Navigation Keys:',
-        '  j / ↓     Scroll down',
-        '  k / ↑     Scroll up',
+        '  j / ↓     Scroll down (page in Dynamic mode)',
+        '  k / ↑     Scroll up (page in Dynamic mode)',
         '  l / →     Next page',
         '  h / ←     Previous page',
         '  SPACE     Next page',

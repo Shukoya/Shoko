@@ -71,7 +71,9 @@ module EbookReader
     end
 
     def scroll_down
-      if @config.view_mode == :split
+      if @config.page_numbering_mode == :dynamic
+        next_page
+      elsif @config.view_mode == :split
         @left_page = [@left_page + 1, @max_page || 0].min
         @right_page = [@right_page + 1, @max_page || 0].min
       else
@@ -80,7 +82,9 @@ module EbookReader
     end
 
     def scroll_up
-      if @config.view_mode == :split
+      if @config.page_numbering_mode == :dynamic
+        prev_page
+      elsif @config.view_mode == :split
         @left_page = [@left_page - 1, 0].max
         @right_page = [@right_page - 1, 0].max
       else

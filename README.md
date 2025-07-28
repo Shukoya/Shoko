@@ -86,8 +86,8 @@ On first run, the application will:
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `j` / `↓` | Scroll down | Move down one line |
-| `k` / `↑` | Scroll up | Move up one line |
+| `j` / `↓` | Scroll down | Move down one line (page in Dynamic mode) |
+| `k` / `↑` | Scroll up | Move up one line (page in Dynamic mode) |
 | `l` / `→` / `Space` | Next page | Go to next page |
 | `h` / `←` | Previous page | Go to previous page |
 | `n` | Next chapter | Jump to next chapter |
@@ -139,7 +139,7 @@ Configuration is stored in `~/.config/Reader/config.json`:
 - **show_page_numbers**: `true` or `false` - Display page numbers
 - **line_spacing**: `"compact"`, `"normal"`, or `"relaxed"` - Line spacing
 - **highlight_quotes**: `true` or `false` - Highlight quoted text
-- **page_numbering_mode**: `"absolute"` or `"dynamic"` - Page numbering strategy
+- **page_numbering_mode**: `"absolute"` or `"dynamic"` - Page numbering strategy. In `dynamic` mode, navigation keys jump by full pages.
 
 ## Architecture
 

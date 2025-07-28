@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Input handling race conditions
 - Error recovery in corrupted EPUB files
 - Consistent error handling patterns
+- Dynamic page numbering now advances pages without manual scrolling
 
 ### Security
 - Added input validation for all file paths
