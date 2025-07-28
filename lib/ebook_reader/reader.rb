@@ -217,7 +217,7 @@ module EbookReader
     def enter_copy_mode
       @copy_mode = true
       draw_screen
-      Terminal.read_key
+      Terminal.read_key_blocking
     ensure
       @copy_mode = false
       draw_screen

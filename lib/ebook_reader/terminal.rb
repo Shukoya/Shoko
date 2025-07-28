@@ -158,6 +158,15 @@ module EbookReader
         nil # No input available
       end
 
+      def read_key_blocking
+        loop do
+          key = read_key
+          return key if key
+
+          IO.select([$stdin])
+        end
+      end
+
       private
 
       def setup_signal_handlers

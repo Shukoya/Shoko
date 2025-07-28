@@ -23,7 +23,7 @@ RSpec.describe EbookReader::Reader, 'copy mode' do
   end
 
   it 'shows the indicator and waits for input' do
-    allow(EbookReader::Terminal).to receive(:read_key).and_return('x')
+    allow(EbookReader::Terminal).to receive(:read_key_blocking).and_return('x')
     expect(EbookReader::Terminal).to receive(:write).with(24, 1, /copy mode activated!/i)
     reader.enter_copy_mode
     expect(reader.instance_variable_get(:@copy_mode)).to be false
