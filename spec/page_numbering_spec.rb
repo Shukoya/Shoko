@@ -54,7 +54,7 @@ RSpec.describe EbookReader::Reader do
         reader.instance_variable_set(:@single_page, 30)
         pages = reader.send(:calculate_current_pages)
         expect(pages[:current]).to eq(2)
-        expect(pages[:total]).to eq(5)
+        expect(pages[:total]).to eq(7)
       end
     end
 

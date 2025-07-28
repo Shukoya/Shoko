@@ -67,8 +67,8 @@ module EbookReader
     def calculate_global_page_position(lines_per_page)
       return 1 if @dynamic_page_map.nil? || @dynamic_page_map.empty?
 
-      # Get current line offset within chapter
-      current_line_offset = @config.view_mode == :split ? @left_page : @single_page
+      # Use the single page offset for consistency across view modes
+      current_line_offset = @single_page
 
       # Calculate total lines before current chapter
       lines_before = @dynamic_chapter_starts[@current_chapter] || 0

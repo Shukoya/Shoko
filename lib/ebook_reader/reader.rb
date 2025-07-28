@@ -101,7 +101,7 @@ module EbookReader
       return unless chapter
 
       wrapped = wrap_lines(chapter.lines || [], col_width)
-      max_page = [wrapped.size - content_height, 0].max
+      max_page = calculate_last_page_start(wrapped.size, content_height)
 
       if @config.view_mode == :split
         handle_split_next_page(max_page, content_height)
@@ -135,7 +135,7 @@ module EbookReader
       return unless chapter
 
       wrapped = wrap_lines(chapter.lines || [], col_width)
-      max_page = [wrapped.size - content_height, 0].max
+      max_page = calculate_last_page_start(wrapped.size, content_height)
 
       if @config.view_mode == :split
         @right_page = max_page
@@ -360,12 +360,18 @@ module EbookReader
 
     def get_layout_metrics(width, height)
       col_width = if @config.view_mode == :split
-                    [(width - 3) / 2, MIN_COLUMN_WIDTH].max
-                  else
-                    (width * 0.9).to_i.clamp(30, 120)
-                  end
+                     [(width - 3) / 2, MIN_COLUMN_WIDTH].max
+                   else
+                     (width * 0.9).to_i.clamp(30, 120)
+                   end
       content_height = [height - 2, 1].max
       [col_width, content_height]
+    end
+
+    def calculate_last_page_start(total_lines, lines_per_page)
+      return 0 if total_lines <= lines_per_page
+
+      ((total_lines - 1) / lines_per_page) * lines_per_page
     end
 
     def load_progress
@@ -553,7 +559,7 @@ module EbookReader
       col_width, content_height = get_layout_metrics(width, height)
       content_height = adjust_for_line_spacing(content_height)
       wrapped = wrap_lines(chapter.lines, col_width)
-      max_page = [wrapped.size - content_height, 0].max
+      max_page = calculate_last_page_start(wrapped.size, content_height)
 
       if @config.view_mode == :split
         @right_page = max_page
