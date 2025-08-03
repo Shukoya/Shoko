@@ -9,6 +9,7 @@ module EbookReader
 
       class SettingsScreen
         include UI::SettingsDefinitions
+
         def initialize(config, scanner)
           @config = config
           @scanner = scanner

@@ -28,7 +28,7 @@ module EbookReader
           path: @reader.path,
           chapter: @reader.current_chapter,
           line_offset: line_offset,
-          text: text_snippet,
+          text: text_snippet
         )
       end
 

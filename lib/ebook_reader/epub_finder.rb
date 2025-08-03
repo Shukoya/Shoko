@@ -109,22 +109,22 @@ module EbookReader
       end
 
       def priority_directories
-        %w[
-          ~/Books
-          ~/Documents/Books
-          ~/Downloads
-          ~/Desktop
-          ~/Documents
-          ~/Library/Mobile\ Documents
+        [
+          '~/Books',
+          '~/Documents/Books',
+          '~/Downloads',
+          '~/Desktop',
+          '~/Documents',
+          '~/Library/Mobile Documents',
         ].map { |dir| File.expand_path(dir) }
       end
 
       def other_directories
-        %w[
-          ~
-          ~/Dropbox
-          ~/Google\ Drive
-          ~/OneDrive
+        [
+          '~',
+          '~/Dropbox',
+          '~/Google Drive',
+          '~/OneDrive',
         ].map { |dir| File.expand_path(dir) }
       end
 

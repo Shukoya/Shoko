@@ -1,9 +1,12 @@
 # frozen_string_literal: true
 
+require_relative 'helpers/column_drawer'
+
 module EbookReader
   # Module containing display-related Reader methods
   module ReaderDisplay
     include Helpers::ColumnDrawer
+
     HELP_LINES = [
       '',
       'Navigation Keys:',
@@ -122,6 +125,7 @@ module EbookReader
 
     def invalid_page_calculation?(actual_height, width, height)
       return true if actual_height <= 0
+
       update_page_map(width, height) if size_changed?(width, height) || @page_map.empty?
       !@total_pages.positive?
     end
@@ -249,7 +253,8 @@ module EbookReader
       displayable_lines = adjust_for_line_spacing(content_height)
       wrapped = wrap_lines(chapter.lines || [], col_width)
       lines_in_page = extract_lines_in_page(wrapped, displayable_lines)
-      build_setup_hash(lines_in_page, wrapped, col_width, col_start, content_height, displayable_lines)
+      build_setup_hash(lines_in_page, wrapped, col_width, col_start, content_height,
+                       displayable_lines)
     end
 
     def build_setup_hash(lines, wrapped, col_width, col_start, content_height, displayable)
@@ -283,7 +288,7 @@ module EbookReader
                                                                 height: setup[:displayable_lines]),
         content: Models::ColumnDrawingParams::Content.new(lines: setup[:wrapped],
                                                           offset: @single_page,
-                                                          show_page_num: false),
+                                                          show_page_num: false)
       )
     end
 
@@ -315,7 +320,9 @@ module EbookReader
       line_count = 0
       (start_offset...end_offset).each do |line_idx|
         break if line_count >= actual_height
-        line_count = draw_spaced_line(lines[line_idx] || '', start_row, start_col, width, line_count)
+
+        line_count = draw_spaced_line(lines[line_idx] || '', start_row, start_col, width,
+                                      line_count)
       end
     end
 

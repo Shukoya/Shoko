@@ -84,9 +84,7 @@ module EbookReader
       SIZE_CACHE_INTERVAL = 0.5
 
       def size
-        if cache_expired?
-          update_size_cache
-        end
+        update_size_cache if cache_expired?
 
         [@size_cache[:height], @size_cache[:width]]
       end
@@ -118,6 +116,8 @@ module EbookReader
         [Constants::TerminalConstants::DEFAULT_ROWS,
          Constants::TerminalConstants::DEFAULT_COLUMNS]
       end
+
+      public
 
       def clear
         print [ANSI::Control::CLEAR, ANSI::Control::HOME].join
@@ -194,9 +194,12 @@ module EbookReader
         nil
       end
 
+      private
+
       def validate_console
         console = IO.console
         raise EbookReader::TerminalUnavailableError unless console
+
         console
       end
 
@@ -216,6 +219,8 @@ module EbookReader
 
         input
       end
+
+      public
 
       def read_key_blocking
         loop do

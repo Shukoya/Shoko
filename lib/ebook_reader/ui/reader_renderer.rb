@@ -31,7 +31,7 @@ module EbookReader
       end
 
       def render_standard_header(width)
-        Terminal.write(1, 1, WHITE + 'Reader' + RESET)
+        Terminal.write(1, 1, "#{WHITE}Reader#{RESET}")
         right_text = 'q:Quit ?:Help t:ToC B:Bookmarks'
         Terminal.write(1, [width - right_text.length + 1, 1].max,
                        WHITE + right_text + RESET)
@@ -45,8 +45,6 @@ module EbookReader
           render_split_view_footer(height, width, doc, chapter, view_mode, line_spacing, bookmarks)
         end
       end
-
-      private
 
       def render_single_view_footer(height, width, pages)
         return unless @config.show_page_numbers && pages[:total].positive?

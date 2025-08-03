@@ -80,8 +80,6 @@ module EbookReader
       end
     end
 
-    private
-
     def extract_entry(zip, entry, tmpdir)
       dest = prepare_destination(entry, tmpdir)
       return if File.exist?(dest)
@@ -105,6 +103,7 @@ module EbookReader
 
     def handle_rubyzip_compatibility(zip, entry, dest, error)
       raise unless error.message.include?('wrong number of arguments')
+
       zip.extract(entry, dest) { true }
     end
 

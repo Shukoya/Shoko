@@ -255,10 +255,10 @@ module EbookReader
 
     def handle_character_input(key)
       char = key.to_s
-      if char.length == 1 && char.ord >= 32
-        @file_input += char
-        @open_file_screen.input = @file_input
-      end
+      return unless char.length == 1 && char.ord >= 32
+
+      @file_input += char
+      @open_file_screen.input = @file_input
     end
 
     def handle_setting_change(key)

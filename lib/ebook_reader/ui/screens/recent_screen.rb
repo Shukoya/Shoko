@@ -70,7 +70,7 @@ module EbookReader
             list_start: list_start,
             height: height,
             width: width,
-            selected_index: @selected,
+            selected_index: @selected
           )
         end
 

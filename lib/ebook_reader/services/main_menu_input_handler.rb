@@ -77,9 +77,10 @@ module EbookReader
       end
 
       def browse_input_handlers
-        @browse_handlers ||= base_browse_handlers
-                             .merge(cursor_handlers)
-                             .merge(backspace_handlers)
+        @browse_input_handlers ||= begin
+          merged = base_browse_handlers.merge(cursor_handlers)
+          merged.merge(backspace_handlers)
+        end
       end
 
       def base_browse_handlers
@@ -109,11 +110,11 @@ module EbookReader
       end
 
       def backspace_handlers
-        {
-          "\b" => -> { handle_backspace },
-          "\x7F" => -> { handle_backspace },
-          "\x08" => -> { handle_backspace },
-        }
+        backspace_keys.to_h { |k| [k, -> { handle_backspace }] }
+      end
+
+      def backspace_keys
+        ["\b", "\x7F"]
       end
 
       def reset_search
@@ -137,7 +138,7 @@ module EbookReader
         selected = handle_navigation_keys(
           key,
           @menu.instance_variable_get(:@browse_selected),
-          recent.length - 1,
+          recent.length - 1
         )
         @menu.instance_variable_set(:@browse_selected, selected)
       end
@@ -172,14 +173,15 @@ module EbookReader
       end
 
       def handle_setting_change(key)
-        case key
-        when '1' then @menu.send(:toggle_view_mode)
-        when '2' then @menu.send(:toggle_page_numbers)
-        when '3' then @menu.send(:cycle_line_spacing)
-        when '4' then @menu.send(:toggle_highlight_quotes)
-        when '5' then @menu.send(:clear_cache)
-        when '6' then @menu.send(:toggle_page_numbering_mode)
-        end
+        actions = {
+          '1' => :toggle_view_mode,
+          '2' => :toggle_page_numbers,
+          '3' => :cycle_line_spacing,
+          '4' => :toggle_highlight_quotes,
+          '5' => :clear_cache,
+          '6' => :toggle_page_numbering_mode,
+        }
+        @menu.send(actions[key]) if actions[key]
       end
 
       def searchable_key?(key)

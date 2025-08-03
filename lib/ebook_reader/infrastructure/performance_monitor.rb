@@ -96,8 +96,6 @@ module EbookReader
           @metrics = nil
         end
 
-        private
-
         # Get current memory usage in bytes
         #
         # @return [Integer] Memory usage

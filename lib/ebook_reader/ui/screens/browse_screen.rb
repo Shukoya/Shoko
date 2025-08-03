@@ -56,7 +56,7 @@ module EbookReader
         end
 
         def status_formatters
-          @formatters ||= {
+          @status_formatters ||= {
             scanning: ->(msg) { "#{YELLOW}⟳ #{msg}#{RESET}" },
             error: ->(msg) { "#{RED}✗ #{msg}#{RESET}" },
             done: ->(msg) { "#{GREEN}✓ #{msg}#{RESET}" },

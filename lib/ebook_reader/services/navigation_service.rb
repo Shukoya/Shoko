@@ -76,10 +76,10 @@ module EbookReader
         return unless can_go_to_next_chapter?
 
         target_page_index = find_chapter_start_page(@reader.current_chapter + 1)
-        if target_page_index
-          @reader.current_page_index = target_page_index
-          @reader.current_chapter += 1
-        end
+        return unless target_page_index
+
+        @reader.current_page_index = target_page_index
+        @reader.current_chapter += 1
       end
 
       def next_chapter_absolute
@@ -110,10 +110,10 @@ module EbookReader
         return unless can_go_to_prev_chapter?
 
         target_page_index = find_chapter_start_page(@reader.current_chapter - 1)
-        if target_page_index
-          @reader.current_page_index = target_page_index
-          @reader.current_chapter -= 1
-        end
+        return unless target_page_index
+
+        @reader.current_page_index = target_page_index
+        @reader.current_chapter -= 1
       end
 
       def prev_chapter_absolute

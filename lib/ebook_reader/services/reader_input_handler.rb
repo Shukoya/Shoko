@@ -50,7 +50,7 @@ module EbookReader
       end
 
       def reading_input_handlers
-        @reading_handlers ||= basic_reading_handlers.merge(toggle_handlers)
+        @reading_input_handlers ||= basic_reading_handlers.merge(toggle_handlers)
       end
 
       def basic_reading_handlers
@@ -89,9 +89,9 @@ module EbookReader
       end
 
       def dynamic_navigation_handlers
-        @dynamic_handlers ||= basic_nav_handlers
-                               .merge(chapter_nav_handlers)
-                               .merge(go_handlers)
+        @dynamic_navigation_handlers ||= basic_nav_handlers
+                                         .merge(chapter_nav_handlers)
+                                         .merge(go_handlers)
       end
 
       def basic_nav_handlers
@@ -222,7 +222,7 @@ module EbookReader
         selected = handle_navigation_keys(
           key,
           @reader.instance_variable_get(:@toc_selected),
-          @reader.doc.chapter_count - 1,
+          @reader.doc.chapter_count - 1
         )
         @reader.instance_variable_set(:@toc_selected, selected)
       end
@@ -266,7 +266,7 @@ module EbookReader
         selected = handle_navigation_keys(
           key,
           @reader.instance_variable_get(:@bookmark_selected),
-          bookmarks.length - 1,
+          bookmarks.length - 1
         )
         @reader.instance_variable_set(:@bookmark_selected, selected)
       end

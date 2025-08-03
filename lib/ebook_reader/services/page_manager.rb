@@ -42,7 +42,8 @@ module EbookReader
         page_count = calculate_page_count(wrapped_lines.size, layout_metrics[:lines_per_page])
 
         page_count.times do |page_idx|
-          add_page_data(wrapped_lines, chapter_idx, page_idx, layout_metrics[:lines_per_page], page_count)
+          add_page_data(wrapped_lines, chapter_idx, page_idx, layout_metrics[:lines_per_page],
+                        page_count)
         end
       end
 
@@ -84,8 +85,6 @@ module EbookReader
       def total_pages
         @pages_data.size
       end
-
-      private
 
       def calculate_layout_metrics(width, height)
         col_width = if @config.view_mode == :split
