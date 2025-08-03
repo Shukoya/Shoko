@@ -232,11 +232,7 @@ module EbookReader
     private
 
     def initialize_state
-      @current_chapter = 0
-      @left_page = 0
-      @right_page = 0
-      @single_page = 0
-      @current_page_index = 0
+      @current_chapter = @left_page = @right_page = @single_page = @current_page_index = 0
       @running = true
       @mode = :read
       @toc_selected = 0
@@ -245,8 +241,7 @@ module EbookReader
       @message = nil
       @page_map = []
       @total_pages = 0
-      @last_width = 0
-      @last_height = 0
+      @last_width = @last_height = 0
     end
 
     def load_document
@@ -263,19 +258,25 @@ module EbookReader
     def main_loop
       draw_screen
       while @running
-        key = Terminal.read_key_blocking
-        next unless key
-
-        keys = [key]
-        while (extra = Terminal.read_key)
-          keys << extra
-          break if keys.size > 10
-        end
+        keys = read_input_keys
+        next if keys.empty?
 
         old_state = capture_state
         keys.each { |k| @input_handler.process_input(k) }
         draw_screen if state_changed?(old_state)
       end
+    end
+
+    def read_input_keys
+      key = Terminal.read_key_blocking
+      return [] unless key
+
+      keys = [key]
+      while (extra = Terminal.read_key)
+        keys << extra
+        break if keys.size > 10
+      end
+      keys
     end
 
     def capture_state
@@ -285,12 +286,7 @@ module EbookReader
                      @config.view_mode == :split ? @left_page : @single_page
                    end
 
-      {
-        chapter: @current_chapter,
-        page: page_value,
-        mode: @mode,
-        message: @message,
-      }
+      { chapter: @current_chapter, page: page_value, mode: @mode, message: @message }
     end
 
     def state_changed?(old_state)
@@ -409,35 +405,37 @@ module EbookReader
       end
     end
 
+    ERROR_MESSAGE_LINES = [
+      'Failed to load EPUB file:',
+      '',
+      '%<error>s',
+      '',
+      'Possible causes:',
+      '- The file might be corrupted',
+      '- The file might not be a valid EPUB',
+      '- The file might be password protected',
+      '',
+      "Press 'q' to return to the menu",
+    ].freeze
+
     def create_error_document(error_msg)
       doc = Object.new
+      define_error_doc_methods(doc, error_msg)
+      doc
+    end
+
+    def define_error_doc_methods(doc, error_msg)
       doc.define_singleton_method(:title) { 'Error Loading EPUB' }
       doc.define_singleton_method(:language) { 'en_US' }
       doc.define_singleton_method(:chapter_count) { 1 }
       doc.define_singleton_method(:chapters) { [{ title: 'Error', lines: [] }] }
       doc.define_singleton_method(:get_chapter) do |_idx|
-        {
-          number: '1',
-          title: 'Error',
-          lines: build_error_lines(error_msg),
-        }
+        { number: '1', title: 'Error', lines: error_lines(error_msg) }
       end
-      doc
     end
 
-    def build_error_lines(error_msg)
-      [
-        'Failed to load EPUB file:',
-        '',
-        error_msg,
-        '',
-        'Possible causes:',
-        '- The file might be corrupted',
-        '- The file might not be a valid EPUB',
-        '- The file might be password protected',
-        '',
-        "Press 'q' to return to the menu",
-      ]
+    def error_lines(error_msg)
+      ERROR_MESSAGE_LINES.map { |line| line == '%<error>s' ? error_msg : line }
     end
 
     def adjust_for_line_spacing(height)
@@ -545,12 +543,21 @@ module EbookReader
       chapter = @doc.get_chapter(@current_chapter)
       return unless chapter&.lines
 
-      height, width = Terminal.size
-      col_width, content_height = get_layout_metrics(width, height)
-      content_height = adjust_for_line_spacing(content_height)
+      col_width, content_height = end_of_chapter_metrics
+      return unless content_height.positive?
+
       wrapped = wrap_lines(chapter.lines, col_width)
       max_page = [wrapped.size - content_height, 0].max
+      set_page_end(max_page, content_height)
+    end
 
+    def end_of_chapter_metrics
+      height, width = Terminal.size
+      col_width, content_height = get_layout_metrics(width, height)
+      [col_width, adjust_for_line_spacing(content_height)]
+    end
+
+    def set_page_end(max_page, content_height)
       if @config.view_mode == :split
         @right_page = max_page
         @left_page = [max_page - content_height, 0].max

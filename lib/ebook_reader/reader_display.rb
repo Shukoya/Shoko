@@ -3,10 +3,53 @@
 module EbookReader
   # Module containing display-related Reader methods
   module ReaderDisplay
+    HELP_LINES = [
+      '',
+      'Navigation Keys:',
+      '  j / ↓     Scroll down',
+      '  k / ↑     Scroll up',
+      '  l / →     Next page',
+      '  h / ←     Previous page',
+      '  SPACE     Next page',
+      '  n         Next chapter',
+      '  p         Previous chapter',
+      '  g         Go to beginning of chapter',
+      '  G         Go to end of chapter',
+      '',
+      'View Options:',
+      '  v         Toggle split/single view',
+      '  P         Toggle page numbering mode (Absolute/Dynamic)',
+      '  + / -     Adjust line spacing',
+      '',
+      'Features:',
+      '  t         Show Table of Contents',
+      '  b         Add a bookmark',
+      '  B         Show bookmarks',
+      '',
+      'Other Keys:',
+      '  ?         Show/hide this help',
+      '  q         Quit to menu',
+      '  Q         Quit application',
+      '',
+      '',
+      'Press any key to return to reading...',
+    ].freeze
+
     def draw_screen
       Terminal.start_frame
       height, width = Terminal.size
 
+      refresh_page_map(width, height)
+
+      @renderer.render_header(@doc, width, @config.view_mode, @mode)
+      draw_content(height, width)
+      draw_footer(height, width)
+      draw_message(height, width) if @message
+
+      Terminal.end_frame
+    end
+
+    def refresh_page_map(width, height)
       if @config.page_numbering_mode == :dynamic && @page_manager
         if size_changed?(width, height)
           @page_manager.build_page_map(width, height)
@@ -16,13 +59,6 @@ module EbookReader
       elsif size_changed?(width, height)
         update_page_map(width, height)
       end
-
-      @renderer.render_header(@doc, width, @config.view_mode, @mode)
-      draw_content(height, width)
-      draw_footer(height, width)
-      draw_message(height, width) if @message
-
-      Terminal.end_frame
     end
 
     def size_changed?(width, height)
@@ -58,28 +94,36 @@ module EbookReader
       return { current: 0, total: 0 } unless @config.show_page_numbers
 
       if @config.page_numbering_mode == :dynamic
-        return { current: 0, total: 0 } unless @page_manager
-
-        {
-          current: @current_page_index + 1,
-          total: @page_manager.total_pages,
-        }
+        dynamic_page_numbers
       else
-        height, width = Terminal.size
-        _, content_height = get_layout_metrics(width, height)
-        actual_height = adjust_for_line_spacing(content_height)
-        return { current: 0, total: 0 } if actual_height <= 0
-
-        update_page_map(width, height) if size_changed?(width, height) || @page_map.empty?
-        return { current: 0, total: 0 } unless @total_pages.positive?
-
-        pages_before = @page_map[0...@current_chapter].sum
-        line_offset = @config.view_mode == :split ? @left_page : @single_page
-        page_in_chapter = (line_offset.to_f / actual_height).floor + 1
-        current_global_page = pages_before + page_in_chapter
-
-        { current: current_global_page, total: @total_pages }
+        absolute_page_numbers
       end
+    end
+
+    def dynamic_page_numbers
+      return { current: 0, total: 0 } unless @page_manager
+
+      {
+        current: @current_page_index + 1,
+        total: @page_manager.total_pages,
+      }
+    end
+
+    def absolute_page_numbers
+      height, width = Terminal.size
+      _, content_height = get_layout_metrics(width, height)
+      actual_height = adjust_for_line_spacing(content_height)
+      return { current: 0, total: 0 } if actual_height <= 0
+
+      update_page_map(width, height) if size_changed?(width, height) || @page_map.empty?
+      return { current: 0, total: 0 } unless @total_pages.positive?
+
+      pages_before = @page_map[0...@current_chapter].sum
+      line_offset = @config.view_mode == :split ? @left_page : @single_page
+      page_in_chapter = (line_offset.to_f / actual_height).floor + 1
+      current_global_page = pages_before + page_in_chapter
+
+      { current: current_global_page, total: @total_pages }
     end
 
     def draw_message(height, width)
@@ -300,51 +344,23 @@ module EbookReader
     end
 
     def draw_help_screen(height, width)
-      help_lines = build_help_lines
-      start_row = [(height - help_lines.size) / 2, 1].max
+      start_row = [(height - HELP_LINES.size) / 2, 1].max
 
-      help_lines.each_with_index do |line, idx|
+      HELP_LINES.each_with_index do |line, idx|
         row = start_row + idx
         break if row >= height - 2
 
-        col = [(width - line.length) / 2, 1].max
-        Terminal.write(row, col, Terminal::ANSI::WHITE + line + Terminal::ANSI::RESET)
+        draw_help_line(line, row, width)
       end
     end
 
+    def draw_help_line(line, row, width)
+      col = [(width - line.length) / 2, 1].max
+      Terminal.write(row, col, Terminal::ANSI::WHITE + line + Terminal::ANSI::RESET)
+    end
+
     def build_help_lines
-      [
-        '',
-        'Navigation Keys:',
-        '  j / ↓     Scroll down',
-        '  k / ↑     Scroll up',
-        '  l / →     Next page',
-        '  h / ←     Previous page',
-        '  SPACE     Next page',
-        '  n         Next chapter',
-        '  p         Previous chapter',
-        '  g         Go to beginning of chapter',
-        '  G         Go to end of chapter',
-        '',
-        'View Options:',
-        '  v         Toggle split/single view',
-        '  P         Toggle page numbering mode (Absolute/Dynamic)',
-        '  + / -     Adjust line spacing',
-        '',
-        # Copy mode was removed; pages are always printed so terminals can select text.
-        'Features:',
-        '  t         Show Table of Contents',
-        '  b         Add a bookmark',
-        '  B         Show bookmarks',
-        '',
-        'Other Keys:',
-        '  ?         Show/hide this help',
-        '  q         Quit to menu',
-        '  Q         Quit application',
-        '',
-        '',
-        'Press any key to return to reading...',
-      ]
+      HELP_LINES
     end
 
     def draw_toc_screen(height, width)
@@ -379,14 +395,17 @@ module EbookReader
       range.each_with_index do |idx, row|
         chapter = chapters[idx]
         line = chapter.title || 'Untitled'
+        draw_toc_line(idx, line, list_start + row, width)
+      end
+    end
 
-        if idx == @toc_selected
-          Terminal.write(list_start + row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
-          Terminal.write(list_start + row, 4,
-                         Terminal::ANSI::BRIGHT_WHITE + line[0, width - 6] + Terminal::ANSI::RESET)
-        else
-          Terminal.write(list_start + row, 4, Terminal::ANSI::WHITE + line[0, width - 6] + Terminal::ANSI::RESET)
-        end
+    def draw_toc_line(idx, line, row, width)
+      if idx == @toc_selected
+        Terminal.write(row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
+        Terminal.write(row, 4,
+                       Terminal::ANSI::BRIGHT_WHITE + line[0, width - 6] + Terminal::ANSI::RESET)
+      else
+        Terminal.write(row, 4, Terminal::ANSI::WHITE + line[0, width - 6] + Terminal::ANSI::RESET)
       end
     end
 
