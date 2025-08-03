@@ -274,6 +274,12 @@ module EbookReader
       def handle_empty_bookmarks_input(key)
         @reader.switch_mode(:read) if ['B'].include?(key) || escape_key?(key)
       end
+
+      public :handle_navigation_input,
+             :scroll_down_with_max,
+             :next_page_with_params,
+             :prev_page_with_params,
+             :go_to_end_with_params
     end
   end
 end

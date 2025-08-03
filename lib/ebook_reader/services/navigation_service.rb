@@ -124,6 +124,8 @@ module EbookReader
       def can_go_to_prev_chapter?
         @reader.current_chapter.positive?
       end
+
+      public :go_to_end, :next_chapter, :prev_chapter
     end
   end
 end

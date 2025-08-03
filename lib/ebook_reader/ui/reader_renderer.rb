@@ -18,6 +18,15 @@ module EbookReader
         end
       end
 
+      def render_footer(height, width, doc, chapter, pages, view_mode, mode, line_spacing,
+                        bookmarks)
+        if view_mode == :single && mode == :read
+          render_single_view_footer(height, width, pages)
+        else
+          render_split_view_footer(height, width, doc, chapter, view_mode, line_spacing, bookmarks)
+        end
+      end
+
       private
 
       def single_view_reading_mode?(view_mode, mode)
@@ -35,15 +44,6 @@ module EbookReader
         right_text = 'q:Quit ?:Help t:ToC B:Bookmarks'
         Terminal.write(1, [width - right_text.length + 1, 1].max,
                        WHITE + right_text + RESET)
-      end
-
-      def render_footer(height, width, doc, chapter, pages, view_mode, mode, line_spacing,
-                        bookmarks)
-        if view_mode == :single && mode == :read
-          render_single_view_footer(height, width, pages)
-        else
-          render_split_view_footer(height, width, doc, chapter, view_mode, line_spacing, bookmarks)
-        end
       end
 
       def render_single_view_footer(height, width, pages)

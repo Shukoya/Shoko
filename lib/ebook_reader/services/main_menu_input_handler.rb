@@ -218,6 +218,11 @@ module EbookReader
       def handle_open_file_input(key)
         @menu.send(:handle_open_file_input, key)
       end
+
+      public :handle_browse_input,
+             :handle_recent_input,
+             :handle_setting_change,
+             :searchable_key?
     end
   end
 end

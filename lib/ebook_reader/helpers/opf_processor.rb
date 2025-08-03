@@ -41,6 +41,16 @@ module EbookReader
         extract_titles_from_ncx(ncx_path)
       end
 
+      def process_spine(manifest, chapter_titles)
+        chapter_num = 1
+
+        @opf.elements.each('//spine/itemref') do |itemref|
+          chapter_num = process_itemref(itemref, manifest, chapter_titles, chapter_num) do |*args|
+            yield(*args)
+          end
+        end
+      end
+
       private
 
       def find_ncx_path(manifest)
@@ -72,16 +82,6 @@ module EbookReader
 
         key = content_src.split('#').first
         chapter_titles[key] = HTMLProcessor.clean_html(label.text)
-      end
-
-      def process_spine(manifest, chapter_titles)
-        chapter_num = 1
-
-        @opf.elements.each('//spine/itemref') do |itemref|
-          chapter_num = process_itemref(itemref, manifest, chapter_titles, chapter_num) do |*args|
-            yield(*args)
-          end
-        end
       end
 
       def process_itemref(itemref, manifest, chapter_titles, chapter_num)

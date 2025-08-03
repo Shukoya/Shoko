@@ -14,6 +14,13 @@ module EbookReader
         apply_progress_data(progress)
       end
 
+      def save_progress
+        return unless valid_save_conditions?
+
+        progress_data = collect_progress_data
+        ProgressManager.save(@reader.path, progress_data[:chapter], progress_data[:line_offset])
+      end
+
       private
 
       def apply_progress_data(progress)
@@ -46,13 +53,6 @@ module EbookReader
         @reader.current_page_index = @reader.page_manager.find_page_index(
           @reader.current_chapter, line_offset
         )
-      end
-
-      def save_progress
-        return unless valid_save_conditions?
-
-        progress_data = collect_progress_data
-        ProgressManager.save(@reader.path, progress_data[:chapter], progress_data[:line_offset])
       end
 
       def valid_save_conditions?

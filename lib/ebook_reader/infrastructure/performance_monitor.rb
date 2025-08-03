@@ -72,6 +72,11 @@ module EbookReader
           calculate_statistics(data)
         end
 
+        # Clear all metrics
+        def clear
+          @metrics = nil
+        end
+
         private
 
         def calculate_statistics(data)
@@ -89,11 +94,6 @@ module EbookReader
 
         def calculate_average(durations)
           durations.sum / durations.size
-        end
-
-        # Clear all metrics
-        def clear
-          @metrics = nil
         end
 
         # Get current memory usage in bytes

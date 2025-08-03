@@ -148,6 +148,14 @@ module EbookReader
       def dynamic_page_mode?(config)
         config.page_numbering_mode == :dynamic
       end
+
+      public :current_page_offset,
+             :page_offset=,
+             :terminal_size_changed?,
+             :update_terminal_size,
+             :to_h,
+             :restore_from,
+             :dynamic_page_mode?
     end
   end
 end

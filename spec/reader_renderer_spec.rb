@@ -3,7 +3,7 @@
 require 'spec_helper'
 
 RSpec.describe EbookReader::UI::ReaderRenderer do
-  let(:config) { instance_double(EbookReader::Config, show_page_numbers: true) }
+  let(:config) { instance_double(EbookReader::Config, show_page_numbers: true, page_numbering_mode: :absolute) }
   let(:renderer) { described_class.new(config) }
   let(:doc) do
     instance_double(EbookReader::EPUBDocument,
