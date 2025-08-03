@@ -12,7 +12,9 @@ require_relative 'ui/reader_renderer'
 require_relative 'concerns/input_handler'
 require_relative 'concerns/bookmarks_ui'
 require_relative 'core/reader_state'
-require_relative 'services/reader_navigation'
+require_relative 'services/navigation_service'
+require_relative 'services/bookmark_service'
+require_relative 'services/state_service'
 require_relative 'renderers/components/text_renderer'
 require_relative 'dynamic_page_calculator'
 require_relative 'reader_display'
@@ -47,7 +49,9 @@ module EbookReader
     include DynamicPageCalculator
     include ReaderDisplay
 
-    attr_reader :current_chapter, :doc, :config
+    attr_accessor :current_chapter, :left_page, :right_page,
+                  :single_page, :current_page_index
+    attr_reader :doc, :config, :page_manager, :path
 
     def initialize(epub_path, config = Config.new)
       @path = epub_path
@@ -56,6 +60,9 @@ module EbookReader
       initialize_state
       load_document
       @page_manager = Services::PageManager.new(@doc, @config) if @doc
+      @navigation_service = Services::NavigationService.new(self)
+      @bookmark_service = Services::BookmarkService.new(self)
+      @state_service = Services::StateService.new(self)
       load_data
       @input_handler = Services::ReaderInputHandler.new(self)
       @terminal_cache = { width: nil, height: nil, checked_at: nil }
@@ -131,21 +138,7 @@ module EbookReader
     end
 
     def next_page_absolute
-      height, width = Terminal.size
-      col_width, content_height = get_layout_metrics(width, height)
-      content_height = adjust_for_line_spacing(content_height)
-
-      chapter = @doc.get_chapter(@current_chapter)
-      return unless chapter
-
-      wrapped = wrap_lines(chapter.lines || [], col_width)
-      max_page = [wrapped.size - content_height, 0].max
-
-      if @config.view_mode == :split
-        handle_split_next_page(max_page, content_height)
-      else
-        handle_single_next_page(max_page, content_height)
-      end
+      @navigation_service.next_page_absolute
     end
 
     def prev_page_absolute
@@ -172,22 +165,7 @@ module EbookReader
     end
 
     def go_to_end
-      height, width = Terminal.size
-      col_width, content_height = get_layout_metrics(width, height)
-      content_height = adjust_for_line_spacing(content_height)
-
-      chapter = @doc.get_chapter(@current_chapter)
-      return unless chapter
-
-      wrapped = wrap_lines(chapter.lines || [], col_width)
-      max_page = [wrapped.size - content_height, 0].max
-
-      if @config.view_mode == :split
-        @right_page = max_page
-        @left_page = [max_page - content_height, 0].max
-      else
-        @single_page = max_page
-      end
+      @navigation_service.go_to_end
     end
 
     def quit_to_menu
@@ -202,57 +180,15 @@ module EbookReader
     end
 
     def next_chapter
-      if @config.page_numbering_mode == :dynamic
-        return unless @current_chapter < @doc.chapter_count - 1
-
-        target_page_index = @page_manager.pages_data.find_index do |page|
-          page[:chapter_index] == @current_chapter + 1
-        end
-
-        if target_page_index
-          @current_page_index = target_page_index
-          @current_chapter += 1
-        end
-      else
-        @current_chapter += 1
-        reset_pages
-        save_progress
-      end
+      @navigation_service.next_chapter
     end
 
     def prev_chapter
-      if @config.page_numbering_mode == :dynamic
-        return unless @current_chapter.positive?
-
-        target_page_index = @page_manager.pages_data.find_index do |page|
-          page[:chapter_index] == @current_chapter - 1
-        end
-
-        if target_page_index
-          @current_page_index = target_page_index
-          @current_chapter -= 1
-        end
-      else
-        @current_chapter -= 1
-        reset_pages
-      end
+      @navigation_service.prev_chapter
     end
 
     def add_bookmark
-      line_offset = @config.view_mode == :split ? @left_page : @single_page
-      chapter = @doc.get_chapter(@current_chapter)
-      return unless chapter
-
-      text_snippet = extract_bookmark_text(chapter, line_offset)
-      data = Models::BookmarkData.new(
-        path: @path,
-        chapter: @current_chapter,
-        line_offset: line_offset,
-        text: text_snippet
-      )
-      BookmarkManager.add(data)
-      load_bookmarks
-      set_message(Constants::Messages::BOOKMARK_ADDED)
+      @bookmark_service.add_bookmark
     end
 
     def toggle_view_mode
@@ -440,21 +376,7 @@ module EbookReader
     end
 
     def load_progress
-      progress = ProgressManager.load(@path)
-      return unless progress
-
-      @current_chapter = progress['chapter'] || 0
-      line_offset = progress['line_offset'] || 0
-
-      @current_chapter = 0 if @current_chapter >= @doc.chapter_count
-
-      if @config.page_numbering_mode == :dynamic && @page_manager
-        height, width = Terminal.size
-        @page_manager.build_page_map(width, height)
-        @current_page_index = @page_manager.find_page_index(@current_chapter, line_offset)
-      else
-        self.page_offsets = line_offset
-      end
+      @state_service.load_progress
     end
 
     def page_offsets=(offset)
@@ -464,15 +386,7 @@ module EbookReader
     end
 
     def save_progress
-      return unless @path && @doc
-
-      if @config.page_numbering_mode == :dynamic && @page_manager
-        page_data = @page_manager.get_page(@current_page_index)
-        ProgressManager.save(@path, page_data[:chapter_index], page_data[:start_line]) if page_data
-      else
-        line_offset = @config.view_mode == :split ? @left_page : @single_page
-        ProgressManager.save(@path, @current_chapter, line_offset)
-      end
+      @state_service.save_progress
     end
 
     def load_bookmarks

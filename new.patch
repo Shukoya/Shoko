@@ -1,0 +1,652 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/lib/ebook_reader.rb b/lib/ebook_reader.rb
+index ce41ff78004483693b13d7bfbb20f84969dd01ee..62fdd4c22dcfa8f59d42d6851be7ffae3233788a 100644
+--- a/lib/ebook_reader.rb
++++ b/lib/ebook_reader.rb
+@@ -30,50 +30,53 @@ require_relative 'ebook_reader/models/bookmark'
+ require_relative 'ebook_reader/models/bookmark_data'
+ require_relative 'ebook_reader/models/column_drawing_params'
+ 
+ # Core components
+ require_relative 'ebook_reader/version'
+ require_relative 'ebook_reader/terminal'
+ require_relative 'ebook_reader/config'
+ require_relative 'ebook_reader/concerns/input_handler'
+ 
+ # Validators
+ require_relative 'ebook_reader/validators/file_path_validator'
+ require_relative 'ebook_reader/validators/terminal_size_validator'
+ 
+ # Data management
+ require_relative 'ebook_reader/epub_finder'
+ require_relative 'ebook_reader/recent_files'
+ require_relative 'ebook_reader/progress_manager'
+ require_relative 'ebook_reader/bookmark_manager'
+ 
+ # Document handling
+ require_relative 'ebook_reader/epub_document'
+ 
+ # Core reader components
+ require_relative 'ebook_reader/core/reader_state'
+ require_relative 'ebook_reader/services/reader_navigation'
++require_relative 'ebook_reader/services/navigation_service'
++require_relative 'ebook_reader/services/bookmark_service'
++require_relative 'ebook_reader/services/state_service'
+ require_relative 'ebook_reader/services/page_manager'
+ require_relative 'ebook_reader/services/reader_input_handler'
+ require_relative 'ebook_reader/services/main_menu_input_handler'
+ 
+ # UI components
+ require_relative 'ebook_reader/main_menu'
+ require_relative 'ebook_reader/reader_refactored'
+ require_relative 'ebook_reader/reader'
+ 
+ # Application entry point
+ require_relative 'ebook_reader/cli'
+ 
+ # Main module for the EbookReader application
+ #
+ # This module serves as the namespace for all EbookReader components
+ # and provides version information and error classes.
+ #
+ # @example Check version
+ #   puts EbookReader::VERSION
+ #
+ # @example Handle errors
+ #   begin
+ #     EbookReader::CLI.run
+ #   rescue EbookReader::Error => e
+ #     puts "Error: #{e.message}"
+diff --git a/lib/ebook_reader/reader.rb b/lib/ebook_reader/reader.rb
+index 601267246e0be6147ef210796bccb9659feb849d..7449500fe4447c291b9b42fae19cf2ed238e7bac 100644
+--- a/lib/ebook_reader/reader.rb
++++ b/lib/ebook_reader/reader.rb
+@@ -1,83 +1,90 @@
+ # frozen_string_literal: true
+ 
+ require_relative 'reader_modes/reading_mode'
+ require_relative 'reader_modes/help_mode'
+ require_relative 'reader_modes/toc_mode'
+ require_relative 'reader_modes/bookmarks_mode'
+ require_relative 'constants/ui_constants'
+ require_relative 'errors'
+ require_relative 'constants/messages'
+ require_relative 'helpers/reader_helpers'
+ require_relative 'ui/reader_renderer'
+ require_relative 'concerns/input_handler'
+ require_relative 'concerns/bookmarks_ui'
+ require_relative 'core/reader_state'
+-require_relative 'services/reader_navigation'
++require_relative 'services/navigation_service'
++require_relative 'services/bookmark_service'
++require_relative 'services/state_service'
+ require_relative 'renderers/components/text_renderer'
+ require_relative 'dynamic_page_calculator'
+ require_relative 'reader_display'
+ 
+ module EbookReader
+   # Main reader interface for displaying EPUB content.
+   #
+   # This class coordinates the reading experience, managing the display,
+   # navigation, bookmarks, and user input. It follows the Model-View-Controller
+   # pattern where:
+   # - Model: EPUBDocument and state management
+   # - View: Renderers and display components
+   # - Controller: Input handling and navigation
+   #
+   # @example Basic usage
+   #   reader = Reader.new("/path/to/book.epub")
+   #   reader.run
+   #
+   # @example With custom configuration
+   #   config = Config.new
+   #   config.view_mode = :single
+   #   reader = Reader.new("/path/to/book.epub", config)
+   #   reader.run
+   class Reader
+     include ReaderRefactored::NavigationHelpers
+     include ReaderRefactored::DrawingHelpers
+     include ReaderRefactored::BookmarkHelpers
+     include Constants::UIConstants
+     include Helpers::ReaderHelpers
+     include Concerns::InputHandler
+     include Concerns::BookmarksUI
+     include DynamicPageCalculator
+     include ReaderDisplay
+ 
+-    attr_reader :current_chapter, :doc, :config
++    attr_accessor :current_chapter, :left_page, :right_page,
++                  :single_page, :current_page_index
++    attr_reader :doc, :config, :page_manager, :path
+ 
+     def initialize(epub_path, config = Config.new)
+       @path = epub_path
+       @config = config
+       @renderer = UI::ReaderRenderer.new(@config)
+       initialize_state
+       load_document
+       @page_manager = Services::PageManager.new(@doc, @config) if @doc
++      @navigation_service = Services::NavigationService.new(self)
++      @bookmark_service = Services::BookmarkService.new(self)
++      @state_service = Services::StateService.new(self)
+       load_data
+       @input_handler = Services::ReaderInputHandler.new(self)
+       @terminal_cache = { width: nil, height: nil, checked_at: nil }
+       @last_rendered_content = {}
+       @wrap_cache = {}
+     end
+ 
+     def run
+       Terminal.setup
+       main_loop
+     ensure
+       Terminal.cleanup
+     end
+ 
+     def switch_mode(mode)
+       @mode = mode
+     end
+ 
+     def scroll_down
+       return if @config.page_numbering_mode == :dynamic
+ 
+       if @config.view_mode == :split
+         @left_page = [@left_page + 1, @max_page || 0].min
+         @right_page = [@right_page + 1, @max_page || 0].min
+       else
+@@ -109,172 +116,101 @@ module EbookReader
+         prev_page_dynamic
+       else
+         prev_page_absolute
+       end
+     end
+ 
+     def next_page_dynamic
+       return unless @page_manager
+ 
+       return unless @current_page_index < @page_manager.total_pages - 1
+ 
+       @current_page_index += 1
+       update_chapter_from_page_index
+     end
+ 
+     def prev_page_dynamic
+       return unless @page_manager
+ 
+       return unless @current_page_index.positive?
+ 
+       @current_page_index -= 1
+       update_chapter_from_page_index
+     end
+ 
+     def next_page_absolute
+-      height, width = Terminal.size
+-      col_width, content_height = get_layout_metrics(width, height)
+-      content_height = adjust_for_line_spacing(content_height)
+-
+-      chapter = @doc.get_chapter(@current_chapter)
+-      return unless chapter
+-
+-      wrapped = wrap_lines(chapter.lines || [], col_width)
+-      max_page = [wrapped.size - content_height, 0].max
+-
+-      if @config.view_mode == :split
+-        handle_split_next_page(max_page, content_height)
+-      else
+-        handle_single_next_page(max_page, content_height)
+-      end
++      @navigation_service.next_page_absolute
+     end
+ 
+     def prev_page_absolute
+       height, width = Terminal.size
+       _, content_height = get_layout_metrics(width, height)
+       content_height = adjust_for_line_spacing(content_height)
+ 
+       if @config.view_mode == :split
+         handle_split_prev_page(content_height)
+       else
+         handle_single_prev_page(content_height)
+       end
+     end
+ 
+     def update_chapter_from_page_index
+       page_data = @page_manager.get_page(@current_page_index)
+       return unless page_data
+ 
+       @current_chapter = page_data[:chapter_index]
+     end
+ 
+     def go_to_start
+       reset_pages
+     end
+ 
+     def go_to_end
+-      height, width = Terminal.size
+-      col_width, content_height = get_layout_metrics(width, height)
+-      content_height = adjust_for_line_spacing(content_height)
+-
+-      chapter = @doc.get_chapter(@current_chapter)
+-      return unless chapter
+-
+-      wrapped = wrap_lines(chapter.lines || [], col_width)
+-      max_page = [wrapped.size - content_height, 0].max
+-
+-      if @config.view_mode == :split
+-        @right_page = max_page
+-        @left_page = [max_page - content_height, 0].max
+-      else
+-        @single_page = max_page
+-      end
++      @navigation_service.go_to_end
+     end
+ 
+     def quit_to_menu
+       save_progress
+       @running = false
+     end
+ 
+     def quit_application
+       save_progress
+       Terminal.cleanup
+       exit 0
+     end
+ 
+     def next_chapter
+-      if @config.page_numbering_mode == :dynamic
+-        return unless @current_chapter < @doc.chapter_count - 1
+-
+-        target_page_index = @page_manager.pages_data.find_index do |page|
+-          page[:chapter_index] == @current_chapter + 1
+-        end
+-
+-        if target_page_index
+-          @current_page_index = target_page_index
+-          @current_chapter += 1
+-        end
+-      else
+-        @current_chapter += 1
+-        reset_pages
+-        save_progress
+-      end
++      @navigation_service.next_chapter
+     end
+ 
+     def prev_chapter
+-      if @config.page_numbering_mode == :dynamic
+-        return unless @current_chapter.positive?
+-
+-        target_page_index = @page_manager.pages_data.find_index do |page|
+-          page[:chapter_index] == @current_chapter - 1
+-        end
+-
+-        if target_page_index
+-          @current_page_index = target_page_index
+-          @current_chapter -= 1
+-        end
+-      else
+-        @current_chapter -= 1
+-        reset_pages
+-      end
++      @navigation_service.prev_chapter
+     end
+ 
+     def add_bookmark
+-      line_offset = @config.view_mode == :split ? @left_page : @single_page
+-      chapter = @doc.get_chapter(@current_chapter)
+-      return unless chapter
+-
+-      text_snippet = extract_bookmark_text(chapter, line_offset)
+-      data = Models::BookmarkData.new(
+-        path: @path,
+-        chapter: @current_chapter,
+-        line_offset: line_offset,
+-        text: text_snippet
+-      )
+-      BookmarkManager.add(data)
+-      load_bookmarks
+-      set_message(Constants::Messages::BOOKMARK_ADDED)
++      @bookmark_service.add_bookmark
+     end
+ 
+     def toggle_view_mode
+       @config.view_mode = @config.view_mode == :split ? :single : :split
+       @config.save
+       @last_width = 0
+       @last_height = 0
+       @dynamic_page_map = nil
+       @dynamic_total_pages = 0
+       @last_dynamic_width = 0
+       @last_dynamic_height = 0
+       reset_pages
+     end
+ 
+     def increase_line_spacing
+       modes = %i[compact normal relaxed]
+       current = modes.index(@config.line_spacing) || 1
+       return unless current < 2
+ 
+       @config.line_spacing = modes[current + 1]
+       @config.save
+       @last_width = 0
+     end
+ 
+     def toggle_page_numbering_mode
+@@ -418,83 +354,61 @@ module EbookReader
+ 
+       calculate_page_map(col_width, actual_height)
+       @last_width = width
+       @last_height = height
+     end
+ 
+     def calculate_page_map(col_width, actual_height)
+       @page_map = @doc.chapters.map do |chapter|
+         wrapped = wrap_lines(chapter.lines || [], col_width)
+         (wrapped.size.to_f / actual_height).ceil
+       end
+       @total_pages = @page_map.sum
+     end
+ 
+     def get_layout_metrics(width, height)
+       col_width = if @config.view_mode == :split
+                     [(width - 3) / 2, MIN_COLUMN_WIDTH].max
+                   else
+                     (width * 0.9).to_i.clamp(30, 120)
+                   end
+       content_height = [height - 2, 1].max
+       [col_width, content_height]
+     end
+ 
+     def load_progress
+-      progress = ProgressManager.load(@path)
+-      return unless progress
+-
+-      @current_chapter = progress['chapter'] || 0
+-      line_offset = progress['line_offset'] || 0
+-
+-      @current_chapter = 0 if @current_chapter >= @doc.chapter_count
+-
+-      if @config.page_numbering_mode == :dynamic && @page_manager
+-        height, width = Terminal.size
+-        @page_manager.build_page_map(width, height)
+-        @current_page_index = @page_manager.find_page_index(@current_chapter, line_offset)
+-      else
+-        self.page_offsets = line_offset
+-      end
++      @state_service.load_progress
+     end
+ 
+     def page_offsets=(offset)
+       @single_page = offset
+       @left_page = offset
+       @right_page = offset
+     end
+ 
+     def save_progress
+-      return unless @path && @doc
+-
+-      if @config.page_numbering_mode == :dynamic && @page_manager
+-        page_data = @page_manager.get_page(@current_page_index)
+-        ProgressManager.save(@path, page_data[:chapter_index], page_data[:start_line]) if page_data
+-      else
+-        line_offset = @config.view_mode == :split ? @left_page : @single_page
+-        ProgressManager.save(@path, @current_chapter, line_offset)
+-      end
++      @state_service.save_progress
+     end
+ 
+     def load_bookmarks
+       @bookmarks = BookmarkManager.get(@path)
+     end
+ 
+     def extract_bookmark_text(chapter, line_offset)
+       height, width = Terminal.size
+       col_width, = get_layout_metrics(width, height)
+       wrapped = wrap_lines(chapter.lines || [], col_width)
+       text = wrapped[line_offset] || 'Bookmark'
+       text.strip[0, 50]
+     end
+ 
+     def set_message(text, duration = 2)
+       @message = text
+       Thread.new do
+         sleep duration
+         @message = nil
+       end
+     end
+ 
+     def create_error_document(error_msg)
+       doc = Object.new
+       doc.define_singleton_method(:title) { 'Error Loading EPUB' }
+diff --git a/lib/ebook_reader/services/bookmark_service.rb b/lib/ebook_reader/services/bookmark_service.rb
+new file mode 100644
+index 0000000000000000000000000000000000000000..d790041696522b5853486632974bd37a6678ac19
+--- /dev/null
++++ b/lib/ebook_reader/services/bookmark_service.rb
+@@ -0,0 +1,28 @@
++# frozen_string_literal: true
++
++module EbookReader
++  module Services
++    class BookmarkService
++      def initialize(reader)
++        @reader = reader
++      end
++
++      def add_bookmark
++        line_offset = @reader.config.view_mode == :split ? @reader.left_page : @reader.single_page
++        chapter = @reader.doc.get_chapter(@reader.current_chapter)
++        return unless chapter
++
++        text_snippet = @reader.send(:extract_bookmark_text, chapter, line_offset)
++        data = Models::BookmarkData.new(
++          path: @reader.path,
++          chapter: @reader.current_chapter,
++          line_offset: line_offset,
++          text: text_snippet
++        )
++        BookmarkManager.add(data)
++        @reader.send(:load_bookmarks)
++        @reader.send(:set_message, Constants::Messages::BOOKMARK_ADDED)
++      end
++    end
++  end
++end
+diff --git a/lib/ebook_reader/services/navigation_service.rb b/lib/ebook_reader/services/navigation_service.rb
+new file mode 100644
+index 0000000000000000000000000000000000000000..54e02e5fb62be9499821d1036552fbb61919d8a4
+--- /dev/null
++++ b/lib/ebook_reader/services/navigation_service.rb
+@@ -0,0 +1,85 @@
++# frozen_string_literal: true
++
++module EbookReader
++  module Services
++    class NavigationService
++      def initialize(reader)
++        @reader = reader
++      end
++
++      def next_page_absolute
++        height, width = Terminal.size
++        col_width, content_height = @reader.send(:get_layout_metrics, width, height)
++        content_height = @reader.send(:adjust_for_line_spacing, content_height)
++
++        chapter = @reader.doc.get_chapter(@reader.current_chapter)
++        return unless chapter
++
++        wrapped = @reader.wrap_lines(chapter.lines || [], col_width)
++        max_page = [wrapped.size - content_height, 0].max
++
++        if @reader.config.view_mode == :split
++          @reader.send(:handle_split_next_page, max_page, content_height)
++        else
++          @reader.send(:handle_single_next_page, max_page, content_height)
++        end
++      end
++
++      def go_to_end
++        height, width = Terminal.size
++        col_width, content_height = @reader.send(:get_layout_metrics, width, height)
++        content_height = @reader.send(:adjust_for_line_spacing, content_height)
++
++        chapter = @reader.doc.get_chapter(@reader.current_chapter)
++        return unless chapter
++
++        wrapped = @reader.wrap_lines(chapter.lines || [], col_width)
++        max_page = [wrapped.size - content_height, 0].max
++
++        if @reader.config.view_mode == :split
++          @reader.right_page = max_page
++          @reader.left_page = [max_page - content_height, 0].max
++        else
++          @reader.single_page = max_page
++        end
++      end
++
++      def next_chapter
++        if @reader.config.page_numbering_mode == :dynamic
++          return unless @reader.current_chapter < @reader.doc.chapter_count - 1
++
++          target_page_index = @reader.page_manager.pages_data.find_index do |page|
++            page[:chapter_index] == @reader.current_chapter + 1
++          end
++
++          if target_page_index
++            @reader.current_page_index = target_page_index
++            @reader.current_chapter += 1
++          end
++        else
++          @reader.current_chapter += 1
++          @reader.send(:reset_pages)
++          @reader.send(:save_progress)
++        end
++      end
++
++      def prev_chapter
++        if @reader.config.page_numbering_mode == :dynamic
++          return unless @reader.current_chapter.positive?
++
++          target_page_index = @reader.page_manager.pages_data.find_index do |page|
++            page[:chapter_index] == @reader.current_chapter - 1
++          end
++
++          if target_page_index
++            @reader.current_page_index = target_page_index
++            @reader.current_chapter -= 1
++          end
++        else
++          @reader.current_chapter -= 1
++          @reader.send(:reset_pages)
++        end
++      end
++    end
++  end
++end
+diff --git a/lib/ebook_reader/services/state_service.rb b/lib/ebook_reader/services/state_service.rb
+new file mode 100644
+index 0000000000000000000000000000000000000000..2d50c8410b1c01ee9b0b3a83be65def4ac09cff8
+--- /dev/null
++++ b/lib/ebook_reader/services/state_service.rb
+@@ -0,0 +1,40 @@
++# frozen_string_literal: true
++
++module EbookReader
++  module Services
++    class StateService
++      def initialize(reader)
++        @reader = reader
++      end
++
++      def load_progress
++        progress = ProgressManager.load(@reader.path)
++        return unless progress
++
++        @reader.current_chapter = progress['chapter'] || 0
++        line_offset = progress['line_offset'] || 0
++        @reader.current_chapter = 0 if @reader.current_chapter >= @reader.doc.chapter_count
++
++        if @reader.config.page_numbering_mode == :dynamic && @reader.page_manager
++          height, width = Terminal.size
++          @reader.page_manager.build_page_map(width, height)
++          @reader.current_page_index = @reader.page_manager.find_page_index(@reader.current_chapter, line_offset)
++        else
++          @reader.send(:page_offsets=, line_offset)
++        end
++      end
++
++      def save_progress
++        return unless @reader.path && @reader.doc
++
++        if @reader.config.page_numbering_mode == :dynamic && @reader.page_manager
++          page_data = @reader.page_manager.get_page(@reader.current_page_index)
++          ProgressManager.save(@reader.path, page_data[:chapter_index], page_data[:start_line]) if page_data
++        else
++          line_offset = @reader.config.view_mode == :split ? @reader.left_page : @reader.single_page
++          ProgressManager.save(@reader.path, @reader.current_chapter, line_offset)
++        end
++      end
++    end
++  end
++end
+diff --git a/spec/spec_helper.rb b/spec/spec_helper.rb
+index ce1ab0616eb8df1c250b34e76884c566ed925567..b65ba76e8af46101dee7b5118fede99a4188e8ce 100644
+--- a/spec/spec_helper.rb
++++ b/spec/spec_helper.rb
+@@ -18,50 +18,53 @@ require 'ebook_reader/constants'
+ require 'ebook_reader/models/chapter'
+ require 'ebook_reader/models/bookmark'
+ require 'ebook_reader/terminal'
+ require 'ebook_reader/config'
+ require 'ebook_reader/epub_finder'
+ require 'ebook_reader/recent_files'
+ require 'ebook_reader/progress_manager'
+ require 'ebook_reader/bookmark_manager'
+ require 'ebook_reader/main_menu'
+ require 'ebook_reader/epub_document'
+ require 'ebook_reader/reader'
+ require 'ebook_reader/cli'
+ require 'ebook_reader/concerns/input_handler'
+ require 'ebook_reader/services/library_scanner'
+ require 'ebook_reader/helpers/html_processor'
+ require 'ebook_reader/helpers/opf_processor'
+ require 'ebook_reader/helpers/reader_helpers'
+ require 'ebook_reader/ui/screens/browse_screen'
+ require 'ebook_reader/ui/main_menu_renderer'
+ require 'ebook_reader/ui/reader_renderer'
+ require 'ebook_reader/infrastructure/logger'
+ require 'ebook_reader/infrastructure/performance_monitor'
+ require 'ebook_reader/validators/file_path_validator'
+ require 'ebook_reader/validators/terminal_size_validator'
+ require 'ebook_reader/services/reader_navigation'
++require 'ebook_reader/services/navigation_service'
++require 'ebook_reader/services/bookmark_service'
++require 'ebook_reader/services/state_service'
+ require 'ebook_reader/reader_modes/base_mode'
+ require 'ebook_reader/reader_modes/reading_mode'
+ require 'ebook_reader/reader_modes/toc_mode'
+ require 'ebook_reader/reader_modes/bookmarks_mode'
+ require 'ebook_reader/reader_modes/help_mode'
+ require 'ebook_reader/renderers/components/text_renderer'
+ require 'ebook_reader/errors'
+ require 'ebook_reader/core/reader_state'
+ 
+ RSpec.configure do |config|
+   config.default_formatter = 'doc'
+   config.example_status_persistence_file_path = '.rspec_status'
+   config.disable_monkey_patching!
+ 
+   config.expect_with :rspec do |c|
+     c.syntax = :expect
+   end
+ 
+   config.include FakeFS::SpecHelpers, fake_fs: true
+ 
+   # Ensure Terminal doesn't interfere with tests
+   config.before(:each) do
+     allow(EbookReader::Terminal).to receive(:setup)
+     allow(EbookReader::Terminal).to receive(:cleanup)
+     allow(EbookReader::Terminal).to receive(:clear)
+ 
+EOF
+)
