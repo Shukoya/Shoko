@@ -54,15 +54,29 @@ module EbookReader
 
       # Reset all state to initial values
       def reset_to_defaults
+        reset_position_state
+        reset_navigation_state
+        reset_system_state
+      end
+
+      private
+
+      def reset_position_state
         @current_chapter = 0
         @left_page = 0
         @right_page = 0
         @single_page = 0
         @current_page_index = 0
-        @pages_per_chapter = []
+      end
+
+      def reset_navigation_state
         @mode = :read
         @toc_selected = 0
         @bookmark_selected = 0
+        @pages_per_chapter = []
+      end
+
+      def reset_system_state
         @message = nil
         @running = true
         @page_map = []

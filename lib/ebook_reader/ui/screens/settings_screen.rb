@@ -5,7 +5,10 @@ module EbookReader
     module Screens
       # Presents application settings and allows users to toggle
       # various configuration options.
+      require_relative '../settings_definitions'
+
       class SettingsScreen
+        include UI::SettingsDefinitions
         def initialize(config, scanner)
           @config = config
           @scanner = scanner
@@ -27,43 +30,7 @@ module EbookReader
         end
 
         def build_settings_list
-          [
-            {
-              name: 'View Mode',
-              value: view_mode_description,
-              key: '1',
-            },
-            {
-              name: 'Show Page Numbers',
-              value: @config.show_page_numbers ? 'Yes' : 'No',
-              key: '2',
-            },
-            {
-              name: 'Line Spacing',
-              value: @config.line_spacing.to_s.capitalize,
-              key: '3',
-            },
-            {
-              name: 'Highlight Quotes',
-              value: @config.highlight_quotes ? 'Yes' : 'No',
-              key: '4',
-            },
-            {
-              name: 'Clear Cache',
-              value: 'Force rescan of EPUB files',
-              key: '5',
-              action: true,
-            },
-            {
-              name: 'Page Numbering Mode',
-              value: @config.page_numbering_mode == :absolute ? 'Absolute' : 'Dynamic',
-              key: '6',
-            },
-          ]
-        end
-
-        def view_mode_description
-          @config.view_mode == :split ? 'Split View (Two Pages)' : 'Single Page (Centered)'
+          settings_list
         end
 
         def render_settings_list(settings, height)

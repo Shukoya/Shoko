@@ -27,41 +27,53 @@ module EbookReader
     private
 
     def build_dynamic_page_map(col_width, lines_per_page)
+      initialize_page_map
+      total_lines = process_all_chapters(col_width, lines_per_page)
+      finalize_page_calculations(total_lines, lines_per_page)
+      cache_terminal_dimensions
+    end
+
+    def initialize_page_map
       @dynamic_page_map = []
       @dynamic_chapter_starts = []
-      total_lines = 0
+    end
 
-      # Calculate pages for each chapter
+    def process_all_chapters(col_width, lines_per_page)
+      total_lines = 0
       @doc.chapters.each_with_index do |chapter, idx|
         @dynamic_chapter_starts << total_lines
-
-        # Wrap lines for current display width
-        wrapped = wrap_lines(chapter.lines || [], col_width)
-        chapter_lines = wrapped.size
-        chapter_pages = (chapter_lines.to_f / lines_per_page).ceil
-
-        @dynamic_page_map << {
-          chapter_index: idx,
-          lines: chapter_lines,
-          pages: chapter_pages,
-          start_line: total_lines,
-        }
-
-        total_lines += chapter_lines
+        total_lines += process_single_chapter(chapter, idx, col_width, lines_per_page, total_lines)
       end
+      total_lines
+    end
 
-      # Calculate total pages for entire book
+    def process_single_chapter(chapter, idx, col_width, lines_per_page, start_line)
+      wrapped = wrap_lines(chapter.lines || [], col_width)
+      chapter_lines = wrapped.size
+      chapter_pages = (chapter_lines.to_f / lines_per_page).ceil
+
+      @dynamic_page_map << {
+        chapter_index: idx,
+        lines: chapter_lines,
+        pages: chapter_pages,
+        start_line: start_line,
+      }
+
+      chapter_lines
+    end
+
+    def finalize_page_calculations(total_lines, lines_per_page)
       @dynamic_total_pages = (total_lines.to_f / lines_per_page).ceil
       @dynamic_total_pages = 1 if @dynamic_total_pages < 1
 
-      # Store for resize detection
-      @last_dynamic_width = Terminal.size[1]
-      @last_dynamic_height = Terminal.size[0]
-
       Infrastructure::Logger.debug('Dynamic page map built',
                                    total_pages: @dynamic_total_pages,
-                                   total_lines:,
-                                   lines_per_page:)
+                                   total_lines: total_lines,
+                                   lines_per_page: lines_per_page)
+    end
+
+    def cache_terminal_dimensions
+      @last_dynamic_width, @last_dynamic_height = Terminal.size
     end
 
     def calculate_global_page_position(lines_per_page)

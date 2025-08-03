@@ -69,16 +69,26 @@ module EbookReader
           data = metrics[label]
           return nil if data.empty?
 
+          calculate_statistics(data)
+        end
+
+        private
+
+        def calculate_statistics(data)
           durations = data.map { |m| m[:duration] }
 
           {
             count: data.size,
             total: durations.sum,
-            average: durations.sum / data.size,
+            average: calculate_average(durations),
             min: durations.min,
             max: durations.max,
             last: durations.last,
           }
+        end
+
+        def calculate_average(durations)
+          durations.sum / durations.size
         end
 
         # Clear all metrics

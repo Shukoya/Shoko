@@ -84,17 +84,34 @@ module EbookReader
       SIZE_CACHE_INTERVAL = 0.5
 
       def size
-        now = Time.now
-        if @size_cache[:checked_at].nil? ||
-           now - @size_cache[:checked_at] > SIZE_CACHE_INTERVAL
-          begin
-            h, w = IO.console.winsize
-          rescue StandardError
-            h, w = default_dimensions
-          end
-          @size_cache = { width: w, height: h, checked_at: now }
+        if cache_expired?
+          update_size_cache
         end
+
         [@size_cache[:height], @size_cache[:width]]
+      end
+
+      private
+
+      def cache_expired?
+        now = Time.now
+        @size_cache[:checked_at].nil? ||
+          now - @size_cache[:checked_at] > SIZE_CACHE_INTERVAL
+      end
+
+      def update_size_cache
+        h, w = fetch_terminal_size
+        @size_cache = {
+          width: w,
+          height: h,
+          checked_at: Time.now,
+        }
+      end
+
+      def fetch_terminal_size
+        IO.console.winsize
+      rescue StandardError
+        default_dimensions
       end
 
       def default_dimensions
@@ -168,23 +185,36 @@ module EbookReader
       end
 
       def read_key
-        console = IO.console
-        raise EbookReader::TerminalUnavailableError unless console
+        console = validate_console
 
         console.raw do
-          input = $stdin.read_nonblock(1)
-          return input unless input == "\e"
-
-          2.times do
-            input << $stdin.read_nonblock(1)
-          rescue IO::WaitReadable
-            break
-          end
-
-          input
+          read_key_with_escape_handling
         end
       rescue IO::WaitReadable
-        nil # No input available
+        nil
+      end
+
+      def validate_console
+        console = IO.console
+        raise EbookReader::TerminalUnavailableError unless console
+        console
+      end
+
+      def read_key_with_escape_handling
+        input = $stdin.read_nonblock(1)
+        return input unless input == "\e"
+
+        read_escape_sequence(input)
+      end
+
+      def read_escape_sequence(input)
+        2.times do
+          input << $stdin.read_nonblock(1)
+        rescue IO::WaitReadable
+          break
+        end
+
+        input
       end
 
       def read_key_blocking

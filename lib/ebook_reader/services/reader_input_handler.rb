@@ -14,32 +14,65 @@ module EbookReader
       def process_input(key)
         return unless key
 
-        case @reader.instance_variable_get(:@mode)
-        when :help
-          @reader.switch_mode(:read)
-        when :toc
-          handle_toc_input(key)
-        when :bookmarks
-          handle_bookmarks_input(key)
-        else
-          handle_reading_input(key)
-        end
+        send(mode_handler_method, key)
+      end
+
+      private
+
+      def mode_handler_method
+        "handle_#{@reader.instance_variable_get(:@mode)}_mode"
+      end
+
+      def handle_help_mode(_key)
+        @reader.switch_mode(:read)
+      end
+
+      def handle_toc_mode(key)
+        handle_toc_input(key)
+      end
+
+      def handle_bookmarks_mode(key)
+        handle_bookmarks_input(key)
+      end
+
+      def handle_read_mode(key)
+        handle_reading_input(key)
       end
 
       def handle_reading_input(key)
-        case key
-        when 'q' then @reader.quit_to_menu
-        when 'Q' then @reader.quit_application
-        when '?' then @reader.switch_mode(:help)
-        when 't', 'T' then @reader.send(:open_toc)
-        when 'b' then @reader.add_bookmark
-        when 'B' then @reader.send(:open_bookmarks)
-        when 'v', 'V' then @reader.toggle_view_mode
-        when 'P' then @reader.toggle_page_numbering_mode
-        when '+' then @reader.increase_line_spacing
-        when '-' then @reader.decrease_line_spacing
-        else handle_navigation_input(key)
+        handler = reading_input_handlers[key]
+
+        if handler
+          handler.call
+        else
+          handle_navigation_input(key)
         end
+      end
+
+      def reading_input_handlers
+        @reading_handlers ||= basic_reading_handlers.merge(toggle_handlers)
+      end
+
+      def basic_reading_handlers
+        {
+          'q' => -> { @reader.quit_to_menu },
+          'Q' => -> { @reader.quit_application },
+          '?' => -> { @reader.switch_mode(:help) },
+          't' => -> { @reader.send(:open_toc) },
+          'T' => -> { @reader.send(:open_toc) },
+          'b' => -> { @reader.add_bookmark },
+          'B' => -> { @reader.send(:open_bookmarks) },
+        }
+      end
+
+      def toggle_handlers
+        {
+          'v' => -> { @reader.toggle_view_mode },
+          'V' => -> { @reader.toggle_view_mode },
+          'P' => -> { @reader.toggle_page_numbering_mode },
+          '+' => -> { @reader.increase_line_spacing },
+          '-' => -> { @reader.decrease_line_spacing },
+        }
       end
 
       def handle_navigation_input(key)
@@ -51,31 +84,70 @@ module EbookReader
       end
 
       def handle_navigation_input_dynamic(key)
-        case key
-        when 'j', 'k', "\e[B", "\eOB", "\e[A", "\eOA"
-          if ['j', "\e[B", "\eOB"].include?(key)
-            @reader.next_page
-          else
-            @reader.prev_page
-          end
-        when 'l', ' ', "\e[C", "\eOC"
-          @reader.next_page
-        when 'h', "\e[D", "\eOD"
-          @reader.prev_page
-        when 'n', 'N'
-          @reader.next_chapter
-        when 'p', 'P'
-          @reader.prev_chapter
-        when 'g'
-          @reader.instance_variable_set(:@current_page_index, 0)
-          @reader.send(:update_chapter_from_page_index)
-        when 'G'
-          pm = @reader.instance_variable_get(:@page_manager)
-          if pm
-            @reader.instance_variable_set(:@current_page_index, pm.total_pages - 1)
-            @reader.send(:update_chapter_from_page_index)
-          end
-        end
+        handler = dynamic_navigation_handlers[key]
+        handler&.call
+      end
+
+      def dynamic_navigation_handlers
+        @dynamic_handlers ||= basic_nav_handlers
+                               .merge(chapter_nav_handlers)
+                               .merge(go_handlers)
+      end
+
+      def basic_nav_handlers
+        next_keys.merge(prev_keys)
+      end
+
+      def next_keys
+        {
+          'j' => -> { @reader.next_page },
+          "\e[B" => -> { @reader.next_page },
+          "\eOB" => -> { @reader.next_page },
+          'l' => -> { @reader.next_page },
+          ' ' => -> { @reader.next_page },
+          "\e[C" => -> { @reader.next_page },
+          "\eOC" => -> { @reader.next_page },
+        }
+      end
+
+      def prev_keys
+        {
+          'k' => -> { @reader.prev_page },
+          "\e[A" => -> { @reader.prev_page },
+          "\eOA" => -> { @reader.prev_page },
+          'h' => -> { @reader.prev_page },
+          "\e[D" => -> { @reader.prev_page },
+          "\eOD" => -> { @reader.prev_page },
+        }
+      end
+
+      def chapter_nav_handlers
+        {
+          'n' => -> { @reader.next_chapter },
+          'N' => -> { @reader.next_chapter },
+          'p' => -> { @reader.prev_chapter },
+          'P' => -> { @reader.prev_chapter },
+        }
+      end
+
+      def go_handlers
+        {
+          'g' => -> { go_to_start_dynamic },
+          'G' => -> { go_to_end_dynamic },
+        }
+      end
+
+      def go_to_start_dynamic
+        @reader.instance_variable_set(:@current_page_index, 0)
+        @reader.send(:update_chapter_from_page_index)
+      end
+
+      def go_to_end_dynamic
+        pm = @reader.instance_variable_get(:@page_manager)
+        return unless pm
+
+        @reader.instance_variable_set(:@current_page_index, pm.total_pages - 1)
+        @reader.send(:update_chapter_from_page_index)
       end
 
       def handle_navigation_input_absolute(key)
@@ -133,39 +205,70 @@ module EbookReader
       end
 
       def handle_toc_input(key)
-        if %w[t T].include?(key) || escape_key?(key)
+        if toc_exit_key?(key)
           @reader.switch_mode(:read)
         elsif navigation_key?(key)
-          selected = handle_navigation_keys(
-            key,
-            @reader.instance_variable_get(:@toc_selected),
-            @reader.doc.chapter_count - 1
-          )
-          @reader.instance_variable_set(:@toc_selected, selected)
+          handle_toc_navigation(key)
         elsif enter_key?(key)
-          chapter_index = @reader.instance_variable_get(:@toc_selected)
-          @reader.send(:jump_to_chapter, chapter_index)
+          handle_toc_selection
         end
+      end
+
+      def toc_exit_key?(key)
+        %w[t T].include?(key) || escape_key?(key)
+      end
+
+      def handle_toc_navigation(key)
+        selected = handle_navigation_keys(
+          key,
+          @reader.instance_variable_get(:@toc_selected),
+          @reader.doc.chapter_count - 1,
+        )
+        @reader.instance_variable_set(:@toc_selected, selected)
+      end
+
+      def handle_toc_selection
+        chapter_index = @reader.instance_variable_get(:@toc_selected)
+        @reader.send(:jump_to_chapter, chapter_index)
       end
 
       def handle_bookmarks_input(key)
         bookmarks = @reader.instance_variable_get(:@bookmarks)
-        return handle_empty_bookmarks_input(key) if bookmarks.empty?
 
-        if ['B'].include?(key) || escape_key?(key)
+        if bookmarks.empty?
+          handle_empty_bookmarks_input(key)
+        else
+          handle_populated_bookmarks_input(key, bookmarks)
+        end
+      end
+
+      def handle_populated_bookmarks_input(key, bookmarks)
+        if bookmark_exit_key?(key)
           @reader.switch_mode(:read)
         elsif navigation_key?(key)
-          selected = handle_navigation_keys(
-            key,
-            @reader.instance_variable_get(:@bookmark_selected),
-            bookmarks.length - 1
-          )
-          @reader.instance_variable_set(:@bookmark_selected, selected)
+          handle_bookmark_navigation(key, bookmarks)
         elsif enter_key?(key)
           @reader.send(:jump_to_bookmark)
-        elsif %w[d D].include?(key)
+        elsif delete_key?(key)
           @reader.send(:delete_selected_bookmark)
         end
+      end
+
+      def bookmark_exit_key?(key)
+        ['B'].include?(key) || escape_key?(key)
+      end
+
+      def delete_key?(key)
+        %w[d D].include?(key)
+      end
+
+      def handle_bookmark_navigation(key, bookmarks)
+        selected = handle_navigation_keys(
+          key,
+          @reader.instance_variable_get(:@bookmark_selected),
+          bookmarks.length - 1,
+        )
+        @reader.instance_variable_set(:@bookmark_selected, selected)
       end
 
       def handle_empty_bookmarks_input(key)

@@ -53,14 +53,27 @@ module EbookReader
       draw_screen
       loop do
         process_scan_results_if_available
-        key = Terminal.read_key_blocking
-        keys = [key]
-        while (extra = Terminal.read_key)
-          keys << extra
-          break if keys.size > 10
-        end
-        keys.each { |k| @input_handler.handle_input(k) }
+        handle_user_input
         draw_screen
+      end
+    end
+
+    def handle_user_input
+      keys = read_input_keys
+      keys.each { |k| @input_handler.handle_input(k) }
+    end
+
+    def read_input_keys
+      key = Terminal.read_key_blocking
+      keys = [key]
+      collect_additional_keys(keys)
+      keys
+    end
+
+    def collect_additional_keys(keys)
+      while (extra = Terminal.read_key)
+        keys << extra
+        break if keys.size > 10
       end
     end
 
@@ -211,22 +224,41 @@ module EbookReader
     end
 
     def handle_open_file_input(key)
+      return unless key
+
       case key
-      when nil
-        return
-      when '\e', "\x1B"
-        switch_to_mode(:menu)
-      when "\r", "\n"
-        path = sanitize_input_path(@file_input)
-        handle_file_path(path) if path && !path.empty?
-        switch_to_mode(:menu)
-      when "\b", "\x7F", "\x08"
-        @file_input = @file_input[0...-1] if @file_input.length.positive?
-      else
-        char = key.to_s
-        @file_input += char if char.length == 1 && char.ord >= 32
+      when "\e", "\x1B" then handle_escape
+      when "\r", "\n" then handle_enter
+      when *backspace_keys then handle_backspace_input
+      else handle_character_input(key)
       end
+    end
+
+    def backspace_keys
+      ["\b", "\x7F", "\x08"]
+    end
+
+    def handle_escape
+      switch_to_mode(:menu)
+    end
+
+    def handle_enter
+      path = sanitize_input_path(@file_input)
+      handle_file_path(path) if path && !path.empty?
+      switch_to_mode(:menu)
+    end
+
+    def handle_backspace_input
+      @file_input = @file_input[0...-1] if @file_input.length.positive?
       @open_file_screen.input = @file_input
+    end
+
+    def handle_character_input(key)
+      char = key.to_s
+      if char.length == 1 && char.ord >= 32
+        @file_input += char
+        @open_file_screen.input = @file_input
+      end
     end
 
     def handle_setting_change(key)

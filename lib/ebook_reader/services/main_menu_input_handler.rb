@@ -25,44 +25,100 @@ module EbookReader
 
       def handle_menu_input(key)
         case key
-        when 'q', 'Q' then @menu.send(:cleanup_and_exit, 0, '')
+        when 'q', 'Q' then handle_quit
         when 'f', 'F' then @menu.send(:switch_to_browse)
         when 'r', 'R' then @menu.send(:switch_to_mode, :recent)
         when 'o', 'O' then @menu.send(:open_file_dialog)
         when 's', 'S' then @menu.send(:switch_to_mode, :settings)
-        when 'j', "\e[B", "\eOB"
-          selected = (@menu.instance_variable_get(:@selected) + 1) % 5
-          @menu.instance_variable_set(:@selected, selected)
-        when 'k', "\e[A", "\eOA"
-          selected = (@menu.instance_variable_get(:@selected) - 1 + 5) % 5
-          @menu.instance_variable_set(:@selected, selected)
-        when "\r", "\n" then @menu.send(:handle_menu_selection)
+        when *navigation_down_keys then navigate_menu_down
+        when *navigation_up_keys then navigate_menu_up
+        when *enter_keys then @menu.send(:handle_menu_selection)
         end
       end
 
+      private
+
+      def handle_quit
+        @menu.send(:cleanup_and_exit, 0, '')
+      end
+
+      def navigation_down_keys
+        ['j', "\e[B", "\eOB"]
+      end
+
+      def navigation_up_keys
+        ['k', "\e[A", "\eOA"]
+      end
+
+      def enter_keys
+        ["\r", "\n"]
+      end
+
+      def navigate_menu_down
+        selected = (@menu.instance_variable_get(:@selected) + 1) % 5
+        @menu.instance_variable_set(:@selected, selected)
+      end
+
+      def navigate_menu_up
+        selected = (@menu.instance_variable_get(:@selected) - 1 + 5) % 5
+        @menu.instance_variable_set(:@selected, selected)
+      end
+
       def handle_browse_input(key)
-        if escape_key?(key)
-          @menu.send(:switch_to_mode, :menu)
-        elsif %w[r R].include?(key)
-          @menu.send(:refresh_scan)
+        handler = browse_input_handlers[key]
+
+        if handler
+          handler.call
         elsif navigation_key?(key)
           @menu.send(:navigate_browse, key)
-        elsif enter_key?(key)
-          @menu.send(:open_selected_book)
-        elsif key == '/'
-          @menu.instance_variable_set(:@search_query, '')
-          @menu.instance_variable_set(:@search_cursor, 0)
-        elsif %W(\e[D \eOD).include?(key)
-          @menu.send(:move_search_cursor, -1)
-        elsif %W(\e[C \eOC).include?(key)
-          @menu.send(:move_search_cursor, 1)
-        elsif key == "\e[3~"
-          @menu.send(:handle_delete)
-        elsif backspace_key?(key)
-          handle_backspace
         elsif searchable_key?(key)
           add_to_search(key)
         end
+      end
+
+      def browse_input_handlers
+        @browse_handlers ||= base_browse_handlers
+                             .merge(cursor_handlers)
+                             .merge(backspace_handlers)
+      end
+
+      def base_browse_handlers
+        handlers = {
+          'r' => -> { @menu.send(:refresh_scan) },
+          'R' => -> { @menu.send(:refresh_scan) },
+          "\r" => -> { @menu.send(:open_selected_book) },
+          "\n" => -> { @menu.send(:open_selected_book) },
+          '/' => -> { reset_search },
+          "\e[3~" => -> { @menu.send(:handle_delete) },
+        }
+        switch_keys.each { |k| handlers[k] = -> { @menu.send(:switch_to_mode, :menu) } }
+        handlers
+      end
+
+      def switch_keys
+        ["\e", "\x1B", 'q']
+      end
+
+      def cursor_handlers
+        {
+          "\e[D" => -> { @menu.send(:move_search_cursor, -1) },
+          "\eOD" => -> { @menu.send(:move_search_cursor, -1) },
+          "\e[C" => -> { @menu.send(:move_search_cursor, 1) },
+          "\eOC" => -> { @menu.send(:move_search_cursor, 1) },
+        }
+      end
+
+      def backspace_handlers
+        {
+          "\b" => -> { handle_backspace },
+          "\x7F" => -> { handle_backspace },
+          "\x08" => -> { handle_backspace },
+        }
+      end
+
+      def reset_search
+        @menu.instance_variable_set(:@search_query, '')
+        @menu.instance_variable_set(:@search_cursor, 0)
       end
 
       def handle_recent_input(key)
@@ -71,20 +127,39 @@ module EbookReader
         if escape_key?(key)
           @menu.send(:switch_to_mode, :menu)
         elsif navigation_key?(key) && recent.any?
-          selected = handle_navigation_keys(key,
-                                            @menu.instance_variable_get(:@browse_selected),
-                                            recent.length - 1)
-          @menu.instance_variable_set(:@browse_selected, selected)
+          handle_recent_navigation(key, recent)
         elsif enter_key?(key)
-          book = recent[@menu.instance_variable_get(:@browse_selected)]
-          if book && book['path'] && File.exist?(book['path'])
-            @menu.send(:open_book, book['path'])
-          else
-            scanner = @menu.instance_variable_get(:@scanner)
-            scanner.scan_message = 'File not found'
-            scanner.scan_status = :error
-          end
+          handle_recent_selection(recent)
         end
+      end
+
+      def handle_recent_navigation(key, recent)
+        selected = handle_navigation_keys(
+          key,
+          @menu.instance_variable_get(:@browse_selected),
+          recent.length - 1,
+        )
+        @menu.instance_variable_set(:@browse_selected, selected)
+      end
+
+      def handle_recent_selection(recent)
+        book = recent[@menu.instance_variable_get(:@browse_selected)]
+
+        if valid_book?(book)
+          @menu.send(:open_book, book['path'])
+        else
+          show_file_not_found_error
+        end
+      end
+
+      def valid_book?(book)
+        book && book['path'] && File.exist?(book['path'])
+      end
+
+      def show_file_not_found_error
+        scanner = @menu.instance_variable_get(:@scanner)
+        scanner.scan_message = 'File not found'
+        scanner.scan_status = :error
       end
 
       def handle_settings_input(key)

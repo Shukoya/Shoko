@@ -52,16 +52,25 @@ module EbookReader
 
       def scan_with_timeout
         epubs = []
-        begin
-          Timeout.timeout(SCAN_TIMEOUT) do
-            epubs = perform_scan
-          end
-        rescue Timeout::Error
-          save_cache(epubs) unless epubs.empty?
-        rescue StandardError
-          epubs = cached_files_fallback
-        end
+        epubs = perform_scan_with_timeout
+      rescue Timeout::Error
+        handle_timeout_error(epubs)
+      rescue StandardError
+        epubs = cached_files_fallback
+      ensure
+        save_and_return_epubs(epubs)
+      end
 
+      def perform_scan_with_timeout
+        Timeout.timeout(SCAN_TIMEOUT) { perform_scan }
+      end
+
+      def handle_timeout_error(epubs)
+        save_cache(epubs) unless epubs.empty?
+        epubs
+      end
+
+      def save_and_return_epubs(epubs)
         save_cache(epubs)
         epubs
       end
@@ -95,25 +104,28 @@ module EbookReader
       end
 
       def build_directory_list
-        priority_dirs = [
-          '~/Books',
-          '~/Documents/Books',
-          '~/Downloads',
-          '~/Desktop',
-          '~/Documents',
-          '~/Library/Mobile Documents',
-        ].map { |dir| File.expand_path(dir) }
-                        .select { |dir| safe_directory_exists?(dir) }
+        directories = priority_directories + other_directories
+        directories.uniq.select { |dir| safe_directory_exists?(dir) }
+      end
 
-        other_dirs = [
-          '~',
-          '~/Dropbox',
-          '~/Google Drive',
-          '~/OneDrive',
+      def priority_directories
+        %w[
+          ~/Books
+          ~/Documents/Books
+          ~/Downloads
+          ~/Desktop
+          ~/Documents
+          ~/Library/Mobile\ Documents
         ].map { |dir| File.expand_path(dir) }
-                     .select { |dir| safe_directory_exists?(dir) }
+      end
 
-        (priority_dirs + other_dirs).uniq
+      def other_directories
+        %w[
+          ~
+          ~/Dropbox
+          ~/Google\ Drive
+          ~/OneDrive
+        ].map { |dir| File.expand_path(dir) }
       end
 
       def safe_directory_exists?(dir)

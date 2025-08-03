@@ -30,26 +30,44 @@ module EbookReader
       def start_scan(force: false)
         return if @scan_thread&.alive?
 
+        initialize_scan
+        @scan_thread = create_scan_thread(force)
+      end
+
+      private
+
+      def initialize_scan
         @scan_status = :scanning
         @scan_message = 'Scanning for EPUB files...'
         @epubs = []
         @filtered_epubs = []
+      end
 
-        @scan_thread = Thread.new do
-          epubs = EPUBFinder.scan_system(force_refresh: force) || []
-          sorted_epubs = epubs.sort_by { |e| (e['name'] || '').downcase }
-          @scan_results_queue.push({
-                                     status: :done,
-                                     epubs: sorted_epubs,
-                                     message: "Found #{sorted_epubs.length} books",
-                                   })
+      def create_scan_thread(force)
+        Thread.new do
+          perform_scan_operation(force)
         rescue StandardError => e
-          @scan_results_queue.push({
-                                     status: :error,
-                                     epubs: [],
-                                     message: "Scan failed: #{e.message[0..50]}",
-                                   })
+          handle_scan_error(e)
         end
+      end
+
+      def perform_scan_operation(force)
+        epubs = EPUBFinder.scan_system(force_refresh: force) || []
+        sorted_epubs = epubs.sort_by { |e| (e['name'] || '').downcase }
+
+        @scan_results_queue.push({
+                                    status: :done,
+                                    epubs: sorted_epubs,
+                                    message: "Found #{sorted_epubs.length} books",
+                                  })
+      end
+
+      def handle_scan_error(error)
+        @scan_results_queue.push({
+                                    status: :error,
+                                    epubs: [],
+                                    message: "Scan failed: #{error.message[0..50]}",
+                                  })
       end
 
       def process_results

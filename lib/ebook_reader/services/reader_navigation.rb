@@ -44,13 +44,23 @@ module EbookReader
       # @param max_page [Integer] Maximum page offset
       def next_page(content_height, max_page)
         if @config.view_mode == :split
-          if @state.right_page < max_page
-            @state.left_page = @state.right_page
-            @state.right_page = [@state.right_page + content_height, max_page].min
-          elsif can_go_to_next_chapter?
-            go_to_next_chapter
-          end
-        elsif @state.single_page < max_page
+          next_page_split_view(content_height, max_page)
+        else
+          next_page_single_view(content_height, max_page)
+        end
+      end
+
+      def next_page_split_view(content_height, max_page)
+        if @state.right_page < max_page
+          @state.left_page = @state.right_page
+          @state.right_page = [@state.right_page + content_height, max_page].min
+        elsif can_go_to_next_chapter?
+          go_to_next_chapter
+        end
+      end
+
+      def next_page_single_view(content_height, max_page)
+        if @state.single_page < max_page
           @state.single_page = [@state.single_page + content_height, max_page].min
         elsif can_go_to_next_chapter?
           go_to_next_chapter
@@ -62,13 +72,23 @@ module EbookReader
       # @param content_height [Integer] Lines per page
       def previous_page(content_height)
         if @config.view_mode == :split
-          if @state.left_page.positive?
-            @state.right_page = @state.left_page
-            @state.left_page = [@state.left_page - content_height, 0].max
-          elsif can_go_to_previous_chapter?
-            go_to_previous_chapter_end
-          end
-        elsif @state.single_page.positive?
+          previous_page_split_view(content_height)
+        else
+          previous_page_single_view(content_height)
+        end
+      end
+
+      def previous_page_split_view(content_height)
+        if @state.left_page.positive?
+          @state.right_page = @state.left_page
+          @state.left_page = [@state.left_page - content_height, 0].max
+        elsif can_go_to_previous_chapter?
+          go_to_previous_chapter_end
+        end
+      end
+
+      def previous_page_single_view(content_height)
+        if @state.single_page.positive?
           @state.single_page = [@state.single_page - content_height, 0].max
         elsif can_go_to_previous_chapter?
           go_to_previous_chapter_end

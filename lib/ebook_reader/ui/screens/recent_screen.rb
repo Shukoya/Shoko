@@ -45,19 +45,33 @@ module EbookReader
         end
 
         def render_list(recent, height, width)
-          list_start = 4
-          max_items = [(height - 6) / 2, 10].min
+          list_params = calculate_list_params(height)
 
-          recent.take(max_items).each_with_index do |book, i|
+          render_recent_items(recent, list_params, height, width)
+        end
+
+        def calculate_list_params(height)
+          {
+            start: 4,
+            max_items: [(height - 6) / 2, 10].min,
+          }
+        end
+
+        def render_recent_items(recent, params, height, width)
+          recent.take(params[:max_items]).each_with_index do |book, i|
             renderer = UI::RecentItemRenderer.new(book: book, index: i, menu: @menu)
-            context = UI::RecentItemRenderer::Context.new(
-              list_start: list_start,
-              height: height,
-              width: width,
-              selected_index: @selected
-            )
+            context = build_renderer_context(params[:start], height, width)
             renderer.render(context)
           end
+        end
+
+        def build_renderer_context(list_start, height, width)
+          UI::RecentItemRenderer::Context.new(
+            list_start: list_start,
+            height: height,
+            width: width,
+            selected_index: @selected,
+          )
         end
 
         def render_footer(height)

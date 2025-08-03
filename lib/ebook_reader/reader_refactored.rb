@@ -22,41 +22,49 @@ module EbookReader
       def update_page_position_split?(direction, content_height, max_page)
         case direction
         when :next
-          if @right_page < max_page
-            @left_page = @right_page
-            @right_page = [@right_page + content_height, max_page].min
-            true
-          else
-            false
-          end
+          update_split_next_page(content_height, max_page)
         when :prev
-          if @left_page.positive?
-            @right_page = @left_page
-            @left_page = [@left_page - content_height, 0].max
-            true
-          else
-            false
-          end
+          update_split_prev_page(content_height)
         end
+      end
+
+      def update_split_next_page(content_height, max_page)
+        return false unless @right_page < max_page
+
+        @left_page = @right_page
+        @right_page = [@right_page + content_height, max_page].min
+        true
+      end
+
+      def update_split_prev_page(content_height)
+        return false unless @left_page.positive?
+
+        @right_page = @left_page
+        @left_page = [@left_page - content_height, 0].max
+        true
       end
 
       def update_page_position_single?(direction, content_height, max_page)
         case direction
         when :next
-          if @single_page < max_page
-            @single_page = [@single_page + content_height, max_page].min
-            true
-          else
-            false
-          end
+          update_single_next_page(content_height, max_page)
         when :prev
-          if @single_page.positive?
-            @single_page = [@single_page - content_height, 0].max
-            true
-          else
-            false
-          end
+          update_single_prev_page(content_height)
         end
+      end
+
+      def update_single_next_page(content_height, max_page)
+        return false unless @single_page < max_page
+
+        @single_page = [@single_page + content_height, max_page].min
+        true
+      end
+
+      def update_single_prev_page(content_height)
+        return false unless @single_page.positive?
+
+        @single_page = [@single_page - content_height, 0].max
+        true
       end
     end
 
@@ -76,16 +84,28 @@ module EbookReader
       end
 
       def render_page_indicator(start_row, start_col, width, height, offset, actual_height, lines)
-        return unless @config.show_page_numbers && lines.size.positive? && actual_height.positive?
+        return unless should_render_indicator?(lines, actual_height)
 
+        page_info = calculate_page_indicator_info(offset, actual_height, lines)
+        render_indicator_text(page_info, start_row, start_col, width, height)
+      end
+
+      def should_render_indicator?(lines, actual_height)
+        @config.show_page_numbers && lines.size.positive? && actual_height.positive?
+      end
+
+      def calculate_page_indicator_info(offset, actual_height, lines)
         page_num = (offset / actual_height) + 1
         total_pages = [(lines.size.to_f / actual_height).ceil, 1].max
-        page_text = "#{page_num}/#{total_pages}"
-        page_row = start_row + height - 1
+        "#{page_num}/#{total_pages}"
+      end
 
+      def render_indicator_text(page_text, start_row, start_col, width, height)
+        page_row = start_row + height - 1
         return if page_row >= Terminal.size[0] - Constants::PAGE_NUMBER_PADDING
 
-        Terminal.write(page_row, [start_col + width - page_text.length, start_col].max,
+        col = [start_col + width - page_text.length, start_col].max
+        Terminal.write(page_row, col,
                        Terminal::ANSI::DIM + Terminal::ANSI::GRAY + page_text + Terminal::ANSI::RESET)
       end
     end

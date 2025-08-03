@@ -47,17 +47,20 @@ module EbookReader
         end
 
         def render_status(scan_status, scan_message)
-          status_text = case scan_status
-                        when :scanning
-                          "#{YELLOW}⟳ #{scan_message}#{RESET}"
-                        when :error
-                          "#{RED}✗ #{scan_message}#{RESET}"
-                        when :done
-                          "#{GREEN}✓ #{scan_message}#{RESET}"
-                        else
-                          ''
-                        end
+          status_text = build_status_text(scan_status, scan_message)
           Terminal.write(4, 2, status_text) unless status_text.empty?
+        end
+
+        def build_status_text(status, message)
+          status_formatters[status]&.call(message) || ''
+        end
+
+        def status_formatters
+          @formatters ||= {
+            scanning: ->(msg) { "#{YELLOW}⟳ #{msg}#{RESET}" },
+            error: ->(msg) { "#{RED}✗ #{msg}#{RESET}" },
+            done: ->(msg) { "#{GREEN}✓ #{msg}#{RESET}" },
+          }
         end
 
         def render_empty_state(height, width, scan_status, epubs_empty)

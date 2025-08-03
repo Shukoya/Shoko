@@ -76,31 +76,36 @@ module EbookReader
     # fall back to several alternatives if needed.
     def extract_epub(tmpdir)
       Zip::File.open(@path) do |zip|
-        zip.each do |entry|
-          # Skip directories
-          next if entry.name.end_with?('/')
-
-          dest = File.join(tmpdir, entry.name)
-          FileUtils.mkdir_p(File.dirname(dest))
-
-          # CRITICAL FIX: Handle different rubyzip versions
-          next if File.exist?(dest)
-
-          begin
-            # First try the standard way
-            entry.extract(dest)
-          rescue ArgumentError => e
-            raise unless e.message.include?('wrong number of arguments')
-
-            # For rubyzip versions that don't accept parameters
-            # Use the block form which works in all versions
-            zip.extract(entry, dest) { true }
-          rescue StandardError
-            # Ultimate fallback - read and write manually
-            File.binwrite(dest, zip.read(entry))
-          end
-        end
+        zip.each { |entry| extract_entry(zip, entry, tmpdir) unless entry.name.end_with?('/') }
       end
+    end
+
+    private
+
+    def extract_entry(zip, entry, tmpdir)
+      dest = prepare_destination(entry, tmpdir)
+      return if File.exist?(dest)
+
+      extract_with_fallback(zip, entry, dest)
+    end
+
+    def prepare_destination(entry, tmpdir)
+      dest = File.join(tmpdir, entry.name)
+      FileUtils.mkdir_p(File.dirname(dest))
+      dest
+    end
+
+    def extract_with_fallback(zip, entry, dest)
+      entry.extract(dest)
+    rescue ArgumentError => e
+      handle_rubyzip_compatibility(zip, entry, dest, e)
+    rescue StandardError
+      File.binwrite(dest, zip.read(entry))
+    end
+
+    def handle_rubyzip_compatibility(zip, entry, dest, error)
+      raise unless error.message.include?('wrong number of arguments')
+      zip.extract(entry, dest) { true }
     end
 
     # After extraction this method finds the OPF file and begins the
@@ -168,10 +173,14 @@ module EbookReader
     # extracted from the HTML when available or generated automatically.
     def load_chapter(path, number, title_from_ncx = nil)
       content = read_file_content(path)
+      create_chapter_from_content(content, number, title_from_ncx)
+    rescue Errno::ENOENT, REXML::ParseException
+      nil
+    end
 
-      title = title_from_ncx || Helpers::HTMLProcessor.extract_title(content) || "Chapter #{number}"
-      text = Helpers::HTMLProcessor.html_to_text(content)
-      lines = text.split("\n").reject { |line| line.strip.empty? }
+    def create_chapter_from_content(content, number, title_from_ncx)
+      title = extract_chapter_title(content, number, title_from_ncx)
+      lines = extract_chapter_lines(content)
 
       Models::Chapter.new(
         number: number.to_s,
@@ -179,8 +188,15 @@ module EbookReader
         lines: lines,
         metadata: nil
       )
-    rescue Errno::ENOENT, REXML::ParseException
-      nil
+    end
+
+    def extract_chapter_title(content, number, title_from_ncx)
+      title_from_ncx || Helpers::HTMLProcessor.extract_title(content) || "Chapter #{number}"
+    end
+
+    def extract_chapter_lines(content)
+      text = Helpers::HTMLProcessor.html_to_text(content)
+      text.split("\n").reject { |line| line.strip.empty? }
     end
 
     # Utility method to read a file as UTF-8 while stripping any UTF-8

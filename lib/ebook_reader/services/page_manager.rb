@@ -15,31 +15,54 @@ module EbookReader
         return unless @config.page_numbering_mode == :dynamic
 
         @pages_data = []
+        layout_metrics = prepare_layout_metrics(terminal_width, terminal_height)
+        return if layout_metrics[:lines_per_page] <= 0
+
+        build_all_chapter_pages(layout_metrics)
+        @pages_data
+      end
+
+      private
+
+      def prepare_layout_metrics(terminal_width, terminal_height)
         col_width, content_height = calculate_layout_metrics(terminal_width, terminal_height)
         lines_per_page = adjust_for_line_spacing(content_height)
-        return if lines_per_page <= 0
 
+        { col_width: col_width, lines_per_page: lines_per_page }
+      end
+
+      def build_all_chapter_pages(layout_metrics)
         @doc.chapters.each_with_index do |chapter, chapter_idx|
-          wrapped_lines = wrap_chapter_lines(chapter, col_width)
-          page_count = (wrapped_lines.size.to_f / lines_per_page).ceil
-          page_count = 1 if page_count < 1
-
-          page_count.times do |page_idx|
-            start_line = page_idx * lines_per_page
-            end_line = [start_line + lines_per_page - 1, wrapped_lines.size - 1].min
-
-            @pages_data << {
-              chapter_index: chapter_idx,
-              page_in_chapter: page_idx,
-              total_pages_in_chapter: page_count,
-              start_line: start_line,
-              end_line: end_line,
-              lines: wrapped_lines[start_line..end_line] || [],
-            }
-          end
+          build_chapter_pages(chapter, chapter_idx, layout_metrics)
         end
+      end
 
-        @pages_data
+      def build_chapter_pages(chapter, chapter_idx, layout_metrics)
+        wrapped_lines = wrap_chapter_lines(chapter, layout_metrics[:col_width])
+        page_count = calculate_page_count(wrapped_lines.size, layout_metrics[:lines_per_page])
+
+        page_count.times do |page_idx|
+          add_page_data(wrapped_lines, chapter_idx, page_idx, layout_metrics[:lines_per_page], page_count)
+        end
+      end
+
+      def calculate_page_count(line_count, lines_per_page)
+        count = (line_count.to_f / lines_per_page).ceil
+        [count, 1].max
+      end
+
+      def add_page_data(wrapped_lines, chapter_idx, page_idx, lines_per_page, page_count)
+        start_line = page_idx * lines_per_page
+        end_line = [start_line + lines_per_page - 1, wrapped_lines.size - 1].min
+
+        @pages_data << {
+          chapter_index: chapter_idx,
+          page_in_chapter: page_idx,
+          total_pages_in_chapter: page_count,
+          start_line: start_line,
+          end_line: end_line,
+          lines: wrapped_lines[start_line..end_line] || [],
+        }
       end
 
       def get_page(page_index)
@@ -88,36 +111,57 @@ module EbookReader
       def wrap_chapter_lines(chapter, width)
         return [] unless chapter.lines
 
-        wrapped = []
-        chapter.lines.each do |line|
-          next if line.nil?
+        process_chapter_lines(chapter.lines, width)
+      end
 
-          if line.strip.empty?
-            wrapped << ''
-          else
-            wrap_line(line, width, wrapped)
-          end
+      def process_chapter_lines(lines, width)
+        wrapped = []
+        lines.each do |line|
+          process_single_line(line, width, wrapped)
         end
         wrapped
       end
 
+      def process_single_line(line, width, wrapped)
+        return if line.nil?
+
+        if line.strip.empty?
+          wrapped << ''
+        else
+          wrap_line(line, width, wrapped)
+        end
+      end
+
       def wrap_line(line, width, wrapped)
         words = line.split(/\s+/)
+        process_words(words, width, wrapped)
+      end
+
+      def process_words(words, width, wrapped)
         current = ''
 
         words.each do |word|
-          next if word.nil?
-
-          if current.empty?
-            current = word
-          elsif current.length + 1 + word.length <= width
-            current += " #{word}"
-          else
-            wrapped << current
-            current = word
-          end
+          current = add_word_to_line(word, current, width, wrapped)
         end
+
         wrapped << current unless current.empty?
+      end
+
+      def add_word_to_line(word, current, width, wrapped)
+        return current if word.nil?
+
+        if current.empty?
+          word
+        elsif fits_on_line?(current, word, width)
+          "#{current} #{word}"
+        else
+          wrapped << current
+          word
+        end
+      end
+
+      def fits_on_line?(current, word, width)
+        current.length + 1 + word.length <= width
       end
     end
   end
