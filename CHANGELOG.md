@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Standardized logging throughout the application
 - Improved code organization with clear separation of concerns
 
+### Removed
+- Copy mode and the `c` key binding; screen rendering now always remains copy-friendly
+
 ### Fixed
 - Terminal size validation edge cases
 - Memory efficiency in large documents

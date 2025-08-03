@@ -8,6 +8,7 @@ This guide covers the development setup, architecture, and best practices for co
 - [Project Structure](#project-structure)
 - [Architecture Overview](#architecture-overview)
 - [Coding Standards](#coding-standards)
+- [Text Selection and Copying](#text-selection-and-copying)
 - [Testing Guidelines](#testing-guidelines)
 - [Performance Considerations](#performance-considerations)
 - [Debugging Tips](#debugging-tips)
@@ -142,6 +143,15 @@ end
 - **Constants**: `SCREAMING_SNAKE_CASE` (e.g., `MAX_WIDTH`)
 - **Predicates**: End with `?` (e.g., `valid?`)
 - **Dangerous methods**: End with `!` (e.g., `save!`)
+
+## Text Selection and Copying
+
+Reader intentionally renders content directly to the terminal without any special "copy mode".
+This ensures standard terminal text selection works in all contexts.
+
+- Avoid introducing alternate rendering paths that bypass direct printing of page content.
+- Maintain the header → content → footer → message drawing order so text stays selectable.
+- New features should preserve copy-friendly output and not require additional key bindings.
 
 ## Testing Guidelines
 

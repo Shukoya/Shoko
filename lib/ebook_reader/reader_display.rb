@@ -331,11 +331,11 @@ module EbookReader
         '  P         Toggle page numbering mode (Absolute/Dynamic)',
         '  + / -     Adjust line spacing',
         '',
+        # Copy mode was removed; pages are always printed so terminals can select text.
         'Features:',
         '  t         Show Table of Contents',
         '  b         Add a bookmark',
         '  B         Show bookmarks',
-        '  c         Copy current page',
         '',
         'Other Keys:',
         '  ?         Show/hide this help',

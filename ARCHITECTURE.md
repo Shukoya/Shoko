@@ -62,6 +62,7 @@ Reader follows a modular, object-oriented architecture designed for maintainabil
 - **Renderers**: Specialized rendering for different content types
 - **ReaderModes**: Mode-specific behavior and rendering
 - **InputHandler**: Keyboard input processing
+- **Copy-friendly Rendering**: Header, content, footer, and messages are printed directly so standard terminal text selection always works; no separate copy mode exists.
 
 ### Business Logic
 - **EPUBDocument**: EPUB parsing and content extraction

@@ -24,7 +24,7 @@ A fast, keyboard-driven terminal EPUB reader written in Ruby.
 - **Customizable Display**: Adjustable line spacing and visual preferences
 - **Performance Optimized**: Lazy loading and efficient rendering for large books
 - **Error Recovery**: Graceful handling of corrupted or invalid EPUB files
-- **Copy Mode**: Temporarily print the current page for easy text selection
+- **Native Text Selection**: Pages are rendered directly to the terminal, allowing highlight and copy without a special mode
 
 ## Installation
 
@@ -102,11 +102,12 @@ On first run, the application will:
 | `t` | Table of Contents | Show chapter list |
 | `b` | Add bookmark | Bookmark current position |
 | `B` | View bookmarks | Show all bookmarks |
-| `c` | Copy mode | Print current page for selection |
 | `v` | Toggle view | Switch between split/single |
 | `+` | Increase spacing | More line spacing |
 | `-` | Decrease spacing | Less line spacing |
 | `?` | Help | Show help screen |
+
+Text selection is always available—simply highlight any text in your terminal to copy it.
 
 ### Application
 
