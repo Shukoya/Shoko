@@ -47,17 +47,13 @@ module EbookReader
       def update_page_position_single?(direction, content_height, max_page)
         case direction
         when :next
-          update_single_next_page?(content_height, max_page)
+          return false unless @single_page < max_page
+
+          @single_page = [@single_page + content_height, max_page].min
+          true
         when :prev
           update_single_prev_page?(content_height)
         end
-      end
-
-      def update_single_next_page(content_height, max_page)
-        return false unless @single_page < max_page
-
-        @single_page = [@single_page + content_height, max_page].min
-        true
       end
 
       def update_single_prev_page?(content_height)
