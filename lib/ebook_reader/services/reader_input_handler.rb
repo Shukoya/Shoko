@@ -36,7 +36,6 @@ module EbookReader
         when 'B' then @reader.send(:open_bookmarks)
         when 'v', 'V' then @reader.toggle_view_mode
         when 'P' then @reader.toggle_page_numbering_mode
-        when 'c', 'C' then @reader.enter_copy_mode
         when '+' then @reader.increase_line_spacing
         when '-' then @reader.decrease_line_spacing
         else handle_navigation_input(key)

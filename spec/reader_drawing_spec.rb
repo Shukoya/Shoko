@@ -74,12 +74,4 @@ RSpec.describe EbookReader::Reader, 'drawing' do
       reader.send(:draw_screen)
     end
   end
-
-  context 'when copy mode is active' do
-    it 'shows the copy mode indicator' do
-      reader.instance_variable_set(:@copy_mode, true)
-      expect(EbookReader::Terminal).to receive(:write).with(24, 1, /copy mode activated!/i)
-      reader.send(:draw_screen)
-    end
-  end
 end

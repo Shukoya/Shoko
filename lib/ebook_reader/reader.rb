@@ -293,49 +293,6 @@ module EbookReader
       @last_width = 0
     end
 
-    # Enter a temporary copy mode where the current page can be highlighted
-    # without leaving the reader interface.
-    def enter_copy_mode
-      @copy_mode = true
-      draw_screen
-      Terminal.read_key_blocking
-    ensure
-      @copy_mode = false
-      draw_screen
-    end
-
-    # Collect the lines currently visible on screen and print them without
-    # terminal escape codes.
-    def print_copy_text
-      lines = current_page_lines
-      puts lines.join("\n")
-      puts
-      puts '[Press any key to return]'
-    end
-
-    # Determine the text for the current visible page respecting view mode.
-    def current_page_lines
-      height, width = Terminal.size
-      col_width, content_height = get_layout_metrics(width, height)
-      actual_height = adjust_for_line_spacing(content_height)
-
-      chapter = @doc.get_chapter(@current_chapter)
-      return [] unless chapter
-
-      wrapped = wrap_lines(chapter.lines || [], col_width)
-
-      if @config.view_mode == :split
-        left_lines  = calculate_visible_lines(wrapped, @left_page, actual_height)
-        right_lines = calculate_visible_lines(wrapped, @right_page, actual_height)
-        max_lines = [left_lines.length, right_lines.length].max
-        Array.new(max_lines) do |i|
-          format("%-#{col_width}s    %s", left_lines[i].to_s, right_lines[i].to_s)
-        end
-      else
-        calculate_visible_lines(wrapped, @single_page, actual_height)
-      end
-    end
-
     private
 
     def initialize_state
@@ -354,7 +311,6 @@ module EbookReader
       @total_pages = 0
       @last_width = 0
       @last_height = 0
-      @copy_mode = false
     end
 
     def load_document

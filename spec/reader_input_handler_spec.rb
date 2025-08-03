@@ -73,9 +73,6 @@ RSpec.describe EbookReader::Services::ReaderInputHandler do
       expect(reader).to receive(:toggle_view_mode)
       handler.handle_reading_input('v')
 
-      expect(reader).to receive(:enter_copy_mode)
-      handler.handle_reading_input('c')
-
       expect(handler).to receive(:handle_navigation_input).with('x')
       handler.handle_reading_input('x')
     end
