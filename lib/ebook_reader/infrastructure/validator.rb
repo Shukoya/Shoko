@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../policies/validation_policy'
+
 module EbookReader
   module Infrastructure
     # Base validator class providing common validation patterns.
@@ -54,12 +56,11 @@ module EbookReader
       # @param field [Symbol] Field name for error reporting
       # @param message [String] Custom error message
       # @return [Boolean] Validation result
-      def range_valid?(value, range, field, message = nil)
-        return true if range.include?(value)
-
-        message ||= "must be between #{range.min} and #{range.max}"
-        add_error(field, message)
-        false
+      def range_valid?(value, range, field, _message = nil)
+        policy = Policies::ValidationPolicy.new
+        result = policy.range_valid?(value, range, field)
+        @errors.concat(policy.errors) unless result
+        result
       end
 
       # Validate value matches a pattern
@@ -69,11 +70,11 @@ module EbookReader
       # @param field [Symbol] Field name for error reporting
       # @param message [String] Custom error message
       # @return [Boolean] Validation result
-      def format_valid?(value, pattern, field, message = 'has invalid format')
-        return true if value.to_s.match?(pattern)
-
-        add_error(field, message)
-        false
+      def format_valid?(value, pattern, field, _message = 'has invalid format')
+        policy = Policies::ValidationPolicy.new
+        result = policy.format_valid?(value, pattern, field)
+        @errors.concat(policy.errors) unless result
+        result
       end
     end
   end

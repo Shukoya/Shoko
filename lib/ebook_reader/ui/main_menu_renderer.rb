@@ -18,9 +18,12 @@ module EbookReader
         logo_start + logo_lines.length + 5
       end
 
-      def render_menu_item(row, pointer_col, text_col, item, selected)
-        draw_pointer(row, pointer_col, selected)
-        draw_item_text(row, text_col, item, selected)
+      MenuItemContext = Struct.new(:row, :pointer_col, :text_col, :item, :selected,
+                                   keyword_init: true)
+
+      def render_menu_item(context)
+        draw_pointer(context.row, context.pointer_col, context.selected)
+        draw_item_text(context.row, context.text_col, context.item, context.selected)
       end
 
       def render_footer(height, width, text)

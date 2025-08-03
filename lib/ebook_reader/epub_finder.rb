@@ -5,6 +5,8 @@ require 'json'
 require 'time'
 require 'timeout'
 
+require_relative 'models/scanner_context'
+
 module EbookReader
   # EPUB file finder with robust error handling
   class EPUBFinder
@@ -82,24 +84,28 @@ module EbookReader
 
       def perform_scan
         epubs = []
-        visited_paths = Set.new
+        context = Models::ScannerContext.new(
+          epubs: epubs,
+          visited_paths: Set.new,
+          depth: 0
+        )
 
-        scan_directories(epubs, visited_paths)
+        scan_directories(context)
 
         warn "Found #{epubs.length} EPUB files" if DEBUG_MODE
         epubs
       end
 
-      def scan_directories(epubs, visited_paths)
+      def scan_directories(context)
         all_dirs = build_directory_list
 
         warn "Scanning directories: #{all_dirs.join(', ')}" if DEBUG_MODE
 
         all_dirs.each do |start_dir|
-          break if epubs.length >= MAX_FILES
+          break if context.epubs.length >= MAX_FILES
 
           warn "Scanning: #{start_dir}" if DEBUG_MODE
-          scan_directory(start_dir, epubs, visited_paths, 0)
+          scan_directory(start_dir, context)
         end
       end
 
@@ -134,48 +140,42 @@ module EbookReader
         false
       end
 
-      def scan_directory(dir, epubs, visited_paths, depth)
-        return if should_skip_scan?(dir, epubs, visited_paths, depth)
+      def scan_directory(dir, context)
+        return unless context.can_scan?(dir, MAX_DEPTH, MAX_FILES)
 
-        visited_paths.add(dir)
-        process_directory_entries(dir, epubs, visited_paths, depth)
+        context.mark_visited(dir)
+        process_directory_entries(dir, context)
       rescue Errno::EACCES, Errno::ENOENT, Errno::EPERM
         # Skip directories we can't access
       rescue StandardError => e
         warn "Error scanning #{dir}: #{e.message}" if DEBUG_MODE
       end
 
-      def should_skip_scan?(dir, epubs, visited_paths, depth)
-        depth > MAX_DEPTH ||
-          epubs.length >= MAX_FILES ||
-          visited_paths.include?(dir)
-      end
-
-      def process_directory_entries(dir, epubs, visited_paths, depth)
+      def process_directory_entries(dir, context)
         Dir.entries(dir).each do |entry|
           next if entry.start_with?('.')
 
           path = File.join(dir, entry)
-          next if visited_paths.include?(path)
+          next if context.visited_paths.include?(path)
 
-          process_entry(path, epubs, visited_paths, depth)
+          process_entry(path, context)
         end
       end
 
-      def process_entry(path, epubs, visited_paths, depth)
+      def process_entry(path, context)
         if File.directory?(path)
-          process_directory(path, epubs, visited_paths, depth)
+          process_directory(path, context)
         elsif epub_file?(path)
-          add_epub(path, epubs)
+          add_epub(path, context.epubs)
         end
       rescue StandardError
         # Skip items we can't process
       end
 
-      def process_directory(path, epubs, visited_paths, depth)
+      def process_directory(path, context)
         return if skip_directory?(path)
 
-        scan_directory(path, epubs, visited_paths, depth + 1)
+        scan_directory(path, context.with_deeper_depth)
       end
 
       def skip_directory?(path)

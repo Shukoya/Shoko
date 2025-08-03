@@ -28,7 +28,11 @@ require_relative 'ebook_reader/constants/ui_constants'
 require_relative 'ebook_reader/models/chapter'
 require_relative 'ebook_reader/models/bookmark'
 require_relative 'ebook_reader/models/bookmark_data'
-require_relative 'ebook_reader/models/column_drawing_params'
+require_relative 'ebook_reader/models/drawing_context'
+require_relative 'ebook_reader/models/scanner_context'
+require_relative 'ebook_reader/models/page_rendering_context'
+require_relative 'ebook_reader/builders/page_setup_builder'
+require_relative 'ebook_reader/policies/validation_policy'
 
 # Core components
 require_relative 'ebook_reader/version'

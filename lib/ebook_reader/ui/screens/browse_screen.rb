@@ -25,7 +25,9 @@ module EbookReader
           render_status(@scanner.scan_status, @scanner.scan_message)
 
           if @filtered_epubs.empty?
-            render_empty_state(height, width, @scanner.scan_status, @scanner.epubs.empty?)
+            render_empty_state(EmptyStateContext.new(height: height, width: width,
+                                                     scan_status: @scanner.scan_status,
+                                                     epubs_empty: @scanner.epubs.empty?))
           else
             render_book_list(height, width)
           end
@@ -63,13 +65,16 @@ module EbookReader
           }
         end
 
-        def render_empty_state(height, width, scan_status, epubs_empty)
-          if scan_status == :scanning
-            render_scanning_message(height, width)
-          elsif epubs_empty
-            render_no_files_message(height, width)
+        EmptyStateContext = Struct.new(:height, :width, :scan_status, :epubs_empty,
+                                       keyword_init: true)
+
+        def render_empty_state(context)
+          if context.scan_status == :scanning
+            render_scanning_message(context.height, context.width)
+          elsif context.epubs_empty
+            render_no_files_message(context.height, context.width)
           else
-            render_no_matches_message(height, width)
+            render_no_matches_message(context.height, context.width)
           end
         end
 

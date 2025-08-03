@@ -14,13 +14,35 @@ RSpec.describe EbookReader::UI::ReaderRenderer do
   describe '#render_footer' do
     it 'skips page numbers in single view when disabled' do
       pages = { current: 1, total: 10 }
-      renderer.render_footer(24, 80, doc, 0, pages, :single, :read, :normal, [])
+      context = EbookReader::Models::FooterRenderingContext.new(
+        height: 24,
+        width: 80,
+        doc: doc,
+        chapter: 0,
+        pages: pages,
+        view_mode: :single,
+        mode: :read,
+        line_spacing: :normal,
+        bookmarks: []
+      )
+      renderer.render_footer(context)
       expect(EbookReader::Terminal).not_to have_received(:write)
     end
 
     it 'skips second footer line when height is small' do
       pages = { current: 1, total: 10 }
-      renderer.render_footer(3, 80, doc, 0, pages, :split, :read, :normal, [])
+      context = EbookReader::Models::FooterRenderingContext.new(
+        height: 3,
+        width: 80,
+        doc: doc,
+        chapter: 0,
+        pages: pages,
+        view_mode: :split,
+        mode: :read,
+        line_spacing: :normal,
+        bookmarks: []
+      )
+      renderer.render_footer(context)
       expect(EbookReader::Terminal).to have_received(:write).exactly(3).times
     end
   end

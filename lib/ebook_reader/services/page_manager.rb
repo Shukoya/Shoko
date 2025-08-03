@@ -67,11 +67,17 @@ module EbookReader
       def build_chapter_pages(chapter, chapter_idx, layout_metrics)
         wrapped_lines = wrap_chapter_lines(chapter, layout_metrics[:col_width])
         page_count = calculate_page_count(wrapped_lines.size, layout_metrics[:lines_per_page])
-
         page_count.times do |page_idx|
-          add_page_data(wrapped_lines, chapter_idx, page_idx, layout_metrics[:lines_per_page],
-                        page_count)
+          add_page_data(build_page_data(wrapped_lines, chapter_idx, page_idx,
+                                        layout_metrics, page_count))
         end
+      end
+
+      def build_page_data(wrapped_lines, chapter_idx, page_idx, layout_metrics, page_count)
+        PageData.new(wrapped_lines: wrapped_lines, chapter_idx: chapter_idx,
+                     page_idx: page_idx,
+                     lines_per_page: layout_metrics[:lines_per_page],
+                     page_count: page_count)
       end
 
       def calculate_page_count(line_count, lines_per_page)
@@ -79,17 +85,23 @@ module EbookReader
         [count, 1].max
       end
 
-      def add_page_data(wrapped_lines, chapter_idx, page_idx, lines_per_page, page_count)
-        start_line = page_idx * lines_per_page
-        end_line = [start_line + lines_per_page - 1, wrapped_lines.size - 1].min
+      PageData = Struct.new(
+        :wrapped_lines, :chapter_idx, :page_idx, :lines_per_page, :page_count,
+        keyword_init: true
+      )
+
+      def add_page_data(page_data)
+        start_line = page_data.page_idx * page_data.lines_per_page
+        end_line = [start_line + page_data.lines_per_page - 1,
+                    page_data.wrapped_lines.size - 1].min
 
         @pages_data << {
-          chapter_index: chapter_idx,
-          page_in_chapter: page_idx,
-          total_pages_in_chapter: page_count,
+          chapter_index: page_data.chapter_idx,
+          page_in_chapter: page_data.page_idx,
+          total_pages_in_chapter: page_data.page_count,
           start_line: start_line,
           end_line: end_line,
-          lines: wrapped_lines[start_line..end_line] || [],
+          lines: page_data.wrapped_lines[start_line..end_line] || [],
         }
       end
 
@@ -145,24 +157,25 @@ module EbookReader
 
       def process_words(words, width, wrapped)
         current = ''
-
         words.each do |word|
-          current = add_word_to_line(word, current, width, wrapped)
+          current = add_word_to_line(WordContext.new(word: word, current: current,
+                                                     width: width, wrapped: wrapped))
         end
-
         wrapped << current unless current.empty?
       end
 
-      def add_word_to_line(word, current, width, wrapped)
-        return current if word.nil?
+      WordContext = Struct.new(:word, :current, :width, :wrapped, keyword_init: true)
 
-        if current.empty?
-          word
-        elsif fits_on_line?(current, word, width)
-          "#{current} #{word}"
+      def add_word_to_line(context)
+        return context.current if context.word.nil?
+
+        if context.current.empty?
+          context.word
+        elsif fits_on_line?(context.current, context.word, context.width)
+          "#{context.current} #{context.word}"
         else
-          wrapped << current
-          word
+          context.wrapped << context.current
+          context.word
         end
       end
 

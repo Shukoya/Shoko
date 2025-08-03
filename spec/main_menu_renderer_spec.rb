@@ -33,14 +33,20 @@ RSpec.describe EbookReader::UI::MainMenuRenderer do
       expect(EbookReader::Terminal).to receive(:write).with(10, 20, /▸/)
       expect(EbookReader::Terminal).to receive(:write).with(10, 22, /Find Book/)
 
-      renderer.render_menu_item(10, 20, 22, item, true)
+      context = described_class::MenuItemContext.new(row: 10, pointer_col: 20,
+                                                     text_col: 22, item: item,
+                                                     selected: true)
+      renderer.render_menu_item(context)
     end
 
     it 'renders unselected item normally' do
       expect(EbookReader::Terminal).to receive(:write).with(10, 20, /  /)
       expect(EbookReader::Terminal).to receive(:write).with(10, 22, /Find Book/)
 
-      renderer.render_menu_item(10, 20, 22, item, false)
+      context = described_class::MenuItemContext.new(row: 10, pointer_col: 20,
+                                                     text_col: 22, item: item,
+                                                     selected: false)
+      renderer.render_menu_item(context)
     end
   end
 

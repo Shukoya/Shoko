@@ -35,19 +35,52 @@ RSpec.describe EbookReader::UI::ReaderRenderer do
 
     it 'renders page numbers in single view' do
       expect(EbookReader::Terminal).to receive(:write).with(24, 36, %r{5 / 100})
-      renderer.render_footer(24, 80, doc, 0, pages, :single, :read, :normal, bookmarks)
+      context = EbookReader::Models::FooterRenderingContext.new(
+        height: 24,
+        width: 80,
+        doc: doc,
+        chapter: 0,
+        pages: pages,
+        view_mode: :single,
+        mode: :read,
+        line_spacing: :normal,
+        bookmarks: bookmarks
+      )
+      renderer.render_footer(context)
     end
 
     it 'renders full footer in split view' do
       expect(EbookReader::Terminal).to receive(:write).with(23, 1, %r{\[1/10\]})
       expect(EbookReader::Terminal).to receive(:write).with(23, anything, /\[SPLIT\]/)
-      renderer.render_footer(24, 80, doc, 0, pages, :split, :read, :normal, bookmarks)
+      context = EbookReader::Models::FooterRenderingContext.new(
+        height: 24,
+        width: 80,
+        doc: doc,
+        chapter: 0,
+        pages: pages,
+        view_mode: :split,
+        mode: :read,
+        line_spacing: :normal,
+        bookmarks: bookmarks
+      )
+      renderer.render_footer(context)
     end
 
     it 'shows bookmark count' do
       bookmarks = [1, 2, 3]
       expect(EbookReader::Terminal).to receive(:write).with(anything, anything, /B3/)
-      renderer.render_footer(24, 80, doc, 0, pages, :split, :read, :normal, bookmarks)
+      context = EbookReader::Models::FooterRenderingContext.new(
+        height: 24,
+        width: 80,
+        doc: doc,
+        chapter: 0,
+        pages: pages,
+        view_mode: :split,
+        mode: :read,
+        line_spacing: :normal,
+        bookmarks: bookmarks
+      )
+      renderer.render_footer(context)
     end
   end
 end

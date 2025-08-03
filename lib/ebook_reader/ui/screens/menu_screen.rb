@@ -16,7 +16,10 @@ module EbookReader
         def draw(height, width)
           menu_start = @renderer.render_logo(height, width)
           menu_items = build_menu_items
-          render_menu_items(menu_items, menu_start, height, width)
+          render_menu_items(MenuRenderContext.new(items: menu_items,
+                                                  start_row: menu_start,
+                                                  height: height,
+                                                  width: width))
           @renderer.render_footer(height, width,
                                   'Navigate with ↑↓ or jk • Select with Enter')
         end
@@ -33,16 +36,24 @@ module EbookReader
           ]
         end
 
-        def render_menu_items(items, start_row, height, width)
-          items.each_with_index do |item, i|
-            row = start_row + (i * 2)
-            next if row >= height - 2
+        MenuRenderContext = Struct.new(:items, :start_row, :height, :width,
+                                       keyword_init: true)
 
-            pointer_col = [(width / 2) - 20, 2].max
-            text_col = [(width / 2) - 18, 4].max
+        def render_menu_items(context)
+          context.items.each_with_index do |item, i|
+            row = context.start_row + (i * 2)
+            next if row >= context.height - 2
 
-            @renderer.render_menu_item(row, pointer_col, text_col, item,
-                                       i == @selected)
+            pointer_col = [(context.width / 2) - 20, 2].max
+            text_col = [(context.width / 2) - 18, 4].max
+
+            @renderer.render_menu_item(UI::MainMenuRenderer::MenuItemContext.new(
+                                         row: row,
+                                         pointer_col: pointer_col,
+                                         text_col: text_col,
+                                         item: item,
+                                         selected: i == @selected
+                                       ))
           end
         end
       end

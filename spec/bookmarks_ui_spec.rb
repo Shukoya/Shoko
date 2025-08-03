@@ -54,12 +54,26 @@ RSpec.describe EbookReader::Concerns::BookmarksUI do
   end
 
   it 'renders selected bookmark item' do
-    ui.draw_bookmark_item(bookmarks.first, 'Ch1', 0, 4, 80)
+    context = EbookReader::Models::BookmarkDrawingContext.new(
+      bookmark: bookmarks.first,
+      chapter_title: 'Ch1',
+      index: 0,
+      position: EbookReader::Models::Position.new(row: 4, col: 2),
+      width: 80
+    )
+    ui.draw_bookmark_item(context)
     expect(EbookReader::Terminal).to have_received(:write).at_least(3).times
   end
 
   it 'renders unselected bookmark item' do
-    ui.draw_bookmark_item(bookmarks.last, 'Ch1', 1, 6, 80)
+    context = EbookReader::Models::BookmarkDrawingContext.new(
+      bookmark: bookmarks.last,
+      chapter_title: 'Ch1',
+      index: 1,
+      position: EbookReader::Models::Position.new(row: 6, col: 2),
+      width: 80
+    )
+    ui.draw_bookmark_item(context)
     expect(EbookReader::Terminal).to have_received(:write).at_least(2).times
   end
 

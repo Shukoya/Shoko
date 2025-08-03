@@ -18,13 +18,26 @@ module EbookReader
         end
       end
 
-      def render_footer(height, width, doc, chapter, pages, view_mode, mode, line_spacing,
-                        bookmarks)
-        if view_mode == :single && mode == :read
-          render_single_view_footer(height, width, pages)
+      SplitViewContext = Struct.new(
+        :height, :width, :doc, :chapter, :view_mode, :line_spacing, :bookmarks,
+        keyword_init: true
+      )
+
+      StatusContext = Struct.new(:row, :width, :line_spacing, :bookmarks,
+                                 keyword_init: true)
+
+      def render_footer(context)
+        if context.view_mode == :single && context.mode == :read
+          render_single_view_footer(context.height, context.width, context.pages)
         else
-          render_split_view_footer(height, width, doc, chapter, view_mode, line_spacing, bookmarks)
+          render_split_view_footer(split_context_from(context))
         end
+      end
+
+      def split_context_from(context)
+        SplitViewContext.new(height: context.height, width: context.width, doc: context.doc,
+                             chapter: context.chapter, view_mode: context.view_mode,
+                             line_spacing: context.line_spacing, bookmarks: context.bookmarks)
       end
 
       private
@@ -54,14 +67,16 @@ module EbookReader
         Terminal.write(height, centered_col, DIM + GRAY + page_text + RESET)
       end
 
-      def render_split_view_footer(height, width, doc, chapter, view_mode, line_spacing, bookmarks)
-        footer_row1 = [height - 1, 3].max
+      def render_split_view_footer(context)
+        footer_row1 = [context.height - 1, 3].max
 
-        render_footer_progress(footer_row1, doc, chapter)
-        render_footer_mode(footer_row1, width, view_mode)
-        render_footer_status(footer_row1, width, line_spacing, bookmarks)
+        render_footer_progress(footer_row1, context.doc, context.chapter)
+        render_footer_mode(footer_row1, context.width, context.view_mode)
+        render_footer_status(StatusContext.new(row: footer_row1, width: context.width,
+                                               line_spacing: context.line_spacing,
+                                               bookmarks: context.bookmarks))
 
-        render_second_footer_line(height, width, doc) if height > 3
+        render_second_footer_line(context.height, context.width, context.doc) if context.height > 3
       end
 
       def render_footer_progress(row, doc, chapter)
@@ -76,9 +91,9 @@ module EbookReader
         Terminal.write(row, [(width / 2) - 10, 20].max, YELLOW + mode_text + RESET)
       end
 
-      def render_footer_status(row, width, line_spacing, bookmarks)
-        right_prog = "L#{line_spacing.to_s[0]} B#{bookmarks.count}"
-        Terminal.write(row, [width - right_prog.length - 1, 40].max,
+      def render_footer_status(context)
+        right_prog = "L#{context.line_spacing.to_s[0]} B#{context.bookmarks.count}"
+        Terminal.write(context.row, [context.width - right_prog.length - 1, 40].max,
                        BLUE + right_prog + RESET)
       end
 
