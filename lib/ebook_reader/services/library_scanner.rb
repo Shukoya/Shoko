@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 module EbookReader
-  module Helpers
-    # Handles EPUB scanning operations
-    class EPUBScanner
+  module Services
+    # Handles EPUB library scanning operations
+    class LibraryScanner
       attr_accessor :scan_status, :scan_message, :epubs
 
       def initialize

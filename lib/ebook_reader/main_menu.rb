@@ -1,21 +1,19 @@
 # frozen_string_literal: true
 
 require_relative 'ui/main_menu_renderer'
-require_relative 'ui/browse_screen'
 require_relative 'ui/recent_item_renderer'
+require_relative 'ui/screens/browse_screen'
 require_relative 'ui/screens/menu_screen'
 require_relative 'ui/screens/settings_screen'
 require_relative 'ui/screens/recent_screen'
 require_relative 'ui/screens/open_file_screen'
-require_relative 'helpers/epub_scanner'
+require_relative 'services/library_scanner'
 require_relative 'concerns/input_handler'
 
 module EbookReader
   # Main menu (LazyVim style)
   class MainMenu
     include Concerns::InputHandler
-
-    BROWSE_FOOTER_HINTS = '↑↓ Navigate • Enter Open • / Search • r Refresh • ESC Back'
 
     def initialize
       @selected = 0
@@ -25,9 +23,9 @@ module EbookReader
       @search_cursor = 0
       @file_input = ''
       @config = Config.new
-      @scanner = Helpers::EPUBScanner.new
+      @scanner = Services::LibraryScanner.new
       @renderer = UI::MainMenuRenderer.new(@config)
-      @browse_screen = UI::BrowseScreen.new
+      @browse_screen = UI::Screens::BrowseScreen.new(@scanner)
       @menu_screen = UI::Screens::MenuScreen.new(@renderer, @selected)
       @settings_screen = UI::Screens::SettingsScreen.new(@config, @scanner)
       @recent_screen = UI::Screens::RecentScreen.new(self)
@@ -101,91 +99,11 @@ module EbookReader
     end
 
     def draw_browse_screen(height, width)
-      @browse_screen.render_header(width)
-      @browse_screen.render_search_bar(@search_query, @search_cursor)
-      @browse_screen.render_status(@scanner.scan_status, @scanner.scan_message)
-
-      if @filtered_epubs.empty?
-        @browse_screen.render_empty_state(height, width, @scanner.scan_status,
-                                          @scanner.epubs.empty?)
-      else
-        render_book_list(height, width)
-      end
-
-      render_browse_footer(height, width)
-    end
-
-    def render_book_list(height, width)
-      list_start = 6
-      list_height = [height - 8, 1].max
-
-      visible_range = calculate_visible_range(list_height)
-      metrics = { list_start: list_start, list_height: list_height, width: width }
-      render_visible_books(visible_range, metrics)
-      return unless @filtered_epubs.length > list_height
-
-      render_scroll_indicator(list_start, list_height,
-                              width)
-    end
-
-    def calculate_visible_range(list_height)
-      visible_start = [@browse_selected - (list_height / 2), 0].max
-      visible_end = [visible_start + list_height, @filtered_epubs.length].min
-
-      if visible_end == @filtered_epubs.length && @filtered_epubs.length > list_height
-        visible_start = [visible_end - list_height, 0].max
-      end
-
-      visible_start...visible_end
-    end
-
-    def render_visible_books(range, metrics)
-      list_start = metrics[:list_start]
-      list_height = metrics[:list_height]
-      width = metrics[:width]
-
-      range.each_with_index do |idx, row|
-        next if row >= list_height
-
-        book = @filtered_epubs[idx]
-        next unless book
-
-        render_book_item(book, idx, row: list_start + row, width: width)
-      end
-    end
-
-    def render_book_item(book, idx, row:, width:)
-      name = (book['name'] || 'Unknown')[0, [width - 40, 40].max]
-
-      if idx == @browse_selected
-        Terminal.write(row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
-        Terminal.write(row, 4, Terminal::ANSI::BRIGHT_WHITE + name + Terminal::ANSI::RESET)
-      else
-        Terminal.write(row, 2, '  ')
-        Terminal.write(row, 4, Terminal::ANSI::WHITE + name + Terminal::ANSI::RESET)
-      end
-
-      render_book_path(book, row, width) if width > 60
-    end
-
-    def render_book_path(book, row, width)
-      path = (book['dir'] || '').sub(Dir.home, '~')
-      path = "#{path[0, 30]}..." if path.length > 33
-      Terminal.write(row, [width - 35, 45].max,
-                     Terminal::ANSI::DIM + Terminal::ANSI::GRAY + path + Terminal::ANSI::RESET)
-    end
-
-    def render_scroll_indicator(list_start, list_height, width)
-      denominator = [@filtered_epubs.length - 1, 1].max
-      scroll_pos = @filtered_epubs.length > 1 ? @browse_selected.to_f / denominator : 0
-      scroll_row = list_start + (scroll_pos * (list_height - 1)).to_i
-      Terminal.write(scroll_row, width - 2, "#{Terminal::ANSI::BRIGHT_CYAN}▐#{Terminal::ANSI::RESET}")
-    end
-
-    def render_browse_footer(height, _width)
-      hint = "#{@filtered_epubs.length} books • #{BROWSE_FOOTER_HINTS}"
-      Terminal.write(height - 1, 2,
-                     Terminal::ANSI::DIM + hint + Terminal::ANSI::RESET)
+      @browse_screen.selected = @browse_selected
+      @browse_screen.search_query = @search_query
+      @browse_screen.search_cursor = @search_cursor
+      @browse_screen.filtered_epubs = @filtered_epubs
+      @browse_screen.draw(height, width)
     end
 
     def draw_recent_screen(height, width)
@@ -407,10 +325,10 @@ module EbookReader
 
       path = input.chomp.strip
       if (path.start_with?("'") && path.end_with?("'")) ||
-         (path.start_with?("\"") && path.end_with?("\""))
+         (path.start_with?('"') && path.end_with?('"'))
         path = path[1..-2]
       end
-      path = path.delete("\"")
+      path = path.delete('"')
       File.expand_path(path)
     end
 

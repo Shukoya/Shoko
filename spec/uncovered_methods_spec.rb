@@ -23,8 +23,8 @@ RSpec.describe 'Uncovered Methods' do
     end
   end
 
-  describe EbookReader::UI::BrowseScreen do
-    let(:screen) { described_class.new }
+  describe EbookReader::UI::Screens::BrowseScreen do
+    let(:screen) { described_class.new(EbookReader::Services::LibraryScanner.new) }
 
     before do
       allow(EbookReader::Terminal).to receive(:write)

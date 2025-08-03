@@ -3,7 +3,7 @@
 require 'spec_helper'
 
 RSpec.describe 'Utilities comprehensive' do
-  describe EbookReader::Helpers::EPUBScanner do
+  describe EbookReader::Services::LibraryScanner do
     let(:scanner) { described_class.new }
 
     it 'handles scan thread cleanup when thread is nil' do

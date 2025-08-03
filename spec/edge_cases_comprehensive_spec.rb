@@ -84,7 +84,7 @@ RSpec.describe 'Edge Cases Comprehensive' do
 
   describe 'Thread safety' do
     it 'handles concurrent scanner operations' do
-      scanner = EbookReader::Helpers::EPUBScanner.new
+      scanner = EbookReader::Services::LibraryScanner.new
 
       threads = Array.new(5) do
         Thread.new do

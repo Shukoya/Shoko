@@ -359,10 +359,10 @@ module EbookReader
 
     def state_changed?(old_state)
       new_page = if @config.page_numbering_mode == :dynamic
-                    @current_page_index
-                  else
-                    @config.view_mode == :split ? @left_page : @single_page
-                  end
+                   @current_page_index
+                 else
+                   @config.view_mode == :split ? @left_page : @single_page
+                 end
 
       old_state[:chapter] != @current_chapter ||
         old_state[:page] != new_page ||

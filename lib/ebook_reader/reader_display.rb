@@ -394,6 +394,5 @@ module EbookReader
       Terminal.write(height - 1, 2,
                      "#{Terminal::ANSI::DIM}↑↓ Navigate • Enter Jump • t/ESC Back#{Terminal::ANSI::RESET}")
     end
-
   end
 end

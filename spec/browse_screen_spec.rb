@@ -2,8 +2,8 @@
 
 require 'spec_helper'
 
-RSpec.describe EbookReader::UI::BrowseScreen do
-  let(:browse_screen) { described_class.new }
+RSpec.describe EbookReader::UI::Screens::BrowseScreen do
+  let(:browse_screen) { described_class.new(EbookReader::Services::LibraryScanner.new) }
 
   before do
     allow(EbookReader::Terminal).to receive(:write)

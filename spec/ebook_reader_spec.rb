@@ -22,14 +22,14 @@ RSpec.describe EbookReader do
 
   it 'loads UI components' do
     expect(defined?(EbookReader::UI)).to be_truthy
-    expect(defined?(EbookReader::UI::BrowseScreen)).to be_truthy
+    expect(defined?(EbookReader::UI::Screens::BrowseScreen)).to be_truthy
     expect(defined?(EbookReader::UI::MainMenuRenderer)).to be_truthy
     expect(defined?(EbookReader::UI::ReaderRenderer)).to be_truthy
   end
 
-  it 'loads helpers' do
-    expect(defined?(EbookReader::Helpers)).to be_truthy
-    expect(defined?(EbookReader::Helpers::EPUBScanner)).to be_truthy
+  it 'loads services' do
+    expect(defined?(EbookReader::Services)).to be_truthy
+    expect(defined?(EbookReader::Services::LibraryScanner)).to be_truthy
     expect(defined?(EbookReader::Helpers::HTMLProcessor)).to be_truthy
     expect(defined?(EbookReader::Helpers::OPFProcessor)).to be_truthy
     expect(defined?(EbookReader::Helpers::ReaderHelpers)).to be_truthy

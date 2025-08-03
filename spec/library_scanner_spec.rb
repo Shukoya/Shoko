@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe EbookReader::Helpers::EPUBScanner do
+RSpec.describe EbookReader::Services::LibraryScanner do
   let(:scanner) { described_class.new }
 
   describe '#initialize' do
