@@ -22,6 +22,33 @@ module EbookReader
         @pages_data
       end
 
+      # Retrieve page data for a given global page index. Out-of-range
+      # indices return the first or last page so callers always receive a
+      # valid result rather than needing to handle nils.
+      def get_page(page_index)
+        return nil if @pages_data.empty?
+        return @pages_data.first if page_index.negative?
+        return @pages_data.last if page_index >= @pages_data.size
+
+        @pages_data[page_index]
+      end
+
+      # Find the global page index for a chapter and line offset. This
+      # method is used by the state service when restoring progress and
+      # therefore needs to be publicly accessible.
+      def find_page_index(chapter_index, line_offset)
+        @pages_data.find_index do |page|
+          page[:chapter_index] == chapter_index &&
+            line_offset >= page[:start_line] &&
+            line_offset <= page[:end_line]
+        end || 0
+      end
+
+      # Total number of pages currently built in the page map.
+      def total_pages
+        @pages_data.size
+      end
+
       private
 
       def prepare_layout_metrics(terminal_width, terminal_height)
@@ -64,26 +91,6 @@ module EbookReader
           end_line: end_line,
           lines: wrapped_lines[start_line..end_line] || [],
         }
-      end
-
-      def get_page(page_index)
-        return nil if @pages_data.empty?
-        return @pages_data.first if page_index.negative?
-        return @pages_data.last if page_index >= @pages_data.size
-
-        @pages_data[page_index]
-      end
-
-      def find_page_index(chapter_index, line_offset)
-        @pages_data.find_index do |page|
-          page[:chapter_index] == chapter_index &&
-            line_offset >= page[:start_line] &&
-            line_offset <= page[:end_line]
-        end || 0
-      end
-
-      def total_pages
-        @pages_data.size
       end
 
       def calculate_layout_metrics(width, height)
