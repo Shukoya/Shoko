@@ -16,21 +16,9 @@ module EbookReader
     include Concerns::InputHandler
 
     def initialize
-      @selected = 0
-      @mode = :menu
-      @browse_selected = 0
-      @search_query = ''
-      @search_cursor = 0
-      @file_input = ''
-      @config = Config.new
-      @scanner = Services::LibraryScanner.new
-      @renderer = UI::MainMenuRenderer.new(@config)
-      @browse_screen = UI::Screens::BrowseScreen.new(@scanner)
-      @menu_screen = UI::Screens::MenuScreen.new(@renderer, @selected)
-      @settings_screen = UI::Screens::SettingsScreen.new(@config, @scanner)
-      @recent_screen = UI::Screens::RecentScreen.new(self)
-      @open_file_screen = UI::Screens::OpenFileScreen.new
-      @input_handler = Services::MainMenuInputHandler.new(self)
+      setup_state
+      setup_services
+      setup_ui
     end
 
     def run
@@ -48,6 +36,30 @@ module EbookReader
     end
 
     private
+
+    def setup_state
+      @selected = 0
+      @mode = :menu
+      @browse_selected = 0
+      @search_query = ''
+      @search_cursor = 0
+      @file_input = ''
+    end
+
+    def setup_services
+      @config = Config.new
+      @scanner = Services::LibraryScanner.new
+      @input_handler = Services::MainMenuInputHandler.new(self)
+    end
+
+    def setup_ui
+      @renderer = UI::MainMenuRenderer.new(@config)
+      @browse_screen = UI::Screens::BrowseScreen.new(@scanner)
+      @menu_screen = UI::Screens::MenuScreen.new(@renderer, @selected)
+      @settings_screen = UI::Screens::SettingsScreen.new(@config, @scanner)
+      @recent_screen = UI::Screens::RecentScreen.new(self)
+      @open_file_screen = UI::Screens::OpenFileScreen.new
+    end
 
     def main_loop
       draw_screen
@@ -202,8 +214,7 @@ module EbookReader
     end
 
     def move_search_cursor(delta)
-      @search_cursor = [[@search_cursor + delta, 0].max,
-                        @search_query.length].min
+      @search_cursor = (@search_cursor + delta).clamp(0, @search_query.length)
     end
 
     def handle_delete
@@ -227,7 +238,7 @@ module EbookReader
       return unless key
 
       case key
-      when "\e", "\x1B" then handle_escape
+      when "\e" then handle_escape
       when "\r", "\n" then handle_enter
       when *backspace_keys then handle_backspace_input
       else handle_character_input(key)

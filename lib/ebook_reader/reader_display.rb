@@ -1,12 +1,14 @@
 # frozen_string_literal: true
 
 require_relative 'models/page_rendering_context'
-require_relative 'models/drawing_context'
 require_relative 'builders/page_setup_builder'
 
 module EbookReader
   # Module containing display-related Reader methods
   module ReaderDisplay
+    LineDrawingContext = Struct.new(:lines, :start_offset, :end_offset, :position, :dimensions,
+                                    :actual_height, keyword_init: true)
+
     HELP_LINES = [
       '',
       'Navigation Keys:',
@@ -45,7 +47,9 @@ module EbookReader
 
       refresh_page_map(width, height)
 
-      @renderer.render_header(@doc, width, @config.view_mode, @mode)
+      header_context = EbookReader::UI::ReaderRenderer::HeaderContext.new(@doc, width,
+                                                                          @config.view_mode, @mode)
+      @renderer.render_header(header_context)
       draw_content(height, width)
       draw_footer(height, width)
       draw_message(height, width) if @message
@@ -159,7 +163,9 @@ module EbookReader
       wrapped = wrap_lines(chapter.lines || [], col_width)
 
       draw_chapter_info(chapter, width)
-      draw_split_columns(wrapped, col_width, content_height, height)
+      context = SplitColumnDrawingContext.new(wrapped, col_width, content_height, height,
+                                              @left_page, @right_page)
+      draw_split_columns(context)
     end
 
     def draw_chapter_info(chapter, width)
@@ -167,23 +173,28 @@ module EbookReader
       Terminal.write(2, 1, Terminal::ANSI::BLUE + chapter_info[0, width - 2] + Terminal::ANSI::RESET)
     end
 
-    def draw_split_columns(wrapped, col_width, content_height, height)
+    SplitColumnDrawingContext = Struct.new(:wrapped_lines, :col_width, :content_height,
+                                           :total_height, :left_page_offset, :right_page_offset)
+
+    def draw_split_columns(context)
       left_context = Models::PageRenderingContext.new(
-        lines: wrapped,
-        offset: @left_page,
-        dimensions: Models::Dimensions.new(width: col_width, height: content_height),
+        lines: context.wrapped_lines,
+        offset: context.left_page_offset,
+        dimensions: Models::Dimensions.new(width: context.col_width,
+                                           height: context.content_height),
         position: Models::Position.new(row: 3, col: 1),
         show_page_num: true
       )
       draw_column(left_context)
 
-      draw_divider(height, col_width)
+      draw_divider(context.total_height, context.col_width)
 
       right_context = Models::PageRenderingContext.new(
-        lines: wrapped,
-        offset: @right_page,
-        dimensions: Models::Dimensions.new(width: col_width, height: content_height),
-        position: Models::Position.new(row: 3, col: col_width + 5),
+        lines: context.wrapped_lines,
+        offset: context.right_page_offset,
+        dimensions: Models::Dimensions.new(width: context.col_width,
+                                           height: context.content_height),
+        position: Models::Position.new(row: 3, col: context.col_width + 5),
         show_page_num: false
       )
       draw_column(right_context)
@@ -202,8 +213,6 @@ module EbookReader
         draw_single_screen_absolute(height, width)
       end
     end
-
-    private
 
     def draw_single_screen_dynamic(height, width)
       return unless @page_manager
@@ -279,16 +288,22 @@ module EbookReader
       displayable_lines = adjust_for_line_spacing(content_height)
       wrapped = wrap_lines(chapter.lines || [], col_width)
       lines_in_page = extract_lines_in_page(wrapped, displayable_lines)
-      build_setup_hash(lines_in_page, wrapped, col_width, col_start, content_height,
-                       displayable_lines)
+      context = PageSetupBuildContext.new(lines_in_page, wrapped, col_width, col_start, content_height,
+                                          displayable_lines)
+      build_page_setup(context)
     end
 
-    def build_setup_hash(lines, wrapped, col_width, col_start, content_height, displayable)
+    PageSetupBuildContext = Struct.new(:lines, :wrapped, :col_width, :col_start, :content_height,
+                                       :displayable_lines)
+
+    def build_page_setup(context)
       Builders::PageSetupBuilder.new
-                                .with_lines(lines)
-                                .with_wrapped(wrapped)
-                                .with_dimensions(col_width, content_height, displayable)
-                                .with_position(col_start)
+                                .with_lines(context.lines)
+                                .with_wrapped(context.wrapped)
+                                .with_dimensions(context.col_width,
+                                                 context.content_height,
+                                                 context.displayable_lines)
+                                .with_position(context.col_start)
                                 .build
     end
 
@@ -320,15 +335,34 @@ module EbookReader
       return if invalid_column_params?(context.lines, context.dimensions.width,
                                        context.dimensions.height)
 
+      render_column_content(context)
+      draw_page_number(context) if context.show_page_num
+    end
+
+    def render_column_content(context)
       actual_height = calculate_actual_height(context.dimensions.height)
       end_offset = [context.offset + actual_height, context.lines.size].min
-      draw_lines(LineDrawingContext.new(lines: context.lines, start_offset: context.offset,
-                                        end_offset: end_offset, position: context.position,
-                                        dimensions: context.dimensions,
-                                        actual_height: actual_height))
-      return unless context.show_page_num
+      drawing_context = LineDrawingContext.new(lines: context.lines, start_offset: context.offset,
+                                               end_offset: end_offset, position: context.position,
+                                               dimensions: context.dimensions,
+                                               actual_height: actual_height)
+      draw_lines(drawing_context)
+    end
 
-      draw_page_number(context)
+    def draw_lines(context)
+      (context.start_offset...context.end_offset).each_with_index do |line_index, i|
+        line = context.lines[line_index]
+        row = context.position.row + i
+        break if row >= context.position.row + context.dimensions.height
+
+        draw_line(
+          DrawingParams.new(
+            line: line,
+            position: Models::Position.new(row: row, col: context.position.col),
+            width: context.dimensions.width
+          )
+        )
+      end
     end
 
     def invalid_column_params?(lines, width, height)
@@ -337,33 +371,6 @@ module EbookReader
 
     def calculate_actual_height(height)
       height
-    end
-
-    LineDrawingContext = Struct.new(
-      :lines, :start_offset, :end_offset, :position, :dimensions, :actual_height,
-      keyword_init: true
-    )
-
-    def draw_lines(context)
-      line_count = 0
-      (context.start_offset...context.end_offset).each do |line_idx|
-        break if line_count >= context.actual_height
-
-        line = context.lines[line_idx] || ''
-        line_context = LineContext.new(line: line, position: context.position,
-                                       width: context.dimensions.width,
-                                       line_count: line_count)
-        line_count = draw_spaced_line(line_context)
-      end
-    end
-
-    def draw_spaced_line(context)
-      row = calculate_row(context.position.row, context.line_count)
-      return context.line_count + 1 if row >= Terminal.size[0] - 2
-
-      draw_line(DrawingParams.new(line: context.line, position: context.position,
-                                  width: context.width))
-      context.line_count + 1
     end
 
     LineContext = Struct.new(:line, :position, :width, :line_count, keyword_init: true)
@@ -429,8 +436,8 @@ module EbookReader
 
     def calculate_page_info(context)
       actual_height = calculate_actual_height(context.dimensions.height)
-      page_num = (context.offset / actual_height) + 1
-      total_pages = [(context.lines.size.to_f / actual_height).ceil, 1].max
+      page_num = calculate_current_page_number(context.offset, actual_height)
+      total_pages = calculate_total_pages(context.lines.size, actual_height)
 
       {
         text: "#{page_num}/#{total_pages}",
@@ -438,14 +445,29 @@ module EbookReader
       }
     end
 
+    def calculate_current_page_number(offset, height)
+      (offset / height) + 1
+    end
+
+    def calculate_total_pages(total_lines, height)
+      [(total_lines.to_f / height).ceil, 1].max
+    end
+
     def draw_page_text(page_info, context)
       return if page_info[:row] >= Terminal.size[0] - 2
 
-      col = context.position.col +
-            [(context.dimensions.width - page_info[:text].length) / 2, 0].max
-      Terminal.write(page_info[:row], col,
-                     Terminal::ANSI::DIM + Terminal::ANSI::GRAY + page_info[:text] +
-                     Terminal::ANSI::RESET)
+      col = calculate_page_text_column(page_info, context)
+      text = formatted_page_text(page_info[:text])
+      Terminal.write(page_info[:row], col, text)
+    end
+
+    def calculate_page_text_column(page_info, context)
+      context.position.col +
+        [(context.dimensions.width - page_info[:text].length) / 2, 0].max
+    end
+
+    def formatted_page_text(text)
+      Terminal::ANSI::DIM + Terminal::ANSI::GRAY + text + Terminal::ANSI::RESET
     end
 
     def draw_help_screen(height, width)
@@ -487,7 +509,8 @@ module EbookReader
       return if chapters.empty?
 
       visible_range = calculate_toc_visible_range(list_height, chapters.length)
-      draw_toc_items(visible_range, chapters, list_start, width)
+      context = TocItemsContext.new(visible_range, chapters, list_start, width, @toc_selected)
+      draw_toc_items(context)
     end
 
     def calculate_toc_visible_range(list_height, chapter_count)
@@ -496,21 +519,28 @@ module EbookReader
       visible_start...visible_end
     end
 
-    def draw_toc_items(range, chapters, list_start, width)
-      range.each_with_index do |idx, row|
-        chapter = chapters[idx]
+    TocItemsContext = Struct.new(:range, :chapters, :list_start, :width, :selected_index)
+
+    def draw_toc_items(context)
+      context.range.each_with_index do |idx, row|
+        chapter = context.chapters[idx]
         line = chapter.title || 'Untitled'
-        draw_toc_line(idx, line, list_start + row, width)
+        line_context = TocLineContext.new(idx, line, context.list_start + row, context.width,
+                                          idx == context.selected_index)
+        draw_toc_line(line_context)
       end
     end
 
-    def draw_toc_line(idx, line, row, width)
-      if idx == @toc_selected
-        Terminal.write(row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
-        Terminal.write(row, 4,
-                       Terminal::ANSI::BRIGHT_WHITE + line[0, width - 6] + Terminal::ANSI::RESET)
+    TocLineContext = Struct.new(:index, :line, :row, :width, :selected)
+
+    def draw_toc_line(context)
+      if context.selected
+        Terminal.write(context.row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
+        Terminal.write(context.row, 4,
+                       Terminal::ANSI::BRIGHT_WHITE + context.line[0, context.width - 6] + Terminal::ANSI::RESET)
       else
-        Terminal.write(row, 4, Terminal::ANSI::WHITE + line[0, width - 6] + Terminal::ANSI::RESET)
+        Terminal.write(context.row, 4,
+                       Terminal::ANSI::WHITE + context.line[0, context.width - 6] + Terminal::ANSI::RESET)
       end
     end
 

@@ -47,22 +47,30 @@ module EbookReader
         visible_start...visible_end
       end
 
+      BookmarkParams = Struct.new(:idx, :row_idx, :list_start, :width, keyword_init: true)
+
       def draw_bookmark_items(range, list_start, width)
         range.each_with_index do |idx, row_idx|
-          bookmark = @bookmarks[idx]
-          chapter_title = @doc.get_chapter(bookmark.chapter_index)&.title ||
-                          "Chapter #{bookmark.chapter_index + 1}"
-
-          context = Models::BookmarkDrawingContext.new(
-            bookmark: bookmark,
-            chapter_title: chapter_title,
-            index: idx,
-            position: Models::Position.new(row: list_start + (row_idx * 2), col: 2),
-            width: width
-          )
-
+          params = BookmarkParams.new(idx: idx, row_idx: row_idx,
+                                      list_start: list_start,
+                                      width: width)
+          context = build_bookmark_context(params)
           draw_bookmark_item(context)
         end
+      end
+
+      def build_bookmark_context(params)
+        bookmark = @bookmarks[params.idx]
+        chapter_title = @doc.get_chapter(bookmark.chapter_index)&.title ||
+                        "Chapter #{bookmark.chapter_index + 1}"
+
+        Models::BookmarkDrawingContext.new(
+          bookmark: bookmark,
+          chapter_title: chapter_title,
+          index: params.idx,
+          position: Models::Position.new(row: params.list_start + (params.row_idx * 2), col: 2),
+          width: params.width
+        )
       end
 
       BookmarkItemContext = Struct.new(:position, :width, :line1, :line2, keyword_init: true)
@@ -85,23 +93,30 @@ module EbookReader
       end
 
       def draw_selected_bookmark_item(context)
-        Terminal.write(context.position.row, 2,
-                       "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
-        Terminal.write(context.position.row, 4,
-                       Terminal::ANSI::BRIGHT_WHITE + context.line1[0, context.width - 6] +
-                       Terminal::ANSI::RESET)
-        Terminal.write(context.position.row + 1, 4,
-                       Terminal::ANSI::ITALIC + Terminal::ANSI::GRAY +
-                       context.line2[0, context.width - 6] + Terminal::ANSI::RESET)
+        draw_bookmark_pointer(context.position.row)
+        draw_bookmark_text(context, Terminal::ANSI::BRIGHT_WHITE,
+                           Terminal::ANSI::ITALIC + Terminal::ANSI::GRAY)
       end
 
       def draw_unselected_bookmark_item(context)
-        Terminal.write(context.position.row, 4,
-                       Terminal::ANSI::WHITE + context.line1[0, context.width - 6] +
-                       Terminal::ANSI::RESET)
-        Terminal.write(context.position.row + 1, 4,
-                       Terminal::ANSI::DIM + Terminal::ANSI::GRAY +
-                       context.line2[0, context.width - 6] + Terminal::ANSI::RESET)
+        draw_bookmark_text(context, Terminal::ANSI::WHITE,
+                           Terminal::ANSI::DIM + Terminal::ANSI::GRAY)
+      end
+
+      def draw_bookmark_pointer(row)
+        Terminal.write(row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
+      end
+
+      def draw_bookmark_text(context, style1, style2)
+        line1 = formatted_line(context.line1, context.width - 6, style1)
+        line2 = formatted_line(context.line2, context.width - 6, style2)
+
+        Terminal.write(context.position.row, 4, line1)
+        Terminal.write(context.position.row + 1, 4, line2)
+      end
+
+      def formatted_line(text, width, style)
+        style + text[0, width] + Terminal::ANSI::RESET
       end
 
       def draw_bookmarks_footer(height)

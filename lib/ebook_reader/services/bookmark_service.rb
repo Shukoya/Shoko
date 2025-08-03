@@ -2,6 +2,8 @@
 
 module EbookReader
   module Services
+    # A service that provides methods for managing bookmarks. It includes methods
+    # for adding bookmarks, and creating bookmark data.
     class BookmarkService
       def initialize(reader)
         @reader = reader

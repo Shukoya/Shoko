@@ -46,8 +46,8 @@ module EbookReader
 
         def render_list(recent, height, width)
           list_params = calculate_list_params(height)
-
-          render_recent_items(recent, list_params, height, width)
+          context = RenderContext.new(recent, list_params, height, width)
+          render_recent_items(context)
         end
 
         def calculate_list_params(height)
@@ -57,11 +57,14 @@ module EbookReader
           }
         end
 
-        def render_recent_items(recent, params, height, width)
-          recent.take(params[:max_items]).each_with_index do |book, i|
+        RenderContext = Struct.new(:recent_files, :params, :height, :width)
+
+        def render_recent_items(context)
+          context.recent_files.take(context.params[:max_items]).each_with_index do |book, i|
             renderer = UI::RecentItemRenderer.new(book: book, index: i, menu: @menu)
-            context = build_renderer_context(params[:start], height, width)
-            renderer.render(context)
+            renderer_context = build_renderer_context(context.params[:start], context.height,
+                                                      context.width)
+            renderer.render(renderer_context)
           end
         end
 

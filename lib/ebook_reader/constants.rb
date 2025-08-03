@@ -48,7 +48,8 @@ module EbookReader
     # Display settings
     CHAPTER_INFO_MAX_WIDTH = 100
     HIGHLIGHT_WORDS = [
-      'Chinese poets', 'philosophers', 'Taoyuen-ming', 'celebrated', 'fragrance', 'plum-blossoms', 'Linwosing', 'Chowmushih'
+      'Chinese poets', 'philosophers', 'Taoyuen-ming', 'celebrated', 'fragrance',
+      'plum-blossoms', 'Linwosing', 'Chowmushih'
     ].freeze
     HIGHLIGHT_PATTERNS = Regexp.union(HIGHLIGHT_WORDS)
     QUOTE_PATTERNS = /("[^"]+")|('[^']+')/

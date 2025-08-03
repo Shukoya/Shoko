@@ -2,6 +2,9 @@
 
 module EbookReader
   module UI
+    # A module that defines the structure and content of the settings screen.
+    # It provides a list of settings, each with a name, value, and key for
+    # user interaction. This module is included in the `SettingsScreen` class.
     module SettingsDefinitions
       def settings_list
         [

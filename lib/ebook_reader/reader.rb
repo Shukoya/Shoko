@@ -142,6 +142,8 @@ module EbookReader
     end
 
     def prev_page_absolute
+      return if @current_chapter.zero? && @single_page.zero? && @left_page.zero?
+
       height, width = Terminal.size
       _, content_height = get_layout_metrics(width, height)
       content_height = adjust_for_line_spacing(content_height)
@@ -332,7 +334,8 @@ module EbookReader
       if @single_page.positive?
         @single_page = [@single_page - content_height, 0].max
       elsif @current_chapter.positive?
-        prev_chapter_with_end_position
+        @current_chapter -= 1
+        position_at_chapter_end
       end
     end
 
@@ -441,9 +444,12 @@ module EbookReader
     def adjust_for_line_spacing(height)
       return 1 if height <= 0
 
-      return height unless @config.line_spacing == :relaxed
-
-      [height / 2, 1].max
+      case @config.line_spacing
+      when :relaxed
+        [height / 2, 1].max
+      else # :compact, :normal
+        height
+      end
     end
 
     def process_input(key)

@@ -13,10 +13,9 @@ module EbookReader
 
     def self.add(bookmark_data)
       bookmarks = load_all
-      entry = build_entry(bookmark_data.chapter, bookmark_data.line_offset, bookmark_data.text)
-      list = (bookmarks[bookmark_data.path] || []).map { |h| Models::Bookmark.from_h(h) }
-      list = append_bookmark(list, entry)
-      bookmarks[bookmark_data.path] = list.map(&:to_h)
+      new_bookmark = build_entry(bookmark_data.chapter, bookmark_data.line_offset,
+                                 bookmark_data.text)
+      update_bookmarks_for_path(bookmarks, bookmark_data.path, new_bookmark)
       save_all(bookmarks)
     end
 
@@ -41,6 +40,12 @@ module EbookReader
         text_snippet: text,
         created_at: Time.now
       )
+    end
+
+    private_class_method def self.update_bookmarks_for_path(bookmarks, path, new_bookmark)
+      list = (bookmarks[path] || []).map { |h| Models::Bookmark.from_h(h) }
+      list = append_bookmark(list, new_bookmark)
+      bookmarks[path] = list.map(&:to_h)
     end
 
     private_class_method def self.append_bookmark(list, entry)

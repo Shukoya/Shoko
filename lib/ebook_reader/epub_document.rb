@@ -17,6 +17,8 @@ module EbookReader
   class EPUBDocument
     attr_reader :title, :chapters, :language
 
+    ZipExtractionContext = Struct.new(:zip_file, :entry, :destination, :error)
+
     def initialize(path)
       @path = path
       @title = File.basename(path, '.epub').tr('_', ' ')
@@ -96,15 +98,16 @@ module EbookReader
     def extract_with_fallback(zip, entry, dest)
       entry.extract(dest)
     rescue ArgumentError => e
-      handle_rubyzip_compatibility(zip, entry, dest, e)
+      context = ZipExtractionContext.new(zip, entry, dest, e)
+      handle_rubyzip_compatibility(context)
     rescue StandardError
       File.binwrite(dest, zip.read(entry))
     end
 
-    def handle_rubyzip_compatibility(zip, entry, dest, error)
-      raise unless error.message.include?('wrong number of arguments')
+    def handle_rubyzip_compatibility(context)
+      raise unless context.error.message.include?('wrong number of arguments')
 
-      zip.extract(entry, dest) { true }
+      context.zip_file.extract(context.entry, context.destination) { true }
     end
 
     # After extraction this method finds the OPF file and begins the

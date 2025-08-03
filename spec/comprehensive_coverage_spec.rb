@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../lib/ebook_reader/models/line_drawing_context'
 
 RSpec.describe 'Comprehensive Coverage Tests' do
   describe EbookReader::Reader do
@@ -62,7 +63,7 @@ RSpec.describe 'Comprehensive Coverage Tests' do
         reader.instance_variable_set(:@current_chapter, 1)
         reader.instance_variable_set(:@single_page, 0)
 
-        reader.send(:prev_page_with_params, 10)
+        reader.prev_page
         expect(reader.instance_variable_get(:@current_chapter)).to eq(0)
       end
 
@@ -116,14 +117,15 @@ RSpec.describe 'Comprehensive Coverage Tests' do
       before { config.view_mode = :split }
 
       it 'scrolls both pages together' do
-        reader.send(:scroll_down_with_max, 10)
+        reader.instance_variable_set(:@max_page, 10)
+        reader.scroll_down
         expect(reader.instance_variable_get(:@left_page)).to eq(1)
         expect(reader.instance_variable_get(:@right_page)).to eq(1)
       end
 
       it 'handles split view page transitions' do
         reader.instance_variable_set(:@right_page, 10)
-        reader.send(:handle_split_next_page, 10, 5)
+        reader.send(:handle_split_next_page, 5, 10)
         expect(reader.instance_variable_get(:@left_page)).to eq(10)
       end
 

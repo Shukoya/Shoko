@@ -4,6 +4,8 @@ module EbookReader
   module Helpers
     # Helper methods for Reader
     module ReaderHelpers
+      WordContext = Struct.new(:word, :current, :width, :wrapped)
+
       def wrap_lines(lines, width)
         return [] if invalid_wrap_params?(lines, width)
 
@@ -52,22 +54,23 @@ module EbookReader
         current = ''
 
         words.each do |word|
-          current = process_word(word, current, width, wrapped)
+          context = WordContext.new(word, current, width, wrapped)
+          current = process_word(context)
         end
 
         wrapped << current unless current.empty?
       end
 
-      def process_word(word, current, width, wrapped)
-        return current if word.nil?
+      def process_word(context)
+        return context.current if context.word.nil?
 
-        if current.empty?
-          word
-        elsif fits_on_current_line?(current, word, width)
-          "#{current} #{word}"
+        return context.word if context.current.empty?
+
+        if fits_on_current_line?(context.current, context.word, context.width)
+          "#{context.current} #{context.word}"
         else
-          wrapped << current
-          word
+          context.wrapped << context.current
+          context.word
         end
       end
 

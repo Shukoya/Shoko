@@ -26,10 +26,5 @@ module EbookReader
       :chapter, :index, :position, :width,
       keyword_init: true
     )
-
-    LineDrawingContext = Struct.new(
-      :line, :position, :width, :line_count,
-      keyword_init: true
-    )
   end
 end

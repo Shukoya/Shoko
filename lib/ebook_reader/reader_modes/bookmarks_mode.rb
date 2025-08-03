@@ -40,8 +40,6 @@ module EbookReader
         end
       end
 
-      private
-
       def handle_empty_input(key)
         reader.switch_mode(:read) if escape_key?(key) || key == 'B'
       end
@@ -65,41 +63,50 @@ module EbookReader
 
         visible_range.each_with_index do |idx, row_idx|
           bookmark = @bookmarks[idx]
-          draw_bookmark_item(bookmark, idx, list_start + (row_idx * 2), width)
+          context = BookmarkItemContext.new(bookmark, idx, list_start + (row_idx * 2), width,
+                                            idx == @selected)
+          draw_bookmark_item(context)
         end
       end
 
-      def draw_bookmark_item(bookmark, idx, row, width)
+      BookmarkItemContext = Struct.new(:bookmark, :index, :row, :width, :selected)
+      BookmarkDrawContext = Struct.new(:row, :width, :bookmark, :chapter_title)
+
+      def draw_bookmark_item(context)
         doc = reader.send(:doc)
-        chapter = doc.get_chapter(bookmark.chapter_index)
-        chapter_title = chapter&.title || "Chapter #{bookmark.chapter_index + 1}"
+        chapter = doc.get_chapter(context.bookmark.chapter_index)
+        chapter_title = chapter&.title || "Chapter #{context.bookmark.chapter_index + 1}"
+        draw_context = BookmarkDrawContext.new(context.row, context.width, context.bookmark,
+                                               chapter_title)
 
-        if idx == @selected
-          draw_selected_bookmark(row, width, bookmark, chapter_title)
+        if context.selected
+          draw_selected_bookmark(draw_context)
         else
-          draw_unselected_bookmark(row, width, bookmark, chapter_title)
+          draw_unselected_bookmark(draw_context)
         end
       end
 
-      def draw_selected_bookmark(row, width, bookmark, chapter_title)
-        terminal.write(row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
+      def draw_selected_bookmark(context)
+        terminal.write(context.row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
 
-        chapter_text = "Ch. #{bookmark.chapter_index + 1}: #{chapter_title[0, width - 20]}"
-        terminal.write(row, 4,
+        chapter_text = "Ch. #{context.bookmark.chapter_index + 1}: " \
+                       "#{context.chapter_title[0, context.width - 20]}"
+        terminal.write(context.row, 4,
                        "#{Terminal::ANSI::BRIGHT_WHITE}#{chapter_text}#{Terminal::ANSI::RESET}")
 
-        bookmark_text = bookmark.text_snippet[0, width - 8]
-        terminal.write(row + 1, 6,
+        bookmark_text = context.bookmark.text_snippet[0, context.width - 8]
+        terminal.write(context.row + 1, 6,
                        "#{Terminal::ANSI::ITALIC}#{Terminal::ANSI::GRAY}#{bookmark_text}#{Terminal::ANSI::RESET}")
       end
 
-      def draw_unselected_bookmark(row, width, bookmark, chapter_title)
-        chapter_text = "Ch. #{bookmark.chapter_index + 1}: #{chapter_title[0, width - 20]}"
-        terminal.write(row, 4,
+      def draw_unselected_bookmark(context)
+        chapter_text = "Ch. #{context.bookmark.chapter_index + 1}: " \
+                       "#{context.chapter_title[0, context.width - 20]}"
+        terminal.write(context.row, 4,
                        "#{Terminal::ANSI::WHITE}#{chapter_text}#{Terminal::ANSI::RESET}")
 
-        bookmark_text = bookmark.text_snippet[0, width - 8]
-        terminal.write(row + 1, 6,
+        bookmark_text = context.bookmark.text_snippet[0, context.width - 8]
+        terminal.write(context.row + 1, 6,
                        "#{Terminal::ANSI::DIM}#{Terminal::ANSI::GRAY}#{bookmark_text}#{Terminal::ANSI::RESET}")
       end
 

@@ -13,17 +13,16 @@ module EbookReader
           @config = config
         end
 
+        RenderContext = Struct.new(:line, :row, :col, :width)
+
         # Render a line of text with appropriate formatting
         #
-        # @param line [String] Text to render
-        # @param row [Integer] Terminal row
-        # @param col [Integer] Terminal column
-        # @param width [Integer] Maximum width
-        def render_line(line, row, col, width)
-          return if line.nil? || row.negative? || col.negative?
+        # @param context [RenderContext] Rendering context
+        def render_line(context)
+          return if context.line.nil? || context.row.negative? || context.col.negative?
 
-          formatted_line = format_line(line, width)
-          Terminal.write(row, col, formatted_line)
+          formatted_line = format_line(context.line, context.width)
+          Terminal.write(context.row, context.col, formatted_line)
         end
 
         # Format a line with highlighting and truncation

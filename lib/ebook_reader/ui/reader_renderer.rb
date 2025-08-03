@@ -10,11 +10,13 @@ module EbookReader
         @config = config
       end
 
-      def render_header(doc, width, view_mode, mode)
-        if single_view_reading_mode?(view_mode, mode)
-          render_centered_title(doc, width)
+      HeaderContext = Struct.new(:doc, :width, :view_mode, :mode)
+
+      def render_header(context)
+        if single_view_reading_mode?(context.view_mode, context.mode)
+          render_centered_title(context.doc, context.width)
         else
-          render_standard_header(width)
+          render_standard_header(context.width)
         end
       end
 

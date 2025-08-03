@@ -7,6 +7,8 @@ module EbookReader
   module Helpers
     # Processes OPF files
     class OPFProcessor
+      SpineContext = Struct.new(:manifest, :chapter_titles)
+
       def initialize(opf_path)
         @opf_path = opf_path
         @opf_dir = File.dirname(opf_path)
@@ -43,9 +45,10 @@ module EbookReader
 
       def process_spine(manifest, chapter_titles)
         chapter_num = 1
+        spine_context = SpineContext.new(manifest, chapter_titles)
 
         @opf.elements.each('//spine/itemref') do |itemref|
-          chapter_num = process_itemref(itemref, manifest, chapter_titles, chapter_num) do |*args|
+          chapter_num = process_itemref(itemref, chapter_num, spine_context) do |*args|
             yield(*args)
           end
         end
@@ -84,15 +87,15 @@ module EbookReader
         chapter_titles[key] = HTMLProcessor.clean_html(label.text)
       end
 
-      def process_itemref(itemref, manifest, chapter_titles, chapter_num)
+      def process_itemref(itemref, chapter_num, spine_context)
         idref = itemref.attributes['idref']
-        return chapter_num unless valid_itemref?(idref, manifest)
+        return chapter_num unless valid_itemref?(idref, spine_context.manifest)
 
-        href = manifest[idref]
+        href = spine_context.manifest[idref]
         file_path = File.join(@opf_dir, href)
         return chapter_num unless File.exist?(file_path)
 
-        title = chapter_titles[href]
+        title = spine_context.chapter_titles[href]
         yield(file_path, chapter_num, title)
         chapter_num + 1
       end

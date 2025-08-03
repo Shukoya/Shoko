@@ -53,13 +53,23 @@ module EbookReader
       private
 
       def validate_minimum_width?(width)
-        range_valid?(width, MIN_WIDTH..Float::INFINITY, :width,
-                     "Terminal width must be at least #{MIN_WIDTH} columns")
+        context = RangeValidationContext.new(
+          width,
+          MIN_WIDTH..Float::INFINITY,
+          :width,
+          "Terminal width must be at least #{MIN_WIDTH} columns"
+        )
+        range_valid?(context)
       end
 
       def validate_minimum_height?(height)
-        range_valid?(height, MIN_HEIGHT..Float::INFINITY, :height,
-                     "Terminal height must be at least #{MIN_HEIGHT} rows")
+        context = RangeValidationContext.new(
+          height,
+          MIN_HEIGHT..Float::INFINITY,
+          :height,
+          "Terminal height must be at least #{MIN_HEIGHT} rows"
+        )
+        range_valid?(context)
       end
     end
   end

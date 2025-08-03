@@ -2,6 +2,9 @@
 
 module EbookReader
   module Helpers
+    # A module that provides helper methods for drawing columns in the reader.
+    # It includes methods for drawing the left and right columns in split view,
+    # and for building the parameters required for drawing a column.
     module ColumnDrawer
       def draw_left_column(wrapped, col_width, content_height)
         params = build_column_params(

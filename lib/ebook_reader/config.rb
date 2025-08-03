@@ -82,12 +82,14 @@ module EbookReader
     end
 
     def apply_config_data(data)
-      @view_mode = data[:view_mode]&.to_sym || @view_mode
-      @theme = data[:theme]&.to_sym || @theme
-      @show_page_numbers = data.fetch(:show_page_numbers, @show_page_numbers)
-      @line_spacing = data[:line_spacing]&.to_sym || @line_spacing
-      @highlight_quotes = data.fetch(:highlight_quotes, @highlight_quotes)
-      @page_numbering_mode = data[:page_numbering_mode]&.to_sym || @page_numbering_mode
+      data.each do |key, value|
+        setter = "#{key}="
+        next unless respond_to?(setter)
+
+        value = value.to_sym if %i[view_mode line_spacing page_numbering_mode
+                                   theme].include?(key)
+        send(setter, value)
+      end
     end
   end
 end

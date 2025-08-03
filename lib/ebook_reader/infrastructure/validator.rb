@@ -49,30 +49,27 @@ module EbookReader
         false
       end
 
+      RangeValidationContext = Struct.new(:value, :range, :field, :message)
+      FormatValidationContext = Struct.new(:value, :pattern, :field, :message)
+
       # Validate value is within a range
       #
-      # @param value [Numeric] Value to check
-      # @param range [Range] Valid range
-      # @param field [Symbol] Field name for error reporting
-      # @param message [String] Custom error message
+      # @param context [RangeValidationContext] Validation context
       # @return [Boolean] Validation result
-      def range_valid?(value, range, field, _message = nil)
+      def range_valid?(context)
         policy = Policies::ValidationPolicy.new
-        result = policy.range_valid?(value, range, field)
+        result = policy.range_valid?(context.value, context.range, context.field)
         @errors.concat(policy.errors) unless result
         result
       end
 
       # Validate value matches a pattern
       #
-      # @param value [String] Value to check
-      # @param pattern [Regexp] Pattern to match
-      # @param field [Symbol] Field name for error reporting
-      # @param message [String] Custom error message
+      # @param context [FormatValidationContext] Validation context
       # @return [Boolean] Validation result
-      def format_valid?(value, pattern, field, _message = 'has invalid format')
+      def format_valid?(context)
         policy = Policies::ValidationPolicy.new
-        result = policy.format_valid?(value, pattern, field)
+        result = policy.format_valid?(context.value, context.pattern, context.field)
         @errors.concat(policy.errors) unless result
         result
       end

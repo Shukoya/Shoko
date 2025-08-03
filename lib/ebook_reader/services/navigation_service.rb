@@ -2,6 +2,9 @@
 
 module EbookReader
   module Services
+    # A service that provides methods for navigating through the book. It includes
+    # methods for moving to the next and previous pages, chapters, and to the end
+    # of the book.
     class NavigationService
       def initialize(reader)
         @reader = reader

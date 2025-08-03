@@ -43,7 +43,7 @@ module EbookReader
         def render_search_bar(search_query, cursor_pos)
           Terminal.write(3, 2, "#{WHITE}Search: #{RESET}")
           display = search_query.dup
-          cursor_pos = [[cursor_pos, 0].max, display.length].min
+          cursor_pos = cursor_pos.clamp(0, display.length)
           display.insert(cursor_pos, '_')
           Terminal.write(3, 10, "#{BRIGHT_WHITE}#{display}#{RESET}")
         end

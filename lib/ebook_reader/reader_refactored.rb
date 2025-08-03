@@ -47,9 +47,9 @@ module EbookReader
       def update_page_position_single?(direction, content_height, max_page)
         case direction
         when :next
-          update_single_next_page(content_height, max_page)
+          update_single_next_page?(content_height, max_page)
         when :prev
-          update_single_prev_page(content_height)
+          update_single_prev_page?(content_height)
         end
       end
 
@@ -60,7 +60,7 @@ module EbookReader
         true
       end
 
-      def update_single_prev_page(content_height)
+      def update_single_prev_page?(content_height)
         return false unless @single_page.positive?
 
         @single_page = [@single_page - content_height, 0].max
@@ -70,11 +70,17 @@ module EbookReader
 
     # Extract drawing helpers
     module DrawingHelpers
-      def draw_line_with_formatting(line, row, start_col, width)
-        if should_highlight_line?(line)
-          draw_highlighted_line(line, row, start_col, width)
+      LineFormatContext = Struct.new(:line, :row, :start_col, :width)
+      PageIndicatorContext = Struct.new(:start_row, :start_col, :width, :height, :offset,
+                                        :actual_height, :lines)
+      IndicatorTextContext = Struct.new(:page_text, :start_row, :start_col, :width, :height)
+
+      def draw_line_with_formatting(context)
+        if should_highlight_line?(context.line)
+          draw_highlighted_line(context.line, context.row, context.start_col, context.width)
         else
-          Terminal.write(row, start_col, Terminal::ANSI::WHITE + line[0, width] + Terminal::ANSI::RESET)
+          Terminal.write(context.row, context.start_col,
+                         Terminal::ANSI::WHITE + context.line[0, context.width] + Terminal::ANSI::RESET)
         end
       end
 
@@ -83,11 +89,14 @@ module EbookReader
         lines[offset...end_offset] || []
       end
 
-      def render_page_indicator(start_row, start_col, width, height, offset, actual_height, lines)
-        return unless should_render_indicator?(lines, actual_height)
+      def render_page_indicator(context)
+        return unless should_render_indicator?(context.lines, context.actual_height)
 
-        page_info = calculate_page_indicator_info(offset, actual_height, lines)
-        render_indicator_text(page_info, start_row, start_col, width, height)
+        page_info = calculate_page_indicator_info(context.offset, context.actual_height,
+                                                  context.lines)
+        text_context = IndicatorTextContext.new(page_info, context.start_row, context.start_col,
+                                                context.width, context.height)
+        render_indicator_text(text_context)
       end
 
       def should_render_indicator?(lines, actual_height)
@@ -100,13 +109,13 @@ module EbookReader
         "#{page_num}/#{total_pages}"
       end
 
-      def render_indicator_text(page_text, start_row, start_col, width, height)
-        page_row = start_row + height - 1
+      def render_indicator_text(context)
+        page_row = context.start_row + context.height - 1
         return if page_row >= Terminal.size[0] - Constants::PAGE_NUMBER_PADDING
 
-        col = [start_col + width - page_text.length, start_col].max
+        col = [context.start_col + context.width - context.page_text.length, context.start_col].max
         Terminal.write(page_row, col,
-                       Terminal::ANSI::DIM + Terminal::ANSI::GRAY + page_text + Terminal::ANSI::RESET)
+                       Terminal::ANSI::DIM + Terminal::ANSI::GRAY + context.page_text + Terminal::ANSI::RESET)
       end
     end
 

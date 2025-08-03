@@ -2,6 +2,9 @@
 
 module EbookReader
   module Services
+    # A service that provides methods for managing the reader's state. It includes
+    # methods for loading and saving progress, and for applying progress data to
+    # the reader.
     class StateService
       def initialize(reader)
         @reader = reader
@@ -41,13 +44,13 @@ module EbookReader
         line_offset = progress['line_offset'] || 0
 
         if @reader.config.page_numbering_mode == :dynamic && @reader.page_manager
-          set_dynamic_page_offset(line_offset)
+          self.dynamic_page_offset = line_offset
         else
           @reader.send(:page_offsets=, line_offset)
         end
       end
 
-      def set_dynamic_page_offset(line_offset)
+      def dynamic_page_offset=(line_offset)
         height, width = Terminal.size
         @reader.page_manager.build_page_map(width, height)
         @reader.current_page_index = @reader.page_manager.find_page_index(

@@ -14,13 +14,10 @@ module EbookReader
       def handle_input(key)
         return unless key
 
-        case @menu.instance_variable_get(:@mode)
-        when :menu then handle_menu_input(key)
-        when :browse then handle_browse_input(key)
-        when :recent then handle_recent_input(key)
-        when :settings then handle_settings_input(key)
-        when :open_file then handle_open_file_input(key)
-        end
+        mode = @menu.instance_variable_get(:@mode)
+        mode_handler = "handle_#{mode}_input"
+
+        send(mode_handler, key) if respond_to?(mode_handler, true)
       end
 
       def handle_menu_input(key)
@@ -30,6 +27,12 @@ module EbookReader
         when 'r', 'R' then @menu.send(:switch_to_mode, :recent)
         when 'o', 'O' then @menu.send(:open_file_dialog)
         when 's', 'S' then @menu.send(:switch_to_mode, :settings)
+        else handle_menu_navigation(key)
+        end
+      end
+
+      def handle_menu_navigation(key)
+        case key
         when *navigation_down_keys then navigate_menu_down
         when *navigation_up_keys then navigate_menu_up
         when *enter_keys then @menu.send(:handle_menu_selection)

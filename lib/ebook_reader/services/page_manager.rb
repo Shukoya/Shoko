@@ -2,6 +2,9 @@
 
 module EbookReader
   module Services
+    # Responsible for calculating and managing the layout of pages for a given
+    # document and configuration. It builds a map of all pages in the book,
+    # taking into account terminal dimensions, view modes, and line spacing.
     class PageManager
       attr_reader :pages_data
 
@@ -49,8 +52,6 @@ module EbookReader
         @pages_data.size
       end
 
-      private
-
       def prepare_layout_metrics(terminal_width, terminal_height)
         col_width, content_height = calculate_layout_metrics(terminal_width, terminal_height)
         lines_per_page = adjust_for_line_spacing(content_height)
@@ -68,16 +69,15 @@ module EbookReader
         wrapped_lines = wrap_chapter_lines(chapter, layout_metrics[:col_width])
         page_count = calculate_page_count(wrapped_lines.size, layout_metrics[:lines_per_page])
         page_count.times do |page_idx|
-          add_page_data(build_page_data(wrapped_lines, chapter_idx, page_idx,
-                                        layout_metrics, page_count))
+          page_data = PageData.new(
+            wrapped_lines: wrapped_lines,
+            chapter_idx: chapter_idx,
+            page_idx: page_idx,
+            lines_per_page: layout_metrics[:lines_per_page],
+            page_count: page_count
+          )
+          add_page_data(page_data)
         end
-      end
-
-      def build_page_data(wrapped_lines, chapter_idx, page_idx, layout_metrics, page_count)
-        PageData.new(wrapped_lines: wrapped_lines, chapter_idx: chapter_idx,
-                     page_idx: page_idx,
-                     lines_per_page: layout_metrics[:lines_per_page],
-                     page_count: page_count)
       end
 
       def calculate_page_count(line_count, lines_per_page)

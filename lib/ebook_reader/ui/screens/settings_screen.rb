@@ -2,11 +2,17 @@
 
 module EbookReader
   module UI
+    # A collection of UI screens that make up the application interface.
+    # Each screen is responsible for rendering a specific part of the UI,
+    # such as the main menu, the book browser, or the settings page.
     module Screens
       # Presents application settings and allows users to toggle
       # various configuration options.
       require_relative '../settings_definitions'
 
+      # Renders the settings screen, allowing users to view and modify application
+      # configuration. It uses the `SettingsDefinitions` module to build the list
+      # of available settings and their current values.
       class SettingsScreen
         include UI::SettingsDefinitions
 

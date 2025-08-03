@@ -4,6 +4,9 @@ module EbookReader
   # Calculates dynamic page numbers based on current display format
   # Takes into account terminal size, line spacing, and view mode
   module DynamicPageCalculator
+    ChapterContext = Struct.new(:chapter, :index, :start_line)
+    LayoutConfig = Struct.new(:column_width, :lines_per_page)
+
     # Calculate total pages and current page for the entire book
     def calculate_dynamic_pages
       return { current: 0, total: 0 } unless @doc && @config.show_page_numbers
@@ -15,8 +18,9 @@ module EbookReader
       return { current: 0, total: 0 } if actual_height <= 0
 
       # Build page map for entire book if terminal size changed
-      build_dynamic_page_map(col_width, actual_height) if size_changed?(width,
-                                                                        height) || @dynamic_page_map.nil?
+      if size_changed?(width, height) || @dynamic_page_map.nil?
+        build_dynamic_page_map(col_width, actual_height)
+      end
 
       # Calculate current position in entire book
       current_global_page = calculate_global_page_position(actual_height)
@@ -28,7 +32,8 @@ module EbookReader
 
     def build_dynamic_page_map(col_width, lines_per_page)
       initialize_page_map
-      total_lines = process_all_chapters(col_width, lines_per_page)
+      layout_config = LayoutConfig.new(col_width, lines_per_page)
+      total_lines = process_all_chapters(layout_config)
       finalize_page_calculations(total_lines, lines_per_page)
       cache_terminal_dimensions
     end
@@ -38,25 +43,26 @@ module EbookReader
       @dynamic_chapter_starts = []
     end
 
-    def process_all_chapters(col_width, lines_per_page)
+    def process_all_chapters(layout_config)
       total_lines = 0
       @doc.chapters.each_with_index do |chapter, idx|
         @dynamic_chapter_starts << total_lines
-        total_lines += process_single_chapter(chapter, idx, col_width, lines_per_page, total_lines)
+        context = ChapterContext.new(chapter, idx, total_lines)
+        total_lines += process_single_chapter(context, layout_config)
       end
       total_lines
     end
 
-    def process_single_chapter(chapter, idx, col_width, lines_per_page, start_line)
-      wrapped = wrap_lines(chapter.lines || [], col_width)
+    def process_single_chapter(context, layout_config)
+      wrapped = wrap_lines(context.chapter.lines || [], layout_config.column_width)
       chapter_lines = wrapped.size
-      chapter_pages = (chapter_lines.to_f / lines_per_page).ceil
+      chapter_pages = (chapter_lines.to_f / layout_config.lines_per_page).ceil
 
       @dynamic_page_map << {
-        chapter_index: idx,
+        chapter_index: context.index,
         lines: chapter_lines,
         pages: chapter_pages,
-        start_line: start_line,
+        start_line: context.start_line,
       }
 
       chapter_lines
