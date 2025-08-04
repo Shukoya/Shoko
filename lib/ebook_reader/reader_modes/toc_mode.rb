@@ -13,6 +13,9 @@ module EbookReader
         @selected = reader.current_chapter
       end
 
+      ChapterItemContext = Struct.new(:chapter, :index, :row, :width, :selected)
+      private_constant :ChapterItemContext
+
       def draw(height, width)
         draw_header(width)
         draw_chapter_list(height, width)
@@ -52,8 +55,6 @@ module EbookReader
           draw_chapter_item(context)
         end
       end
-
-      ChapterItemContext = Struct.new(:chapter, :index, :row, :width, :selected)
 
       def draw_chapter_item(context)
         title = context.chapter.title || 'Untitled'

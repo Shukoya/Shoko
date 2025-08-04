@@ -231,6 +231,20 @@ module EbookReader
       @last_width = 0
     end
 
+    ERROR_MESSAGE_LINES = [
+      'Failed to load EPUB file:',
+      '',
+      '%<error>s',
+      '',
+      'Possible causes:',
+      '- The file might be corrupted',
+      '- The file might not be a valid EPUB',
+      '- The file might be password protected',
+      '',
+      "Press 'q' to return to the menu",
+    ].freeze
+    private_constant :ERROR_MESSAGE_LINES
+
     private
 
     def initialize_state
@@ -407,19 +421,6 @@ module EbookReader
         @message = nil
       end
     end
-
-    ERROR_MESSAGE_LINES = [
-      'Failed to load EPUB file:',
-      '',
-      '%<error>s',
-      '',
-      'Possible causes:',
-      '- The file might be corrupted',
-      '- The file might not be a valid EPUB',
-      '- The file might be password protected',
-      '',
-      "Press 'q' to return to the menu",
-    ].freeze
 
     def create_error_document(error_msg)
       doc = Object.new

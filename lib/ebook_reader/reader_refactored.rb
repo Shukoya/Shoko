@@ -22,13 +22,13 @@ module EbookReader
       def update_page_position_split?(direction, content_height, max_page)
         case direction
         when :next
-          update_split_next_page(content_height, max_page)
+          split_next_page?(content_height, max_page)
         when :prev
-          update_split_prev_page(content_height)
+          split_prev_page?(content_height)
         end
       end
 
-      def update_split_next_page(content_height, max_page)
+      def split_next_page?(content_height, max_page)
         return false unless @right_page < max_page
 
         @left_page = @right_page
@@ -36,7 +36,7 @@ module EbookReader
         true
       end
 
-      def update_split_prev_page(content_height)
+      def split_prev_page?(content_height)
         return false unless @left_page.positive?
 
         @right_page = @left_page

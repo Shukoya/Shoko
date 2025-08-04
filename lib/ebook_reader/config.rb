@@ -11,6 +11,7 @@ module EbookReader
 
     CONFIG_DIR = File.expand_path('~/.config/reader')
     CONFIG_FILE = File.join(CONFIG_DIR, 'config.json')
+    SYMBOL_KEYS = %i[view_mode line_spacing page_numbering_mode theme].freeze
 
     def initialize
       set_defaults
@@ -86,8 +87,7 @@ module EbookReader
         setter = "#{key}="
         next unless respond_to?(setter)
 
-        value = value.to_sym if %i[view_mode line_spacing page_numbering_mode
-                                   theme].include?(key)
+        value = value.to_sym if SYMBOL_KEYS.include?(key)
         send(setter, value)
       end
     end

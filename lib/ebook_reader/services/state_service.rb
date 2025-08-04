@@ -27,11 +27,11 @@ module EbookReader
       private
 
       def apply_progress_data(progress)
-        set_chapter_from_progress(progress)
-        set_page_offset_from_progress(progress)
+        self.chapter_from_progress = progress
+        self.page_offset_from_progress = progress
       end
 
-      def set_chapter_from_progress(progress)
+      def chapter_from_progress=(progress)
         chapter = progress['chapter'] || 0
         @reader.current_chapter = validate_chapter_index(chapter)
       end
@@ -40,7 +40,7 @@ module EbookReader
         chapter >= @reader.doc.chapter_count ? 0 : chapter
       end
 
-      def set_page_offset_from_progress(progress)
+      def page_offset_from_progress=(progress)
         line_offset = progress['line_offset'] || 0
 
         if @reader.config.page_numbering_mode == :dynamic && @reader.page_manager

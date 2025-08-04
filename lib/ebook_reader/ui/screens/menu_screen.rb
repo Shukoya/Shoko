@@ -8,6 +8,9 @@ module EbookReader
       class MenuScreen
         attr_accessor :selected
 
+        MenuRenderContext = Struct.new(:items, :start_row, :height, :width, keyword_init: true)
+        private_constant :MenuRenderContext
+
         def initialize(renderer, selected)
           @renderer = renderer
           @selected = selected
@@ -35,9 +38,6 @@ module EbookReader
             { key: 'q', icon: '󰿅', text: 'Quit', desc: 'Exit application' },
           ]
         end
-
-        MenuRenderContext = Struct.new(:items, :start_row, :height, :width,
-                                       keyword_init: true)
 
         def render_menu_items(context)
           context.items.each_with_index do |item, i|

@@ -288,8 +288,14 @@ module EbookReader
       displayable_lines = adjust_for_line_spacing(content_height)
       wrapped = wrap_lines(chapter.lines || [], col_width)
       lines_in_page = extract_lines_in_page(wrapped, displayable_lines)
-      context = PageSetupBuildContext.new(lines_in_page, wrapped, col_width, col_start, content_height,
-                                          displayable_lines)
+      context = PageSetupBuildContext.new(
+        lines_in_page,
+        wrapped,
+        col_width,
+        col_start,
+        content_height,
+        displayable_lines
+      )
       build_page_setup(context)
     end
 

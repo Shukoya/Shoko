@@ -8,6 +8,9 @@ module EbookReader
       class RecentScreen
         attr_accessor :selected
 
+        RenderContext = Struct.new(:recent_files, :params, :height, :width)
+        private_constant :RenderContext
+
         def initialize(menu)
           @menu = menu
           @selected = 0
@@ -56,8 +59,6 @@ module EbookReader
             max_items: [(height - 6) / 2, 10].min,
           }
         end
-
-        RenderContext = Struct.new(:recent_files, :params, :height, :width)
 
         def render_recent_items(context)
           context.recent_files.take(context.params[:max_items]).each_with_index do |book, i|
