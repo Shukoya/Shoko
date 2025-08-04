@@ -75,14 +75,56 @@ module EbookReader
       def draw_bookmark_item(context)
         doc = reader.send(:doc)
         chapter = doc.get_chapter(context.bookmark.chapter_index)
-        chapter_title = chapter&.title || "Chapter #{context.bookmark.chapter_index + 1}"
-        draw_context = BookmarkDrawContext.new(context.row, context.width, context.bookmark,
-                                               chapter_title)
 
-        if context.selected
-          draw_selected_bookmark(draw_context)
-        else
-          draw_unselected_bookmark(draw_context)
+        bookmark_renderer = BookmarkRenderer.new(
+          bookmark: context.bookmark,
+          chapter: chapter,
+          context: context,
+          mode: self
+        )
+
+        bookmark_renderer.render
+      end
+
+      class BookmarkRenderer
+        def initialize(bookmark:, chapter:, context:, mode:)
+          @bookmark = bookmark
+          @chapter = chapter
+          @context = context
+          @mode = mode
+        end
+
+        def render
+          if @context.selected
+            render_selected
+          else
+            render_unselected
+          end
+        end
+
+        private
+
+        def render_selected
+          draw_context = build_draw_context
+          @mode.send(:draw_selected_bookmark, draw_context)
+        end
+
+        def render_unselected
+          draw_context = build_draw_context
+          @mode.send(:draw_unselected_bookmark, draw_context)
+        end
+
+        def build_draw_context
+          BookmarkDrawContext.new(
+            row: @context.row,
+            width: @context.width,
+            bookmark: @bookmark,
+            chapter_title: chapter_title
+          )
+        end
+
+        def chapter_title
+          @chapter&.title || "Chapter #{@bookmark.chapter_index + 1}"
         end
       end
 

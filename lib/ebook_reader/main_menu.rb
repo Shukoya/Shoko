@@ -9,6 +9,7 @@ require_relative 'ui/screens/recent_screen'
 require_relative 'ui/screens/open_file_screen'
 require_relative 'services/library_scanner'
 require_relative 'concerns/input_handler'
+require_relative 'main_menu/screen_manager'
 
 module EbookReader
   # Main menu (LazyVim style)
@@ -19,6 +20,7 @@ module EbookReader
       setup_state
       setup_services
       setup_ui
+      @screen_manager = ScreenManager.new(self)
     end
 
     def run
@@ -104,44 +106,7 @@ module EbookReader
     end
 
     def draw_screen
-      Terminal.start_frame
-      height, width = Terminal.size
-
-      case @mode
-      when :menu then draw_main_menu(height, width)
-      when :browse then draw_browse_screen(height, width)
-      when :recent then draw_recent_screen(height, width)
-      when :settings then draw_settings_screen(height, width)
-      when :open_file then draw_open_file_screen(height, width)
-      end
-
-      Terminal.end_frame
-    end
-
-    def draw_main_menu(height, width)
-      @menu_screen.selected = @selected
-      @menu_screen.draw(height, width)
-    end
-
-    def draw_browse_screen(height, width)
-      @browse_screen.selected = @browse_selected
-      @browse_screen.search_query = @search_query
-      @browse_screen.search_cursor = @search_cursor
-      @browse_screen.filtered_epubs = @filtered_epubs
-      @browse_screen.draw(height, width)
-    end
-
-    def draw_recent_screen(height, width)
-      @recent_screen.selected = @browse_selected
-      @recent_screen.draw(height, width)
-    end
-
-    def draw_settings_screen(height, width)
-      @settings_screen.draw(height, width)
-    end
-
-    def draw_open_file_screen(height, width)
-      @open_file_screen.draw(height, width)
+      @screen_manager.draw_screen
     end
 
     def handle_input(key)

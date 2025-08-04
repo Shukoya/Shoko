@@ -5,6 +5,35 @@ require_relative 'base_mode'
 module EbookReader
   module ReaderModes
     # Handles the main reading view
+    class NavigationCommand
+      COMMANDS = {
+        'j' => :scroll_down,
+        "\e[B" => :scroll_down,
+        "\eOB" => :scroll_down,
+        'k' => :scroll_up,
+        "\e[A" => :scroll_up,
+        "\eOA" => :scroll_up,
+        'l' => :next_page,
+        ' ' => :next_page,
+        "\e[C" => :next_page,
+        "\eOC" => :next_page,
+        'h' => :prev_page,
+        "\e[D" => :prev_page,
+        "\eOD" => :prev_page,
+        'n' => :next_chapter,
+        'N' => :next_chapter,
+        'p' => :prev_chapter,
+        'P' => :prev_chapter,
+        'g' => :go_to_start,
+        'G' => :go_to_end,
+      }.freeze
+
+      def self.execute(key, reader)
+        command = COMMANDS[key]
+        reader.send(command) if command
+      end
+    end
+
     class ReadingMode < BaseMode
       def draw(height, width)
         if config.view_mode == :split
@@ -46,16 +75,7 @@ module EbookReader
       end
 
       def handle_navigation(key)
-        case key
-        when 'j', "\e[B", "\eOB" then reader.scroll_down
-        when 'k', "\e[A", "\eOA" then reader.scroll_up
-        when 'l', ' ', "\e[C", "\eOC" then reader.next_page
-        when 'h', "\e[D", "\eOD" then reader.prev_page
-        when 'n', 'N' then reader.next_chapter
-        when 'p', 'P' then reader.prev_chapter
-        when 'g' then reader.go_to_start
-        when 'G' then reader.go_to_end
-        end
+        NavigationCommand.execute(key, reader)
       end
 
       def handle_mode_switch(key)

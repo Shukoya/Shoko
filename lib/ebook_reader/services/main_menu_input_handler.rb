@@ -87,15 +87,33 @@ module EbookReader
       end
 
       def base_browse_handlers
-        handlers = {
+        {}.merge(
+          refresh_handlers,
+          navigation_handlers,
+          action_handlers
+        )
+      end
+
+      def refresh_handlers
+        {
           'r' => -> { @menu.send(:refresh_scan) },
           'R' => -> { @menu.send(:refresh_scan) },
+        }
+      end
+
+      def navigation_handlers
+        {
           "\r" => -> { @menu.send(:open_selected_book) },
           "\n" => -> { @menu.send(:open_selected_book) },
           '/' => -> { reset_search },
-          "\e[3~" => -> { @menu.send(:handle_delete) },
         }
-        switch_keys.each { |k| handlers[k] = -> { @menu.send(:switch_to_mode, :menu) } }
+      end
+
+      def action_handlers
+        handlers = { "\e[3~" => -> { @menu.send(:handle_delete) } }
+        switch_keys.each do |key|
+          handlers[key] = -> { @menu.send(:switch_to_mode, :menu) }
+        end
         handlers
       end
 

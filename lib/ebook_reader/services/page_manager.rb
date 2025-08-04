@@ -91,19 +91,42 @@ module EbookReader
       )
 
       def add_page_data(page_data)
-        start_line = page_data.page_idx * page_data.lines_per_page
-        end_line = [start_line + page_data.lines_per_page - 1,
-                    page_data.wrapped_lines.size - 1].min
+        page_info = build_page_info(page_data)
+        @pages_data << page_info
+      end
 
-        @pages_data << {
+      private
+
+      def build_page_info(page_data)
+        line_range = calculate_line_range(page_data)
+
+        {
           chapter_index: page_data.chapter_idx,
           page_in_chapter: page_data.page_idx,
           total_pages_in_chapter: page_data.page_count,
-          start_line: start_line,
-          end_line: end_line,
-          lines: page_data.wrapped_lines[start_line..end_line] || [],
+          start_line: line_range.first,
+          end_line: line_range.last,
+          lines: extract_page_lines(page_data, line_range),
         }
       end
+
+      def calculate_line_range(page_data)
+        start_line = page_data.page_idx * page_data.lines_per_page
+        end_line = calculate_end_line(start_line, page_data)
+        start_line..end_line
+      end
+
+      def calculate_end_line(start_line, page_data)
+        potential_end = start_line + page_data.lines_per_page - 1
+        actual_end = page_data.wrapped_lines.size - 1
+        [potential_end, actual_end].min
+      end
+
+      def extract_page_lines(page_data, line_range)
+        page_data.wrapped_lines[line_range] || []
+      end
+
+      public
 
       def calculate_layout_metrics(width, height)
         col_width = if @config.view_mode == :split

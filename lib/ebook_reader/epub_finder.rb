@@ -6,6 +6,7 @@ require 'time'
 require 'timeout'
 
 require_relative 'models/scanner_context'
+require_relative 'epub_finder/directory_scanner'
 
 module EbookReader
   # EPUB file finder with robust error handling
@@ -90,113 +91,11 @@ module EbookReader
           depth: 0
         )
 
-        scan_directories(context)
+        scanner = DirectoryScanner.new(context)
+        scanner.scan_all_directories
 
         warn "Found #{epubs.length} EPUB files" if DEBUG_MODE
         epubs
-      end
-
-      def scan_directories(context)
-        all_dirs = build_directory_list
-
-        warn "Scanning directories: #{all_dirs.join(', ')}" if DEBUG_MODE
-
-        all_dirs.each do |start_dir|
-          break if context.epubs.length >= MAX_FILES
-
-          warn "Scanning: #{start_dir}" if DEBUG_MODE
-          scan_directory(start_dir, context)
-        end
-      end
-
-      def build_directory_list
-        directories = priority_directories + other_directories
-        directories.uniq.select { |dir| safe_directory_exists?(dir) }
-      end
-
-      def priority_directories
-        [
-          '~/Books',
-          '~/Documents/Books',
-          '~/Downloads',
-          '~/Desktop',
-          '~/Documents',
-          '~/Library/Mobile Documents',
-        ].map { |dir| File.expand_path(dir) }
-      end
-
-      def other_directories
-        [
-          '~',
-          '~/Dropbox',
-          '~/Google Drive',
-          '~/OneDrive',
-        ].map { |dir| File.expand_path(dir) }
-      end
-
-      def safe_directory_exists?(dir)
-        Dir.exist?(dir)
-      rescue StandardError
-        false
-      end
-
-      def scan_directory(dir, context)
-        return unless context.can_scan?(dir, MAX_DEPTH, MAX_FILES)
-
-        context.mark_visited(dir)
-        process_directory_entries(dir, context)
-      rescue Errno::EACCES, Errno::ENOENT, Errno::EPERM
-        # Skip directories we can't access
-      rescue StandardError => e
-        warn "Error scanning #{dir}: #{e.message}" if DEBUG_MODE
-      end
-
-      def process_directory_entries(dir, context)
-        Dir.entries(dir).each do |entry|
-          next if entry.start_with?('.')
-
-          path = File.join(dir, entry)
-          next if context.visited_paths.include?(path)
-
-          process_entry(path, context)
-        end
-      end
-
-      def process_entry(path, context)
-        if File.directory?(path)
-          process_directory(path, context)
-        elsif epub_file?(path)
-          add_epub(path, context.epubs)
-        end
-      rescue StandardError
-        # Skip items we can't process
-      end
-
-      def process_directory(path, context)
-        return if skip_directory?(path)
-
-        scan_directory(path, context.with_deeper_depth)
-      end
-
-      def skip_directory?(path)
-        base = File.basename(path).downcase
-        Constants::SKIP_DIRS.map(&:downcase).include?(base)
-      end
-
-      def epub_file?(path)
-        path.downcase.end_with?('.epub') &&
-          File.readable?(path) &&
-          File.size(path).positive?
-      end
-
-      def add_epub(path, epubs)
-        epubs << {
-          'path' => path,
-          'name' => File.basename(path, '.epub').gsub(/[_-]/, ' '),
-          'size' => File.size(path),
-          'modified' => File.mtime(path).iso8601,
-          'dir' => File.dirname(path),
-        }
       end
 
       def load_cache

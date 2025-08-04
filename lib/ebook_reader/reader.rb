@@ -18,6 +18,7 @@ require_relative 'services/state_service'
 require_relative 'renderers/components/text_renderer'
 require_relative 'dynamic_page_calculator'
 require_relative 'reader_display'
+require_relative 'reader/display_handler'
 
 module EbookReader
   # Main reader interface for displaying EPUB content.
@@ -48,6 +49,7 @@ module EbookReader
     include Concerns::BookmarksUI
     include DynamicPageCalculator
     include ReaderDisplay
+    include Reader::DisplayHandler
 
     attr_accessor :current_chapter, :left_page, :right_page,
                   :single_page, :current_page_index
