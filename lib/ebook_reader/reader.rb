@@ -20,6 +20,8 @@ require_relative 'dynamic_page_calculator'
 require_relative 'reader_display'
 require_relative 'reader/display_handler'
 require_relative 'presenters/reader_presenter'
+require_relative 'rendering/render_cache'
+require_relative 'services/chapter_cache'
 
 module EbookReader
   # Main reader interface for displaying EPUB content.
@@ -70,8 +72,9 @@ module EbookReader
       load_data
       @input_handler = Services::ReaderInputHandler.new(self)
       @terminal_cache = { width: nil, height: nil, checked_at: nil }
-      @last_rendered_content = {}
-      @wrap_cache = {}
+      @render_cache = Rendering::RenderCache.new
+      @chapter_cache = Services::ChapterCache.new
+      @last_rendered_state = {}
     end
 
     def run

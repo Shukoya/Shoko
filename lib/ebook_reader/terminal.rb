@@ -70,6 +70,7 @@ module EbookReader
     @size_cache = { width: nil, height: nil, checked_at: nil }
     @batch_mode = false
     @batch_buffer = nil
+    @screen_buffer = {}
 
     class << self
       # Get current terminal dimensions.
@@ -135,6 +136,26 @@ module EbookReader
         else
           @buffer << content
         end
+      end
+
+      # Write text to the terminal only if it has changed since the last
+      # write at the same position. This reduces unnecessary terminal
+      # updates when content hasn't changed.
+      #
+      # @param row [Integer] row position
+      # @param col [Integer] column position
+      # @param text [String] text to write
+      def write_differential(row, col, text)
+        key = "#{row}_#{col}"
+        return if @screen_buffer[key] == text
+
+        write(row, col, text)
+        @screen_buffer[key] = text
+      end
+
+      # Clear internal buffer tracking for differential writes
+      def clear_buffer_cache
+        @screen_buffer.clear
       end
 
       def batch_write
