@@ -9,10 +9,12 @@ module EbookReader
     class OPFProcessor
       SpineContext = Struct.new(:manifest, :chapter_titles)
 
-      def initialize(opf_path)
+      def initialize(opf_path, zip: nil)
         @opf_path = opf_path
         @opf_dir = File.dirname(opf_path)
-        @opf = REXML::Document.new(File.read(opf_path))
+        @zip = zip
+        content = zip ? zip.read(opf_path) : File.read(opf_path)
+        @opf = REXML::Document.new(content)
       end
 
       def extract_metadata
@@ -63,13 +65,18 @@ module EbookReader
         ncx_href = manifest[ncx_id]
         return nil unless ncx_href
 
-        path = File.join(@opf_dir, ncx_href)
-        File.exist?(path) ? path : nil
+        path = join_path(ncx_href)
+        if @zip
+          @zip.find_entry(path) ? path : nil
+        else
+          File.exist?(path) ? path : nil
+        end
       end
 
       def extract_titles_from_ncx(ncx_path)
         chapter_titles = {}
-        ncx = REXML::Document.new(File.read(ncx_path))
+        ncx_content = @zip ? @zip.read(ncx_path) : File.read(ncx_path)
+        ncx = REXML::Document.new(ncx_content)
 
         ncx.elements.each('//navMap/navPoint/navLabel/text') do |label|
           process_nav_point(label, chapter_titles)
@@ -92,8 +99,9 @@ module EbookReader
         return chapter_num unless valid_itemref?(idref, spine_context.manifest)
 
         href = spine_context.manifest[idref]
-        file_path = File.join(@opf_dir, href)
-        return chapter_num unless File.exist?(file_path)
+        file_path = join_path(href)
+        exists = @zip ? @zip.find_entry(file_path) : File.exist?(file_path)
+        return chapter_num unless exists
 
         title = spine_context.chapter_titles[href]
         yield(file_path, chapter_num, title)
@@ -102,6 +110,10 @@ module EbookReader
 
       def valid_itemref?(idref, manifest)
         idref && manifest[idref]
+      end
+
+      def join_path(href)
+        File.join(@opf_dir, href).sub(%r{^\./}, '')
       end
     end
   end

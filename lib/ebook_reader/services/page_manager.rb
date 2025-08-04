@@ -66,7 +66,10 @@ module EbookReader
       end
 
       def build_all_chapter_pages(layout_metrics)
-        @doc.chapters.each_with_index do |chapter, chapter_idx|
+        @doc.chapter_count.times do |chapter_idx|
+          chapter = @doc.get_chapter(chapter_idx)
+          next unless chapter
+
           build_chapter_pages(chapter, chapter_idx, layout_metrics)
         end
       end

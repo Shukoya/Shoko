@@ -5,9 +5,6 @@ require_relative 'infrastructure/performance_monitor'
 
 require 'zip'
 require 'rexml/document'
-require 'tempfile'
-require 'fileutils'
-require 'cgi'
 require_relative 'helpers/html_processor'
 require_relative 'helpers/opf_processor'
 require_relative 'models/chapter'
@@ -17,14 +14,17 @@ module EbookReader
   class EPUBDocument
     attr_reader :title, :chapters, :language
 
-    ZipExtractionContext = Struct.new(:zip_file, :entry, :destination, :error)
+    ChapterRef = Struct.new(:file_path, :number, :title, keyword_init: true)
 
     def initialize(path)
       @path = path
       @title = File.basename(path, '.epub').tr('_', ' ')
       @language = 'en_US'
       @chapters = []
+      @zip = Zip::File.open(@path)
       parse_epub
+    rescue StandardError => e
+      create_error_chapter(e)
     end
 
     def chapter_count
@@ -34,30 +34,35 @@ module EbookReader
     def get_chapter(index)
       return nil if @chapters.empty?
 
-      @chapters[index] if index >= 0 && index < @chapters.size
+      return nil unless index >= 0 && index < @chapters.size
+
+      entry = @chapters[index]
+
+      return entry if entry.is_a?(Models::Chapter)
+
+      chapter = load_chapter(entry)
+      @chapters[index] = chapter if chapter
+      chapter
     end
 
     private
 
-    # Parse the EPUB file and populate chapters.
+    # Parse the EPUB file and populate chapter references.
     #
-    # The EPUB is first extracted into a temporary directory so the
-    # filesystem remains clean. Once extracted we locate the OPF file
-    # described in META-INF/container.xml and use that to build the
-    # chapter list. Any errors encountered during this process are
-    # captured and presented to the user as a single "Error" chapter so
-    # the application can continue running.
+    # The EPUB archive is read directly without extracting files to disk.
+    # We locate the OPF file described in META-INF/container.xml and use
+    # it to build a list of chapters. Any errors encountered during this
+    # process are captured and presented to the user as a single "Error"
+    # chapter so the application can continue running.
     def parse_epub
       Infrastructure::Logger.info('Parsing EPUB', path: @path)
       Infrastructure::PerformanceMonitor.time('epub_parsing') do
-        Dir.mktmpdir do |tmpdir|
-          extract_epub(tmpdir)
-          load_epub_content(tmpdir)
-        end
+        opf_path = find_opf_path
+        process_opf(opf_path) if opf_path
         ensure_chapters_exist
-      rescue StandardError => e
-        create_error_chapter(e)
       end
+    rescue StandardError => e
+      create_error_chapter(e)
     end
 
     def create_error_chapter(error)
@@ -71,76 +76,28 @@ module EbookReader
       ]
     end
 
-    # Extract all files from the EPUB archive into the given temporary
-    # directory. Rubyzip changed its API around 2.0 which can cause
-    # ArgumentErrors when calling `entry.extract`. To remain compatible
-    # with older versions we attempt the standard extraction first and
-    # fall back to several alternatives if needed.
-    def extract_epub(tmpdir)
-      Zip::File.open(@path) do |zip|
-        zip.each { |entry| extract_entry(zip, entry, tmpdir) unless entry.name.end_with?('/') }
-      end
-    end
-
-    def extract_entry(zip, entry, tmpdir)
-      dest = prepare_destination(entry, tmpdir)
-      return if File.exist?(dest)
-
-      extract_with_fallback(zip, entry, dest)
-    end
-
-    def prepare_destination(entry, tmpdir)
-      dest = File.join(tmpdir, entry.name)
-      FileUtils.mkdir_p(File.dirname(dest))
-      dest
-    end
-
-    def extract_with_fallback(zip, entry, dest)
-      entry.extract(dest)
-    rescue ArgumentError => e
-      context = ZipExtractionContext.new(zip, entry, dest, e)
-      handle_rubyzip_compatibility(context)
-    rescue StandardError
-      File.binwrite(dest, zip.read(entry))
-    end
-
-    def handle_rubyzip_compatibility(context)
-      raise unless context.error.message.include?('wrong number of arguments')
-
-      context.zip_file.extract(context.entry, context.destination) { true }
-    end
-
-    # After extraction this method finds the OPF file and begins the
-    # parsing process that builds our chapter list and metadata.
-    def load_epub_content(tmpdir)
-      opf_path = find_opf_path(tmpdir)
-      return unless opf_path
-
-      process_opf(opf_path)
-    end
-
     # Locate the OPF package file which describes the contents of the
     # EPUB. Its path is defined in META-INF/container.xml as required by
     # the EPUB specification.
-    def find_opf_path(tmpdir)
-      container_file = File.join(tmpdir, 'META-INF', 'container.xml')
-      return unless File.exist?(container_file)
-
-      container = REXML::Document.new(File.read(container_file))
+    def find_opf_path
+      container_xml = @zip.read('META-INF/container.xml')
+      container = REXML::Document.new(container_xml)
       rootfile = container.elements['//rootfile']
       return unless rootfile
 
-      opf_path = File.join(tmpdir, rootfile.attributes['full-path'])
-      opf_path if File.exist?(opf_path)
+      opf_path = rootfile.attributes['full-path']
+      opf_path if @zip.find_entry(opf_path)
+    rescue StandardError
+      nil
     end
 
     # Parse the OPF file using the helper processor. This extracts
     # metadata such as the book title and language, builds a manifest of
     # all items in the EPUB, and walks the spine to determine chapter
-    # order. Each referenced HTML file is converted into a chapter
-    # structure the reader can display.
+    # order. Instead of reading chapter files immediately we store
+    # references so that content can be loaded lazily.
     def process_opf(opf_path)
-      processor = Helpers::OPFProcessor.new(opf_path)
+      processor = Helpers::OPFProcessor.new(opf_path, zip: @zip)
 
       # Extract metadata
       metadata = processor.extract_metadata
@@ -151,10 +108,9 @@ module EbookReader
       manifest = processor.build_manifest_map
       chapter_titles = processor.extract_chapter_titles(manifest)
 
-      # Process spine
+      # Process spine without loading chapter content
       processor.process_spine(manifest, chapter_titles) do |file_path, number, title|
-        chapter = load_chapter(file_path, number, title)
-        @chapters << chapter if chapter
+        @chapters << ChapterRef.new(file_path:, number:, title:)
       end
     end
 
@@ -173,11 +129,15 @@ module EbookReader
     # If an error occurs while reading or parsing the file we simply skip the
     # chapter so the rest of the book can still be viewed. Titles are
     # extracted from the HTML when available or generated automatically.
-    def load_chapter(path, number, title_from_ncx = nil)
-      content = read_file_content(path)
-      create_chapter_from_content(content, number, title_from_ncx)
-    rescue Errno::ENOENT, REXML::ParseException
+    def load_chapter(entry)
+      content = read_entry_content(@zip, entry.file_path)
+      create_chapter_from_content(content, entry.number, entry.title)
+    rescue Errno::ENOENT, Zip::Error, REXML::ParseException
       nil
+    end
+
+    def close
+      @zip.close if @zip && !@zip.closed?
     end
 
     def create_chapter_from_content(content, number, title_from_ncx)
@@ -203,8 +163,9 @@ module EbookReader
 
     # Utility method to read a file as UTF-8 while stripping any UTF-8
     # BOM that may be present.
-    def read_file_content(path)
-      content = File.read(path, encoding: 'UTF-8')
+    def read_entry_content(zip, path)
+      content = zip.read(path)
+      content.force_encoding('UTF-8')
       content = content[1..] if content.start_with?("\uFEFF")
       content
     end

@@ -45,7 +45,10 @@ module EbookReader
 
     def process_all_chapters(layout_config)
       total_lines = 0
-      @doc.chapters.each_with_index do |chapter, idx|
+      @doc.chapter_count.times do |idx|
+        chapter = @doc.get_chapter(idx)
+        next unless chapter
+
         @dynamic_chapter_starts << total_lines
         context = ChapterContext.new(chapter, idx, total_lines)
         total_lines += process_single_chapter(context, layout_config)

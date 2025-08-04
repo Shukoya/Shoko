@@ -361,8 +361,10 @@ module EbookReader
     end
 
     def calculate_page_map(col_width, actual_height)
-      @page_map = @doc.chapters.map do |chapter|
-        wrapped = wrap_lines(chapter.lines || [], col_width)
+      @page_map = Array.new(@doc.chapter_count) do |idx|
+        chapter = @doc.get_chapter(idx)
+        lines = chapter&.lines || []
+        wrapped = wrap_lines(lines, col_width)
         (wrapped.size.to_f / actual_height).ceil
       end
       @total_pages = @page_map.sum

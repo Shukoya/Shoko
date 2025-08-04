@@ -305,20 +305,23 @@ RSpec.describe 'Comprehensive Coverage Tests' do
       end
 
       it 'handles malformed OPF files' do
-        allow(Dir).to receive(:mktmpdir).and_yield('/tmp/test')
-        allow(Zip::File).to receive(:open).and_yield(double('zip', each: nil))
+        entries = {
+          'META-INF/container.xml' => <<~XML,
+            <container>
+              <rootfiles>
+                <rootfile full-path="content.opf"/>
+              </rootfiles>
+            </container>
+          XML
+          'content.opf' => '<invalid>',
+        }
 
-        # Create malformed OPF
-        FileUtils.mkdir_p('/tmp/test/META-INF')
-        File.write('/tmp/test/META-INF/container.xml', <<-XML)
-          <container>
-            <rootfiles>
-              <rootfile full-path="content.opf"/>
-            </rootfiles>
-          </container>
-        XML
-
-        File.write('/tmp/test/content.opf', '<invalid>')
+        zip = double('zip_file')
+        allow(zip).to receive(:read) { |path| entries.fetch(path).dup }
+        allow(zip).to receive(:find_entry) { |path| entries.key?(path) }
+        allow(Zip::File).to receive(:open).with(epub_path).and_return(zip)
+        allow(zip).to receive(:close)
+        allow(zip).to receive(:closed?).and_return(false)
 
         doc = described_class.new(epub_path)
         expect(doc.chapters).not_to be_empty
