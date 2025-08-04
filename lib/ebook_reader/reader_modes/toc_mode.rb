@@ -23,18 +23,34 @@ module EbookReader
       end
 
       def handle_input(key)
-        if escape_key?(key) || %w[t T].include?(key)
-          reader.switch_mode(:read)
+        if exit_key?(key)
+          exit_to_reading_mode
         elsif navigation_key?(key)
-          max_index = reader.send(:doc).chapter_count - 1
-          @selected = handle_navigation_keys(key, @selected, max_index)
+          handle_navigation(key)
         elsif enter_key?(key)
-          reader.send(:jump_to_chapter, @selected)
-          reader.switch_mode(:read)
+          select_chapter_and_exit
         end
       end
 
       private
+
+      def exit_key?(key)
+        escape_key?(key) || %w[t T].include?(key)
+      end
+
+      def exit_to_reading_mode
+        reader.switch_mode(:read)
+      end
+
+      def handle_navigation(key)
+        max_index = reader.send(:doc).chapter_count - 1
+        @selected = handle_navigation_keys(key, @selected, max_index)
+      end
+
+      def select_chapter_and_exit
+        reader.send(:jump_to_chapter, @selected)
+        reader.switch_mode(:read)
+      end
 
       def draw_header(width)
         terminal.write(1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}📖 Table of Contents#{Terminal::ANSI::RESET}")
@@ -61,12 +77,21 @@ module EbookReader
         text = title
 
         if context.selected
-          terminal.write(context.row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
-          terminal.write(context.row, 4,
-                         "#{Terminal::ANSI::BRIGHT_WHITE}#{text[0, context.width - 6]}#{Terminal::ANSI::RESET}")
+          draw_selected_chapter_item(context, text)
         else
-          terminal.write(context.row, 4, "#{Terminal::ANSI::WHITE}#{text[0, context.width - 6]}#{Terminal::ANSI::RESET}")
+          draw_unselected_chapter_item(context, text)
         end
+      end
+
+      def draw_selected_chapter_item(context, text)
+        terminal.write(context.row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
+        terminal.write(context.row, 4,
+                       "#{Terminal::ANSI::BRIGHT_WHITE}#{text[0, context.width - 6]}#{Terminal::ANSI::RESET}")
+      end
+
+      def draw_unselected_chapter_item(context, text)
+        terminal.write(context.row, 4,
+                       "#{Terminal::ANSI::WHITE}#{text[0, context.width - 6]}#{Terminal::ANSI::RESET}")
       end
 
       def draw_footer(height)

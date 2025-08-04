@@ -66,12 +66,24 @@ module EbookReader
 
         return context.word if context.current.empty?
 
-        if fits_on_current_line?(context.current, context.word, context.width)
-          "#{context.current} #{context.word}"
+        if word_fits_on_line?(context)
+          append_word_to_line(context)
         else
-          context.wrapped << context.current
-          context.word
+          wrap_to_next_line(context)
         end
+      end
+
+      def word_fits_on_line?(context)
+        fits_on_current_line?(context.current, context.word, context.width)
+      end
+
+      def append_word_to_line(context)
+        "#{context.current} #{context.word}"
+      end
+
+      def wrap_to_next_line(context)
+        context.wrapped << context.current
+        context.word
       end
 
       def fits_on_current_line?(current, word, width)

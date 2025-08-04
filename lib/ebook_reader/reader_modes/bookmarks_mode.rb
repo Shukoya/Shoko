@@ -29,15 +29,8 @@ module EbookReader
       def handle_input(key)
         return handle_empty_input(key) if @bookmarks.empty?
 
-        if escape_key?(key) || key == 'B'
-          reader.switch_mode(:read)
-        elsif navigation_key?(key)
-          @selected = handle_navigation_keys(key, @selected, @bookmarks.length - 1)
-        elsif enter_key?(key)
-          jump_to_bookmark
-        elsif %w[d D].include?(key)
-          delete_bookmark
-        end
+        handler = input_handlers[key] || navigation_handler(key)
+        handler&.call
       end
 
       def handle_empty_input(key)
@@ -86,6 +79,18 @@ module EbookReader
         bookmark_renderer.render
       end
 
+      # Handles rendering of individual bookmark items in the bookmarks list.
+      # This class encapsulates the display logic for both selected and
+      # unselected bookmark states, providing consistent formatting.
+      #
+      # @example
+      #   renderer = BookmarkRenderer.new(
+      #     bookmark: bookmark,
+      #     chapter: chapter,
+      #     context: context,
+      #     mode: mode
+      #   )
+      #   renderer.render
       class BookmarkRenderer
         def initialize(bookmark:, chapter:, context:, mode:)
           @bookmark = bookmark
@@ -177,6 +182,25 @@ module EbookReader
         reader.send(:delete_selected_bookmark)
         @bookmarks = reader.send(:bookmarks)
         @selected = [@selected, @bookmarks.length - 1].min if @bookmarks.any?
+      end
+
+      private
+
+      def input_handlers
+        @input_handlers ||= {
+          "\e" => -> { reader.switch_mode(:read) },
+          'B' => -> { reader.switch_mode(:read) },
+          "\r" => -> { jump_to_bookmark },
+          "\n" => -> { jump_to_bookmark },
+          'd' => -> { delete_bookmark },
+          'D' => -> { delete_bookmark },
+        }
+      end
+
+      def navigation_handler(key)
+        return unless navigation_key?(key)
+
+        -> { @selected = handle_navigation_keys(key, @selected, @bookmarks.length - 1) }
       end
     end
   end

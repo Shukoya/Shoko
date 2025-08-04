@@ -188,6 +188,9 @@ module EbookReader
       end
 
       WordContext = Struct.new(:word, :current, :width, :wrapped, keyword_init: true)
+      private_constant :WordContext
+
+      private
 
       def add_word_to_line(context)
         return context.current if context.word.nil?

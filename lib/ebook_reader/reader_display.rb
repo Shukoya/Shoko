@@ -122,7 +122,12 @@ module EbookReader
     def render_column_content(context)
       actual_height = calculate_actual_height(context.dimensions.height)
       end_offset = [context.offset + actual_height, context.lines.size].min
-      drawing_context = LineDrawingContext.new(
+      drawing_context = build_line_drawing_context(context, actual_height, end_offset)
+      draw_lines(drawing_context)
+    end
+
+    def build_line_drawing_context(context, actual_height, end_offset)
+      LineDrawingContext.new(
         lines: context.lines,
         start_offset: context.offset,
         end_offset: end_offset,
@@ -130,20 +135,25 @@ module EbookReader
         dimensions: context.dimensions,
         actual_height: actual_height
       )
-      draw_lines(drawing_context)
     end
 
     def draw_lines(context)
-      calculate_visible_line_range(context).each_with_index do |line_index, display_index|
-        render_single_line(
-          line: context.lines[line_index],
-          row: context.position.row + display_index,
-          col: context.position.col,
-          width: context.dimensions.width,
-          base_row: context.position.row,
-          height: context.dimensions.height
-        )
+      visible_range = calculate_visible_line_range(context)
+      visible_range.each_with_index do |line_index, display_index|
+        line_params = build_line_render_params(context, line_index, display_index)
+        render_single_line(line_params)
       end
+    end
+
+    def build_line_render_params(context, line_index, display_index)
+      {
+        line: context.lines[line_index],
+        row: context.position.row + display_index,
+        col: context.position.col,
+        width: context.dimensions.width,
+        base_row: context.position.row,
+        height: context.dimensions.height,
+      }
     end
 
     def calculate_visible_line_range(context)

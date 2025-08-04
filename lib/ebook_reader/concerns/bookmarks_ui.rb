@@ -61,14 +61,14 @@ module EbookReader
 
       def build_bookmark_context(params)
         bookmark = @bookmarks[params.idx]
-        chapter_title = @doc.get_chapter(bookmark.chapter_index)&.title ||
-                        "Chapter #{bookmark.chapter_index + 1}"
+        chapter_title = extract_chapter_title(bookmark)
+        position = calculate_bookmark_position(params)
 
         Models::BookmarkDrawingContext.new(
           bookmark: bookmark,
           chapter_title: chapter_title,
           index: params.idx,
-          position: Models::Position.new(row: params.list_start + (params.row_idx * 2), col: 2),
+          position: position,
           width: params.width
         )
       end
@@ -122,6 +122,20 @@ module EbookReader
       def draw_bookmarks_footer(height)
         Terminal.write(height - 1, 2,
                        "#{Terminal::ANSI::DIM}↑↓ Navigate • Enter Jump • d Delete • B/ESC Back#{Terminal::ANSI::RESET}")
+      end
+
+      private
+
+      def extract_chapter_title(bookmark)
+        @doc.get_chapter(bookmark.chapter_index)&.title ||
+          "Chapter #{bookmark.chapter_index + 1}"
+      end
+
+      def calculate_bookmark_position(params)
+        Models::Position.new(
+          row: params.list_start + (params.row_idx * 2),
+          col: 2
+        )
       end
     end
   end

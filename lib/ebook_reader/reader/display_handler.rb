@@ -37,17 +37,7 @@ module EbookReader
 
       def draw_footer(height, width)
         pages = calculate_current_pages
-        context = Models::FooterRenderingContext.new(
-          height: height,
-          width: width,
-          doc: @doc,
-          chapter: @current_chapter,
-          pages: pages,
-          view_mode: @config.view_mode,
-          mode: @mode,
-          line_spacing: @config.line_spacing,
-          bookmarks: @bookmarks
-        )
+        context = build_footer_context(height, width, pages)
         @renderer.render_footer(context)
       end
 
@@ -58,6 +48,20 @@ module EbookReader
           (width - msg_len) / 2,
           "#{Terminal::ANSI::BG_DARK}#{Terminal::ANSI::BRIGHT_YELLOW} #{@message} " \
           "#{Terminal::ANSI::RESET}"
+        )
+      end
+
+      def build_footer_context(height, width, pages)
+        Models::FooterRenderingContext.new(
+          height: height,
+          width: width,
+          doc: @doc,
+          chapter: @current_chapter,
+          pages: pages,
+          view_mode: @config.view_mode,
+          mode: @mode,
+          line_spacing: @config.line_spacing,
+          bookmarks: @bookmarks
         )
       end
     end
