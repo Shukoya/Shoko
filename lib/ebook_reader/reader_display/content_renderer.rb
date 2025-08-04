@@ -69,18 +69,38 @@ module EbookReader
 
       def draw_toc_line(context)
         if context.selected
-          Terminal.write(context.row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
-          Terminal.write(context.row, 4,
-                         Terminal::ANSI::BRIGHT_WHITE + context.line[0, context.width - 6] + Terminal::ANSI::RESET)
+          draw_selected_toc_line(context)
         else
-          Terminal.write(context.row, 4,
-                         Terminal::ANSI::WHITE + context.line[0, context.width - 6] + Terminal::ANSI::RESET)
+          draw_unselected_toc_line(context)
         end
       end
 
       def draw_toc_footer(height)
         Terminal.write(height - 1, 2,
                        "#{Terminal::ANSI::DIM}↑↓ Navigate • Enter Jump • t/ESC Back#{Terminal::ANSI::RESET}")
+      end
+
+      private
+
+      def draw_selected_toc_line(context)
+        Terminal.write(context.row, 2, toc_pointer)
+        Terminal.write(context.row, 4, selected_toc_text(context.line, context.width))
+      end
+
+      def draw_unselected_toc_line(context)
+        Terminal.write(context.row, 4, unselected_toc_text(context.line, context.width))
+      end
+
+      def toc_pointer
+        "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}"
+      end
+
+      def selected_toc_text(line, width)
+        Terminal::ANSI::BRIGHT_WHITE + line[0, width - 6] + Terminal::ANSI::RESET
+      end
+
+      def unselected_toc_text(line, width)
+        Terminal::ANSI::WHITE + line[0, width - 6] + Terminal::ANSI::RESET
       end
     end
   end

@@ -108,15 +108,8 @@ module EbookReader
       end
 
       def draw_bookmark_text(context, style1, style2)
-        line1 = formatted_line(context.line1, context.width - 6, style1)
-        line2 = formatted_line(context.line2, context.width - 6, style2)
-
-        Terminal.write(context.position.row, 4, line1)
-        Terminal.write(context.position.row + 1, 4, line2)
-      end
-
-      def formatted_line(text, width, style)
-        style + text[0, width] + Terminal::ANSI::RESET
+        bookmark_lines = format_bookmark_lines(context, style1, style2)
+        render_bookmark_lines(bookmark_lines, context.position)
       end
 
       def draw_bookmarks_footer(height)
@@ -125,6 +118,22 @@ module EbookReader
       end
 
       private
+
+      def format_bookmark_lines(context, style1, style2)
+        {
+          line1: format_line_with_style(context.line1, context.width - 6, style1),
+          line2: format_line_with_style(context.line2, context.width - 6, style2),
+        }
+      end
+
+      def format_line_with_style(text, width, style)
+        style + text[0, width] + Terminal::ANSI::RESET
+      end
+
+      def render_bookmark_lines(lines, position)
+        Terminal.write(position.row, 4, lines[:line1])
+        Terminal.write(position.row + 1, 4, lines[:line2])
+      end
 
       def extract_chapter_title(bookmark)
         @doc.get_chapter(bookmark.chapter_index)&.title ||

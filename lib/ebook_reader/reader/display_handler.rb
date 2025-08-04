@@ -52,17 +52,17 @@ module EbookReader
       end
 
       def build_footer_context(height, width, pages)
-        Models::FooterRenderingContext.new(
-          height: height,
-          width: width,
-          doc: @doc,
-          chapter: @current_chapter,
-          pages: pages,
-          view_mode: @config.view_mode,
-          mode: @mode,
-          line_spacing: @config.line_spacing,
-          bookmarks: @bookmarks
-        )
+        context_params = footer_context_params(height, width, pages)
+        Models::FooterRenderingContext.new(context_params)
+      end
+
+      def footer_context_params(height, width, pages)
+        {
+          height: height, width: width, doc: @doc,
+          chapter: @current_chapter, pages: pages,
+          view_mode: @config.view_mode, mode: @mode,
+          line_spacing: @config.line_spacing, bookmarks: @bookmarks
+        }
       end
     end
   end

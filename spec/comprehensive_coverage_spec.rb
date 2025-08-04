@@ -269,8 +269,11 @@ RSpec.describe 'Comprehensive Coverage Tests' do
         scanner.epubs = [{ 'name' => 'A' * 200, 'path' => '/book.epub' }]
         menu.instance_variable_set(:@mode, :browse)
         menu.send(:filter_books)
+        allow(EbookReader::Terminal).to receive(:start_frame)
+        allow(EbookReader::Terminal).to receive(:end_frame)
+        allow(EbookReader::Terminal).to receive(:size).and_return([24, 80])
 
-        expect { menu.send(:draw_browse_screen, 24, 80) }.not_to raise_error
+        expect { menu.send(:draw_screen) }.not_to raise_error
       end
 
       it 'handles terminal resize during operation' do

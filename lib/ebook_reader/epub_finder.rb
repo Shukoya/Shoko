@@ -83,6 +83,18 @@ module EbookReader
         cache && cache['files'] ? cache['files'] : []
       end
 
+      def skip_directory?(path)
+        DirectoryScanner.new(nil).send(:skip_directory?, path)
+      end
+
+      def epub_file?(path)
+        DirectoryScanner.new(nil).send(:epub_file?, path)
+      end
+
+      def safe_directory_exists?(dir)
+        DirectoryScanner.new(nil).send(:safe_directory_exists?, dir)
+      end
+
       def perform_scan
         epubs = []
         context = Models::ScannerContext.new(

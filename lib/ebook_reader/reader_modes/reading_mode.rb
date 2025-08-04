@@ -34,6 +34,9 @@ module EbookReader
       end
     end
 
+    # Handles the main reading view and navigation for the EPUB reader.
+    # This mode is responsible for rendering the book content and processing
+    # reading-related keyboard shortcuts.
     class ReadingMode < BaseMode
       def draw(height, width)
         if config.view_mode == :split

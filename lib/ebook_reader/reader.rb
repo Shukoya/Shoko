@@ -19,6 +19,7 @@ require_relative 'renderers/components/text_renderer'
 require_relative 'dynamic_page_calculator'
 require_relative 'reader_display'
 require_relative 'reader/display_handler'
+require_relative 'presenters/reader_presenter'
 
 module EbookReader
   # Main reader interface for displaying EPUB content.
@@ -59,6 +60,7 @@ module EbookReader
       @path = epub_path
       @config = config
       @renderer = UI::ReaderRenderer.new(@config)
+      @presenter = Presenters::ReaderPresenter.new(self, @config)
       initialize_state
       load_document
       @page_manager = Services::PageManager.new(@doc, @config) if @doc
@@ -232,20 +234,6 @@ module EbookReader
       @config.save
       @last_width = 0
     end
-
-    ERROR_MESSAGE_LINES = [
-      'Failed to load EPUB file:',
-      '',
-      '%<error>s',
-      '',
-      'Possible causes:',
-      '- The file might be corrupted',
-      '- The file might not be a valid EPUB',
-      '- The file might be password protected',
-      '',
-      "Press 'q' to return to the menu",
-    ].freeze
-    private_constant :ERROR_MESSAGE_LINES
 
     private
 
@@ -425,23 +413,7 @@ module EbookReader
     end
 
     def create_error_document(error_msg)
-      doc = Object.new
-      define_error_doc_methods(doc, error_msg)
-      doc
-    end
-
-    def define_error_doc_methods(doc, error_msg)
-      doc.define_singleton_method(:title) { 'Error Loading EPUB' }
-      doc.define_singleton_method(:language) { 'en_US' }
-      doc.define_singleton_method(:chapter_count) { 1 }
-      doc.define_singleton_method(:chapters) { [{ title: 'Error', lines: [] }] }
-      doc.define_singleton_method(:get_chapter) do |_idx|
-        { number: '1', title: 'Error', lines: error_lines(error_msg) }
-      end
-    end
-
-    def error_lines(error_msg)
-      ERROR_MESSAGE_LINES.map { |line| line == '%<error>s' ? error_msg : line }
+      @presenter.error_document_for(error_msg)
     end
 
     def adjust_for_line_spacing(height)

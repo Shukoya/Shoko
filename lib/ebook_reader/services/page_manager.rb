@@ -8,6 +8,12 @@ module EbookReader
     class PageManager
       attr_reader :pages_data
 
+      PageData = Struct.new(
+        :wrapped_lines, :chapter_idx, :page_idx, :lines_per_page, :page_count,
+        keyword_init: true
+      )
+      private_constant :PageData
+
       def initialize(doc, config)
         @doc = doc
         @config = config
@@ -67,17 +73,7 @@ module EbookReader
 
       def build_chapter_pages(chapter, chapter_idx, layout_metrics)
         wrapped_lines = wrap_chapter_lines(chapter, layout_metrics[:col_width])
-        page_count = calculate_page_count(wrapped_lines.size, layout_metrics[:lines_per_page])
-        page_count.times do |page_idx|
-          page_data = PageData.new(
-            wrapped_lines: wrapped_lines,
-            chapter_idx: chapter_idx,
-            page_idx: page_idx,
-            lines_per_page: layout_metrics[:lines_per_page],
-            page_count: page_count
-          )
-          add_page_data(page_data)
-        end
+        create_pages_for_chapter(wrapped_lines, chapter_idx, layout_metrics)
       end
 
       def calculate_page_count(line_count, lines_per_page)
@@ -85,17 +81,32 @@ module EbookReader
         [count, 1].max
       end
 
-      PageData = Struct.new(
-        :wrapped_lines, :chapter_idx, :page_idx, :lines_per_page, :page_count,
-        keyword_init: true
-      )
+      private
+
+      def create_pages_for_chapter(wrapped_lines, chapter_idx, layout_metrics)
+        page_count = calculate_page_count(wrapped_lines.size, layout_metrics[:lines_per_page])
+        page_count.times do |page_idx|
+          info = { chapter_idx: chapter_idx, page_idx: page_idx,
+                   layout_metrics: layout_metrics, page_count: page_count }
+          page_data = build_page_data(wrapped_lines, info)
+          add_page_data(page_data)
+        end
+      end
+
+      def build_page_data(wrapped_lines, info)
+        PageData.new(
+          wrapped_lines: wrapped_lines,
+          chapter_idx: info[:chapter_idx],
+          page_idx: info[:page_idx],
+          lines_per_page: info[:layout_metrics][:lines_per_page],
+          page_count: info[:page_count]
+        )
+      end
 
       def add_page_data(page_data)
         page_info = build_page_info(page_data)
         @pages_data << page_info
       end
-
-      private
 
       def build_page_info(page_data)
         line_range = calculate_line_range(page_data)
@@ -194,19 +205,23 @@ module EbookReader
 
       def add_word_to_line(context)
         return context.current if context.word.nil?
+        return context.word if context.current.empty?
+        return combined_text(context) if fits_on_line?(context.current, context.word, context.width)
 
-        if context.current.empty?
-          context.word
-        elsif fits_on_line?(context.current, context.word, context.width)
-          "#{context.current} #{context.word}"
-        else
-          context.wrapped << context.current
-          context.word
-        end
+        append_current(context)
       end
 
       def fits_on_line?(current, word, width)
         current.length + 1 + word.length <= width
+      end
+
+      def combined_text(context)
+        "#{context.current} #{context.word}"
+      end
+
+      def append_current(context)
+        context.wrapped << context.current
+        context.word
       end
     end
   end

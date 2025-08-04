@@ -1,11 +1,14 @@
 # frozen_string_literal: true
 
+require_relative 'reader_input_handler/navigation_handlers'
+
 module EbookReader
   module Services
     # Handles user input for the Reader class so the reader itself
     # can focus on state management and rendering.
     class ReaderInputHandler
       include Concerns::InputHandler
+      include NavigationHandlers
 
       def initialize(reader)
         @reader = reader
@@ -88,68 +91,6 @@ module EbookReader
         handler&.call
       end
 
-      def dynamic_navigation_handlers
-        @dynamic_navigation_handlers ||= basic_nav_handlers
-                                         .merge(chapter_nav_handlers)
-                                         .merge(go_handlers)
-      end
-
-      def basic_nav_handlers
-        next_keys.merge(prev_keys)
-      end
-
-      def next_keys
-        {
-          'j' => -> { @reader.next_page },
-          "\e[B" => -> { @reader.next_page },
-          "\eOB" => -> { @reader.next_page },
-          'l' => -> { @reader.next_page },
-          ' ' => -> { @reader.next_page },
-          "\e[C" => -> { @reader.next_page },
-          "\eOC" => -> { @reader.next_page },
-        }
-      end
-
-      def prev_keys
-        {
-          'k' => -> { @reader.prev_page },
-          "\e[A" => -> { @reader.prev_page },
-          "\eOA" => -> { @reader.prev_page },
-          'h' => -> { @reader.prev_page },
-          "\e[D" => -> { @reader.prev_page },
-          "\eOD" => -> { @reader.prev_page },
-        }
-      end
-
-      def chapter_nav_handlers
-        {
-          'n' => -> { @reader.next_chapter },
-          'N' => -> { @reader.next_chapter },
-          'p' => -> { @reader.prev_chapter },
-          'P' => -> { @reader.prev_chapter },
-        }
-      end
-
-      def go_handlers
-        {
-          'g' => -> { go_to_start_dynamic },
-          'G' => -> { go_to_end_dynamic },
-        }
-      end
-
-      def go_to_start_dynamic
-        @reader.instance_variable_set(:@current_page_index, 0)
-        @reader.send(:update_chapter_from_page_index)
-      end
-
-      def go_to_end_dynamic
-        pm = @reader.instance_variable_get(:@page_manager)
-        return unless pm
-
-        @reader.instance_variable_set(:@current_page_index, pm.total_pages - 1)
-        @reader.send(:update_chapter_from_page_index)
-      end
-
       def handle_navigation_input_absolute(key)
         height, width = Terminal.size
         col_width, content_height = @reader.send(:get_layout_metrics, width, height)
@@ -165,16 +106,34 @@ module EbookReader
       end
 
       def navigate_by_key(key, content_height, max_page)
-        case key
-        when 'j', "\e[B", "\eOB" then scroll_down_with_max(max_page)
-        when 'k', "\e[A", "\eOA" then @reader.scroll_up
-        when 'l', ' ', "\e[C", "\eOC" then next_page_with_params(content_height, max_page)
-        when 'h', "\e[D", "\eOD" then prev_page_with_params(content_height)
-        when 'n', 'N' then handle_next_chapter
-        when 'p', 'P' then handle_prev_chapter
-        when 'g' then @reader.send(:reset_pages)
-        when 'G' then go_to_end_with_params(content_height, max_page)
-        end
+        command = navigation_commands[key]
+        return unless command
+
+        command.call(content_height, max_page)
+      end
+
+      def navigation_commands
+        @navigation_commands ||= {
+          'j' => ->(_, max) { scroll_down_with_max(max) },
+          "\e[B" => ->(_, max) { scroll_down_with_max(max) },
+          "\eOB" => ->(_, max) { scroll_down_with_max(max) },
+          'k' => ->(_, _) { @reader.scroll_up },
+          "\e[A" => ->(_, _) { @reader.scroll_up },
+          "\eOA" => ->(_, _) { @reader.scroll_up },
+          'l' => ->(ch, max) { next_page_with_params(ch, max) },
+          ' ' => ->(ch, max) { next_page_with_params(ch, max) },
+          "\e[C" => ->(ch, max) { next_page_with_params(ch, max) },
+          "\eOC" => ->(ch, max) { next_page_with_params(ch, max) },
+          'h' => ->(ch, _) { prev_page_with_params(ch) },
+          "\e[D" => ->(ch, _) { prev_page_with_params(ch) },
+          "\eOD" => ->(ch, _) { prev_page_with_params(ch) },
+          'n' => ->(_, _) { handle_next_chapter },
+          'N' => ->(_, _) { handle_next_chapter },
+          'p' => ->(_, _) { handle_prev_chapter },
+          'P' => ->(_, _) { handle_prev_chapter },
+          'g' => ->(_, _) { @reader.send(:reset_pages) },
+          'G' => ->(ch, max) { go_to_end_with_params(ch, max) },
+        }
       end
 
       def scroll_down_with_max(max_page)

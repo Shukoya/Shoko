@@ -9,32 +9,38 @@ RSpec.describe EbookReader::MainMenu, 'rendering' do
     allow(EbookReader::Terminal).to receive(:start_frame)
     allow(EbookReader::Terminal).to receive(:end_frame)
     allow(EbookReader::Terminal).to receive(:write)
+    allow(EbookReader::Terminal).to receive(:size).and_return([24, 80])
     allow(menu).to receive(:loop).and_yield
   end
 
   context 'when drawing different screens' do
     it 'draws the main menu' do
       menu.instance_variable_set(:@mode, :menu)
-      expect(menu).to receive(:draw_main_menu)
+      screen_manager = menu.instance_variable_get(:@screen_manager)
+      expect(screen_manager).to receive(:draw_main_menu).and_call_original
       menu.send(:draw_screen)
     end
 
     it 'draws the browse screen' do
       menu.instance_variable_set(:@mode, :browse)
-      expect(menu).to receive(:draw_browse_screen)
+      menu.instance_variable_set(:@filtered_epubs, [])
+      screen_manager = menu.instance_variable_get(:@screen_manager)
+      expect(screen_manager).to receive(:draw_browse_screen).and_call_original
       menu.send(:draw_screen)
     end
 
     it 'draws the recent screen' do
       menu.instance_variable_set(:@mode, :recent)
       allow(EbookReader::RecentFiles).to receive(:load).and_return([])
-      expect(menu).to receive(:draw_recent_screen)
+      screen_manager = menu.instance_variable_get(:@screen_manager)
+      expect(screen_manager).to receive(:draw_recent_screen).and_call_original
       menu.send(:draw_screen)
     end
 
     it 'draws the settings screen' do
       menu.instance_variable_set(:@mode, :settings)
-      expect(menu).to receive(:draw_settings_screen)
+      screen_manager = menu.instance_variable_get(:@screen_manager)
+      expect(screen_manager).to receive(:draw_settings_screen).and_call_original
       menu.send(:draw_screen)
     end
   end
@@ -44,7 +50,7 @@ RSpec.describe EbookReader::MainMenu, 'rendering' do
       allow(EbookReader::RecentFiles).to receive(:load).and_return([])
       recent_screen = menu.instance_variable_get(:@recent_screen)
       expect(recent_screen).to receive(:draw).with(24, 80)
-      menu.send(:draw_recent_screen, 24, 80)
+      menu.instance_variable_get(:@screen_manager).send(:draw_recent_screen, 24, 80)
     end
 
     it 'renders empty bookmarks screen correctly' do
