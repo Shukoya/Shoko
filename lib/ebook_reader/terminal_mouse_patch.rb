@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 module EbookReader
-  module Terminal
+  # Extensions to Terminal for mouse support
+  class Terminal
     class << self
       # Enable mouse tracking
       def enable_mouse

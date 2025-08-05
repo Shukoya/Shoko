@@ -9,8 +9,8 @@ module EbookReader
       def initialize(reader, text: nil, range: nil, annotation: nil, chapter_index: nil)
         super(reader)
         @annotation = annotation
-        @selected_text = text || annotation&.fetch('text', '')
-        @note = annotation&.fetch('note', '') || ''
+        @selected_text = (text || annotation&.fetch('text', '') || '').dup
+        @note = (annotation&.fetch('note', '') || '').dup
         @range = range || annotation&.fetch('range')
         @chapter_index = chapter_index || annotation&.fetch('chapter_index')
         @cursor_pos = @note.length
