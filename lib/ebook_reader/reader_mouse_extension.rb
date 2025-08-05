@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 module EbookReader
-  # Extension to add mouse support to Reader
+  # Extension to add mouse support to Reader.
+  # Every mouse event triggers an immediate redraw, including while dragging,
+  # so selection highlighting and popup menus appear with no delay.
   module ReaderMouseExtension
     def self.included(base)
       base.class_eval do
@@ -34,14 +36,17 @@ module EbookReader
       Terminal.end_frame
     end
 
+    # Process all mouse events and refresh the screen after each one to provide
+    # instant visual feedback. This includes intermediate drag events so users
+    # see text highlighting as they select.
     def handle_mouse_input(input)
       event = @mouse_handler.parse_mouse_event(input)
       return unless event
-      
+
       # Handle popup menu clicks first
       if @popup_menu&.visible && event[:released]
         item = @popup_menu.handle_click(event[:x], event[:y])
-        
+
         if item
           handle_popup_action(item)
         else
@@ -50,16 +55,14 @@ module EbookReader
           @mouse_handler.reset
           @selection_range = nil
         end
-        return
+      else
+        # Handle text selection
+        result = @mouse_handler.handle_event(event)
+
+        handle_selection_end if result&.fetch(:type, nil) == :selection_end
       end
-      
-      # Handle text selection
-      result = @mouse_handler.handle_event(event)
-      
-      case result&.fetch(:type, nil)
-      when :selection_end
-        handle_selection_end
-      end
+
+      draw_screen
     end
 
     private
