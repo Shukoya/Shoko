@@ -12,6 +12,16 @@ module EbookReader
         })
         handlers
       end
+
+      def handle_annotations_mode(key)
+        mode = @reader.instance_variable_get(:@current_mode)
+        mode&.handle_input(key)
+      end
+
+      def handle_annotation_editor_mode(key)
+        mode = @reader.instance_variable_get(:@current_mode)
+        mode&.handle_input(key)
+      end
     end
   end
 end

@@ -98,13 +98,14 @@ module EbookReader
 
       def save_annotation
         path = reader.instance_variable_get(:@path)
-        
+
         if @is_editing && @annotation
           Annotations::AnnotationStore.update(path, @annotation['id'], @note)
         else
           Annotations::AnnotationStore.add(path, @selected_text, @note, @range, @chapter_index)
         end
-        
+
+        reader.refresh_annotations if reader.respond_to?(:refresh_annotations)
         reader.send(:set_message, 'Annotation saved!')
         reader.switch_mode(:read)
       end

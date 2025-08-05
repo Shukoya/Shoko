@@ -129,6 +129,7 @@ module EbookReader
         Annotations::AnnotationStore.delete(path, annotation['id'])
         load_annotations
         @selected = [@selected, @annotations.length - 1].min if @annotations.any?
+        reader.refresh_annotations if reader.respond_to?(:refresh_annotations)
         reader.send(:set_message, 'Annotation deleted!')
       end
     end

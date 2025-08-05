@@ -41,10 +41,16 @@ module EbookReader
 
       def draw_content(height, width)
         case @mode
-        when :help then draw_help_screen(height, width)
-        when :toc then draw_toc_screen(height, width)
-        when :bookmarks then draw_bookmarks_screen(height, width)
-        else draw_reading_content(height, width)
+        when :help
+          draw_help_screen(height, width)
+        when :toc
+          draw_toc_screen(height, width)
+        when :bookmarks
+          draw_bookmarks_screen(height, width)
+        when :annotations, :annotation_editor
+          @current_mode&.draw(height, width)
+        else
+          draw_reading_content(height, width)
         end
       end
 

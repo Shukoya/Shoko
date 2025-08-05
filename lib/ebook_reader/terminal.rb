@@ -41,6 +41,7 @@ module EbookReader
       # Background colors
       BG_DARK = "\e[48;5;236m"
       BG_BRIGHT_GREEN = "\e[102m"
+      BG_BRIGHT_YELLOW = "\e[103m"
 
       # Control sequences
       module Control

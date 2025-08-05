@@ -19,19 +19,18 @@ module EbookReader
       @popup_menu = nil
       @selected_text = nil
       @selection_range = nil
+      @rendered_lines = {}
+      refresh_annotations
     end
 
     def draw_screen_with_mouse
+      @rendered_lines.clear
       draw_screen_without_mouse
-      
-      # Highlight selected text if any
-      if @mouse_handler.selecting || @selection_range
-        highlight_selection
-      end
-      
-      # Draw popup menu if visible
+
+      highlight_saved_annotations
+      highlight_selection if @mouse_handler.selecting || @selection_range
       @popup_menu&.render
-      
+
       Terminal.end_frame
     end
 
@@ -113,24 +112,57 @@ module EbookReader
 
     def highlight_selection
       range = @mouse_handler.selection_range || @selection_range
-      return unless range
-      
-      # Calculate actual screen positions based on current view
-      # This is simplified - you'll need to adjust based on your rendering
-      start_pos = range[:start]
-      end_pos = range[:end]
-      
-      # Apply highlight color to selected range
-      if start_pos[:y] == end_pos[:y]
-        # Single line selection
-        (start_pos[:x]..end_pos[:x]).each do |x|
-          # Rewrite character at position with highlight
-          Terminal.write_differential(start_pos[:y], x, 
-            "#{Terminal::ANSI::BG_BRIGHT_GREEN}#{Terminal::ANSI::BLACK} #{Terminal::ANSI::RESET}")
-        end
-      else
-        # Multi-line selection - implement as needed
+      highlight_range(range, Terminal::ANSI::BG_BRIGHT_GREEN) if range
+    end
+
+    def highlight_saved_annotations
+      return unless @annotations
+      @annotations.select { |a| a['chapter_index'] == @current_chapter }
+                  .each do |ann|
+        highlight_range(ann['range'], Terminal::ANSI::BG_BRIGHT_YELLOW)
       end
+    end
+
+    def highlight_range(range, color)
+      return unless range
+
+      start_pos = range[:start] || range['start']
+      end_pos = range[:end] || range['end']
+      return unless start_pos && end_pos
+
+      (start_pos[:y]..end_pos[:y]).each do |y|
+        row = y + 1
+        line_info = @rendered_lines[row]
+        next unless line_info
+
+        line_text = line_info[:text]
+        line_start = line_info[:col]
+
+        start_idx = if y == start_pos[:y]
+                      start_pos[:x] + 1 - line_start
+                    else
+                      0
+                    end
+        end_idx = if y == end_pos[:y]
+                    end_pos[:x] + 1 - line_start
+                  else
+                    line_text.length - 1
+                  end
+
+        start_idx = [[start_idx, line_text.length - 1].min, 0].max
+        end_idx = [[end_idx, line_text.length - 1].min, 0].max
+        next if end_idx < start_idx
+
+        (start_idx..end_idx).each do |i|
+          col = line_start + i
+          char = line_text[i] || ' '
+          Terminal.write(row, col, "#{color}#{Terminal::ANSI::BLACK}#{char}#{Terminal::ANSI::RESET}")
+        end
+      end
+    end
+
+    def refresh_annotations
+      @annotations = Annotations::AnnotationStore.get(@path)
     end
 
     def extract_selected_text(range)

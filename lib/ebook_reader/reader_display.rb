@@ -124,13 +124,20 @@ module EbookReader
     end
 
     def draw_line(params)
+      line_text = params.line[0, params.width]
+
       if should_highlight_line?(params.line)
         draw_highlighted_line(params)
       else
         Terminal.write(params.position.row, params.position.col,
-                       Terminal::ANSI::WHITE + params.line[0, params.width] +
+                       Terminal::ANSI::WHITE + line_text +
                        Terminal::ANSI::RESET)
       end
+
+      (@rendered_lines ||= {})[params.position.row] = {
+        col: params.position.col,
+        text: line_text
+      }
     end
 
     def should_highlight_line?(line)
