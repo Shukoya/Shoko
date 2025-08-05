@@ -24,6 +24,8 @@ module EbookReader
         '  + / -     Adjust line spacing',
         '',
         'Features:',
+        '  a         View annotations',
+        '  A         View annotations',
         '  t         Table of Contents',
         '  b         Add bookmark',
         '  B         View bookmarks',

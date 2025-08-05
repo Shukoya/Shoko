@@ -71,6 +71,9 @@ require_relative 'ebook_reader/reader'
 # Application entry point
 require_relative 'ebook_reader/cli'
 
+# Annotation support
+require_relative 'ebook_reader/init_annotations'
+
 # Main module for the EbookReader application
 #
 # This module serves as the namespace for all EbookReader components
