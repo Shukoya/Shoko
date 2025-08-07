@@ -32,7 +32,6 @@ require_relative 'ebook_reader/models/drawing_context'
 require_relative 'ebook_reader/models/scanner_context'
 require_relative 'ebook_reader/models/page_rendering_context'
 require_relative 'ebook_reader/builders/page_setup_builder'
-require_relative 'ebook_reader/policies/validation_policy'
 
 # Core components
 require_relative 'ebook_reader/version'
@@ -65,7 +64,6 @@ require_relative 'ebook_reader/services/main_menu_input_handler'
 
 # UI components
 require_relative 'ebook_reader/main_menu'
-require_relative 'ebook_reader/reader_refactored'
 require_relative 'ebook_reader/reader'
 
 # Application entry point

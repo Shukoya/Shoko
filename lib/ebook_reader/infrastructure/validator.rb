@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative '../policies/validation_policy'
-
 module EbookReader
   module Infrastructure
     # Base validator class providing common validation patterns.
@@ -51,28 +49,6 @@ module EbookReader
 
       RangeValidationContext = Struct.new(:value, :range, :field, :message)
       FormatValidationContext = Struct.new(:value, :pattern, :field, :message)
-
-      # Validate value is within a range
-      #
-      # @param context [RangeValidationContext] Validation context
-      # @return [Boolean] Validation result
-      def range_valid?(context)
-        policy = Policies::ValidationPolicy.new
-        result = policy.range_valid?(context.value, context.range, context.field)
-        @errors.concat(policy.errors) unless result
-        result
-      end
-
-      # Validate value matches a pattern
-      #
-      # @param context [FormatValidationContext] Validation context
-      # @return [Boolean] Validation result
-      def format_valid?(context)
-        policy = Policies::ValidationPolicy.new
-        result = policy.format_valid?(context.value, context.pattern, context.field)
-        @errors.concat(policy.errors) unless result
-        result
-      end
     end
   end
 end

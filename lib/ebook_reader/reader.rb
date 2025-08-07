@@ -43,9 +43,6 @@ module EbookReader
   #   reader = Reader.new("/path/to/book.epub", config)
   #   reader.run
   class Reader
-    include ReaderRefactored::NavigationHelpers
-    include ReaderRefactored::DrawingHelpers
-    include ReaderRefactored::BookmarkHelpers
     include Constants::UIConstants
     include Helpers::ReaderHelpers
     include Concerns::InputHandler
