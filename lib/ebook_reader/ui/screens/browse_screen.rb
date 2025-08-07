@@ -20,6 +20,7 @@ module EbookReader
         end
 
         def draw(height, width)
+          @filtered_epubs ||= [] # Ensure not nil
           render_header(width)
           render_search_bar(@search_query, @search_cursor)
           render_status(@scanner.scan_status, @scanner.scan_message)

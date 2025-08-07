@@ -62,6 +62,9 @@ module EbookReader
       end
 
       def draw_footer_if_changed(height, width, state)
+        # Do not draw the footer when the popup menu is active to avoid clutter
+        return if state[:mode] == :popup_menu
+
         pages = calculate_current_pages
         hash = [pages[:current], pages[:total], width, state[:mode]].hash
         @render_cache.get_or_render(:footer, hash) do
@@ -81,18 +84,75 @@ module EbookReader
       end
 
       def draw_reading_content_differential(height, width, state)
-        old_offset = @last_rendered_state[:page_offset] || -1
+        return draw_reading_content(height, width) unless @config.page_numbering_mode == :absolute
+
+        old_offset = @last_rendered_state[:page_offset]
         new_offset = state[:page_offset]
-        if (old_offset - new_offset).abs == 1
+        
+        # We can only do differential updates for single-line scrolls
+        if old_offset && (new_offset - old_offset).abs == 1
           shift_and_draw_single_line(old_offset, new_offset, height, width)
         else
           draw_reading_content(height, width)
         end
       end
 
-      def shift_and_draw_single_line(_old_offset, _new_offset, height, width)
-        # Fallback to full redraw; differential line drawing can be added later
-        draw_reading_content(height, width)
+      def shift_and_draw_single_line(old_offset, new_offset, height, width)
+        direction = new_offset > old_offset ? :down : :up
+        
+        # Define the scrollable content area (excluding header and footer)
+        content_top = 2
+        content_height = height - 2
+        
+        Terminal.scroll_area(content_top, content_height, direction)
+
+        # Now, draw the new line that has scrolled into view
+        if @config.view_mode == :split
+          draw_new_line_in_split_view(direction, content_height, width)
+        else
+          draw_new_line_in_single_view(direction, content_height, width)
+        end
+      end
+
+      def draw_new_line_in_split_view(direction, content_height, width)
+        col_width, actual_height = get_layout_metrics(width, content_height)
+        chapter_lines = get_wrapped_chapter_lines(col_width)
+        
+        left_offset, right_offset = (direction == :down) ? [@left_page + actual_height - 1, @right_page + actual_height - 1] : [@left_page, @right_page]
+        
+        # Draw left page line
+        left_line = chapter_lines[left_offset]
+        draw_line_at(left_line, direction == :down ? content_height : 1, 1, col_width) if left_line
+
+        # Draw right page line
+        right_line = chapter_lines[right_offset]
+        draw_line_at(right_line, direction == :down ? content_height : 1, col_width + 3, col_width) if right_line
+      end
+
+      def draw_new_line_in_single_view(direction, content_height, width)
+        col_width, actual_height = get_layout_metrics(width, content_height)
+        chapter_lines = get_wrapped_chapter_lines(col_width)
+        
+        line_offset = (direction == :down) ? @single_page + actual_height - 1 : @single_page
+        line_to_draw = chapter_lines[line_offset]
+        
+        start_col = (width - col_width) / 2
+        draw_line_at(line_to_draw, direction == :down ? content_height : 1, start_col, col_width) if line_to_draw
+      end
+
+      def get_wrapped_chapter_lines(col_width)
+        # Simple caching mechanism for wrapped lines per chapter
+        @wrapped_lines_cache ||= {}
+        @wrapped_lines_cache[@current_chapter] ||= wrap_lines(@doc.get_chapter(@current_chapter).lines, col_width)
+      end
+
+      def draw_line_at(text, row, col, width)
+        # This is a simplified drawing method. In a real scenario, you'd
+        # use the existing `draw_line` or a similar helper.
+        Terminal.write(row, col, text.to_s.ljust(width)[0, width])
+        
+        # Also update the @rendered_lines cache for the new line
+        (@rendered_lines ||= {})[row] = { col: col, text: text.to_s }
       end
 
       def capture_render_state(width, height)

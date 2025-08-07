@@ -151,14 +151,21 @@ module EbookReader
     def prev_page_absolute
       return if @current_chapter.zero? && @single_page.zero? && @left_page.zero?
 
-      height, width = Terminal.size
-      _, content_height = get_layout_metrics(width, height)
-      content_height = adjust_for_line_spacing(content_height)
-
       if @config.view_mode == :split
-        handle_split_prev_page(content_height)
+        if @left_page > 0
+          @right_page = @left_page
+          @left_page = [@left_page - (Terminal.size[0] - 2), 0].max
+        elsif @current_chapter > 0
+          @current_chapter -= 1
+          position_at_chapter_end
+        end
       else
-        handle_single_prev_page(content_height)
+        if @single_page > 0
+          @single_page = [@single_page - (Terminal.size[0] - 2), 0].max
+        elsif @current_chapter > 0
+          @current_chapter -= 1
+          position_at_chapter_end
+        end
       end
     end
 
@@ -270,9 +277,39 @@ module EbookReader
         keys = read_input_keys
         next if keys.empty?
 
-        old_state = capture_state
-        keys.each { |k| @input_handler.process_input(k) }
-        draw_screen if state_changed?(old_state)
+        # If the popup menu is active, it gets exclusive access to input
+        if @mode == :popup_menu
+          handle_popup_menu_input(keys)
+        else
+          # Otherwise, process input normally
+          old_state = capture_state
+          keys.each { |k| @input_handler.process_input(k) }
+          draw_screen if state_changed?(old_state)
+        end
+      end
+    end
+
+    def handle_popup_menu_input(keys)
+      return unless @popup_menu
+
+      keys.each do |key|
+        result = @popup_menu.handle_key(key)
+        case result&.fetch(:type)
+        when :selection_change
+          # Redraw only the popup for responsiveness
+          @popup_menu.render
+          Terminal.end_frame
+        when :confirm
+          handle_popup_action(result[:item])
+          draw_screen # Full redraw after action
+        when :cancel
+          # Close the popup and return to reading mode
+          @popup_menu = nil
+          @mouse_handler.reset
+          @selection_range = nil
+          switch_mode(:read)
+          draw_screen
+        end
       end
     end
 
@@ -354,16 +391,26 @@ module EbookReader
     def update_page_map(width, height)
       return if @doc.nil?
 
+      # Generate a cache key based on all factors that affect page layout
+      cache_key = "#{width}x#{height}-#{@config.view_mode}-#{@config.line_spacing}"
+
+      # Use a cached map if it exists for the current configuration
+      if @page_map_cache && @page_map_cache[:key] == cache_key
+        @page_map = @page_map_cache[:map]
+        @total_pages = @page_map_cache[:total]
+        return
+      end
+
       col_width, content_height = get_layout_metrics(width, height)
       actual_height = adjust_for_line_spacing(content_height)
       return if actual_height <= 0
 
-      calculate_page_map(col_width, actual_height)
+      calculate_page_map(col_width, actual_height, cache_key)
       @last_width = width
       @last_height = height
     end
 
-    def calculate_page_map(col_width, actual_height)
+    def calculate_page_map(col_width, actual_height, cache_key)
       @page_map = Array.new(@doc.chapter_count) do |idx|
         chapter = @doc.get_chapter(idx)
         lines = chapter&.lines || []
@@ -371,6 +418,9 @@ module EbookReader
         (wrapped.size.to_f / actual_height).ceil
       end
       @total_pages = @page_map.sum
+
+      # Store the newly calculated map and its key in the cache
+      @page_map_cache = { key: cache_key, map: @page_map, total: @total_pages }
     end
 
     def get_layout_metrics(width, height)
@@ -384,7 +434,11 @@ module EbookReader
     end
 
     def load_progress
-      @state_service.load_progress
+      progress = @state_service.load_progress
+      return unless progress
+
+      @current_chapter = progress.fetch('chapter', 0)
+      @single_page = progress.fetch('line_offset', 0)
     end
 
     def page_offsets=(offset)

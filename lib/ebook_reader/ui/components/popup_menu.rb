@@ -46,6 +46,22 @@ module EbookReader
           get_selected_item
         end
 
+        def handle_key(key)
+          case
+          when Terminal::Keys::UP.include?(key)
+            move_selection(-1)
+            return { type: :selection_change }
+          when Terminal::Keys::DOWN.include?(key)
+            move_selection(1)
+            return { type: :selection_change }
+          when Terminal::Keys::ENTER.include?(key)
+            return { type: :confirm, item: get_selected_item }
+          when Terminal::Keys::ESCAPE.include?(key)
+            return { type: :cancel }
+          end
+          nil
+        end
+
         def contains?(x, y)
           x >= @x && x < (@x + @width) && 
           y >= @y && y < (@y + @height)
@@ -58,9 +74,9 @@ module EbookReader
         end
 
         def draw_shadow
-          # Draw subtle shadow
+          # A more subtle, modern shadow
           (0...@height).each do |i|
-            Terminal.write(@y + i + 1, @x + 1, ' ' * @width)
+            Terminal.write(@y + i + 1, @x + 1, "#{Terminal::ANSI::BG_GREY} #{Terminal::ANSI::RESET}" * @width)
           end
         end
 
@@ -73,14 +89,19 @@ module EbookReader
         def draw_menu_item(item, index)
           item_y = @y + index
           is_selected = (index == @selected_index)
-          
-          bg = is_selected ? Terminal::ANSI::GREEN : Terminal::ANSI::BG_DARK
-          fg = is_selected ? Terminal::ANSI::BLACK : Terminal::ANSI::WHITE
-          
-          line_text = " #{item} ".ljust(@width)
-          
-          Terminal.write(item_y, @x, 
-            "#{bg}#{fg}#{line_text}#{Terminal::ANSI::RESET}")
+
+          # Modern, flat design with better contrast
+          bg = is_selected ? Terminal::ANSI::BLUE : Terminal::ANSI::BG_BLACK
+          fg = is_selected ? Terminal::ANSI::WHITE : Terminal::ANSI::LIGHT_GREY
+
+          # Clear the line with the background color first
+          Terminal.write(item_y, @x, "#{bg}#{' ' * @width}#{Terminal::ANSI::RESET}")
+
+          # Render the text with an icon
+          icon = is_selected ? '❯' : ' '
+          line_text = " #{icon} #{item} ".ljust(@width)
+
+          Terminal.write(item_y, @x, "#{bg}#{fg}#{line_text}#{Terminal::ANSI::RESET}")
         end
       end
     end

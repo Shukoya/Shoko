@@ -43,14 +43,14 @@ RSpec.describe 'Text selection highlighting', fake_fs: true do
     @reader.handle_mouse_input("\e[<0;11;13M")
     expect(EbookReader::Terminal).to have_received(:write).with(
       anything, anything,
-      a_string_including(EbookReader::Terminal::ANSI::BG_BRIGHT_GREEN)
+      a_string_including(EbookReader::Terminal::ANSI::BG_BLUE)
     )
 
     # Drag selection further and ensure highlight updates
     @reader.handle_mouse_input("\e[<32;15;13M")
     expect(EbookReader::Terminal).to have_received(:write).with(
       anything, anything,
-      a_string_including(EbookReader::Terminal::ANSI::BG_BRIGHT_GREEN)
+      a_string_including(EbookReader::Terminal::ANSI::BG_BLUE)
     ).at_least(:twice)
 
     # Release to display popup menu

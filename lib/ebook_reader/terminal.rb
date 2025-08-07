@@ -28,6 +28,7 @@ module EbookReader
       CYAN = "\e[36m"
       WHITE = "\e[37m"
       GRAY = "\e[90m"
+      LIGHT_GREY = "\e[37;1m"
 
       # Bright colors
       BRIGHT_RED = "\e[91m"
@@ -40,8 +41,13 @@ module EbookReader
 
       # Background colors
       BG_DARK = "\e[48;5;236m"
+      BG_BLACK = "\e[40m"
+      BG_BLUE = "\e[44m"
+      BG_CYAN = "\e[46m"
+      BG_GREY = "\e[48;5;240m"
       BG_BRIGHT_GREEN = "\e[102m"
       BG_BRIGHT_YELLOW = "\e[103m"
+      BG_BRIGHT_WHITE = "\e[107m"
 
       # Control sequences
       module Control
@@ -64,6 +70,15 @@ module EbookReader
       def self.clear_below
         "\e[J"
       end
+    end
+
+    # Defines constants for special keyboard keys to abstract away different
+    # terminal escape codes.
+    module Keys
+      UP = ["\e[A", "\eOA", 'k'].freeze
+      DOWN = ["\e[B", "\eOB", 'j'].freeze
+      ENTER = ["\r", "\n"].freeze
+      ESCAPE = ["\e", "\x1B", 'q'].freeze
     end
 
     @buffer = []
