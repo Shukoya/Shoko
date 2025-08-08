@@ -54,8 +54,8 @@ module EbookReader
       if @config.page_numbering_mode == :dynamic && @page_manager
         if size_changed?(width, height)
           @page_manager.build_page_map(width, height)
-          @current_page_index = [@current_page_index, @page_manager.total_pages - 1].min
-          @current_page_index = [0, @current_page_index].max
+          @state.current_page_index = [@state.current_page_index, @page_manager.total_pages - 1].min
+          @state.current_page_index = [0, @state.current_page_index].max
         end
       elsif size_changed?(width, height)
         update_page_map(width, height)
@@ -63,8 +63,8 @@ module EbookReader
     end
 
     def size_changed?(width, height)
-      changed = width != @last_width || height != @last_height
-      @chapter_cache&.clear_cache_for_width(@last_width) if changed && defined?(@chapter_cache)
+      changed = @state.terminal_size_changed?(width, height)
+      @chapter_cache&.clear_cache_for_width(@state.last_width) if changed && defined?(@chapter_cache)
       changed
     end
 
@@ -82,7 +82,7 @@ module EbookReader
       return { current: 0, total: 0 } unless @page_manager
 
       {
-        current: @current_page_index + 1,
+        current: @state.current_page_index + 1,
         total: @page_manager.total_pages,
       }
     end
@@ -100,17 +100,17 @@ module EbookReader
     def invalid_page_calculation?(actual_height, width, height)
       return true if actual_height <= 0
 
-      update_page_map(width, height) if size_changed?(width, height) || @page_map.empty?
-      !@total_pages.positive?
+      update_page_map(width, height) if size_changed?(width, height) || @state.page_map.empty?
+      !@state.total_pages.positive?
     end
 
     def calculate_global_page_position(actual_height)
-      pages_before = @page_map[0...@current_chapter].sum
-      line_offset = @config.view_mode == :split ? @left_page : @single_page
+      pages_before = @state.page_map[0...@state.current_chapter].sum
+      line_offset = @config.view_mode == :split ? @state.left_page : @state.single_page
       page_in_chapter = (line_offset.to_f / actual_height).floor + 1
       current_global_page = pages_before + page_in_chapter
 
-      { current: current_global_page, total: @total_pages }
+      { current: current_global_page, total: @state.total_pages }
     end
 
     DrawingParams = Struct.new(:line, :position, :width, keyword_init: true)

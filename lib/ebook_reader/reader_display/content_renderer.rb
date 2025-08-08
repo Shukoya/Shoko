@@ -22,7 +22,8 @@ module EbookReader
 
       def draw_toc_screen(height, width)
         (@renderer || UI::ReaderRenderer.new(@config)).tap do |renderer|
-          renderer.send(:render_toc_screen, height, width, @doc, @toc_selected)
+          selected = @state&.toc_selected || 0
+          renderer.send(:render_toc_screen, height, width, @doc, selected)
         end
       end
 
@@ -31,7 +32,8 @@ module EbookReader
       def draw_toc_list(_height, _width); end
 
       def calculate_toc_visible_range(list_height, chapter_count)
-        visible_start = [@toc_selected - (list_height / 2), 0].max
+        selected = @state&.toc_selected || 0
+        visible_start = [selected - (list_height / 2), 0].max
         visible_end = [visible_start + list_height, chapter_count].min
         visible_start...visible_end
       end

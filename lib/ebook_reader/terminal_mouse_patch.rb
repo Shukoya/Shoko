@@ -1,39 +1,8 @@
 # frozen_string_literal: true
 
-module EbookReader
-  # Extensions to Terminal for mouse support
-  class Terminal
-    class << self
-      # Enable mouse tracking
-      def enable_mouse
-        print "\e[?1003h\e[?1006h" # Enable mouse tracking with SGR encoding
-        $stdout.flush
-      end
+# frozen_string_literal: true
 
-      # Disable mouse tracking
-      def disable_mouse
-        print "\e[?1003l\e[?1006l" # Disable mouse tracking
-        $stdout.flush
-      end
+# Mouse helpers are now implemented in TerminalInput and exposed via
+# EbookReader::Terminal facade. This file remains to satisfy existing requires.
 
-      # Read mouse or keyboard input
-      def read_input_with_mouse
-        input = read_key_blocking
-        return nil unless input
-
-        # Check if it's a mouse event
-        if input.start_with?("\e[<")
-          # Continue reading the rest of the mouse sequence
-          while input[-1] != 'm' && input[-1] != 'M'
-            extra = read_key
-            break unless extra
-
-            input += extra
-          end
-        end
-
-        input
-      end
-    end
-  end
-end
+module EbookReader; end

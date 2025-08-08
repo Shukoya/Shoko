@@ -47,6 +47,11 @@ module EbookReader
       # Last known terminal dimensions
       attr_accessor :last_width, :last_height
 
+      # Dynamic pagination caches/state
+      attr_accessor :dynamic_page_map, :dynamic_total_pages,
+                    :dynamic_chapter_starts, :last_dynamic_width,
+                    :last_dynamic_height
+
       # Initialize a new reader state
       def initialize
         reset_to_defaults
@@ -83,6 +88,11 @@ module EbookReader
         @total_pages = 0
         @last_width = 0
         @last_height = 0
+        @dynamic_page_map = nil
+        @dynamic_total_pages = 0
+        @dynamic_chapter_starts = []
+        @last_dynamic_width = 0
+        @last_dynamic_height = 0
       end
 
       # Get current page offset based on view mode

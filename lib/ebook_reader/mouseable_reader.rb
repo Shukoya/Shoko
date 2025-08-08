@@ -30,7 +30,7 @@ module EbookReader
 
     def draw_screen
       @rendered_lines.clear
-      super
+      ReaderController::DisplayHandler.instance_method(:draw_screen).bind(self).call
 
       highlight_saved_annotations
       highlight_selection if @mouse_handler.selecting || @selection_range
@@ -136,7 +136,7 @@ module EbookReader
         switch_mode(:annotation_editor,
                     text: @selected_text,
                     range: @selection_range,
-                    chapter_index: @current_chapter)
+                    chapter_index: @state.current_chapter)
       when 'Copy to Clipboard'
         copy_to_clipboard(@selected_text)
         set_message('Copied to clipboard!')
@@ -156,7 +156,7 @@ module EbookReader
     def highlight_saved_annotations
       return unless @annotations
 
-      @annotations.select { |a| a['chapter_index'] == @current_chapter }
+      @annotations.select { |a| a['chapter_index'] == @state.current_chapter }
                   .each do |ann|
         highlight_range(ann['range'], Terminal::ANSI::BG_CYAN)
       end

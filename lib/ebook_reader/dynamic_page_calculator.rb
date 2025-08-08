@@ -18,14 +18,14 @@ module EbookReader
       return { current: 0, total: 0 } if actual_height <= 0
 
       # Build page map for entire book if terminal size changed
-      if size_changed?(width, height) || @dynamic_page_map.nil?
+      if size_changed?(width, height) || @state.dynamic_page_map.nil?
         build_dynamic_page_map(col_width, actual_height)
       end
 
       # Calculate current position in entire book
       current_global_page = calculate_global_page_position(actual_height)
 
-      { current: current_global_page, total: @dynamic_total_pages }
+      { current: current_global_page, total: @state.dynamic_total_pages }
     end
 
     private
@@ -39,8 +39,8 @@ module EbookReader
     end
 
     def initialize_page_map
-      @dynamic_page_map = []
-      @dynamic_chapter_starts = []
+      @state.dynamic_page_map = []
+      @state.dynamic_chapter_starts = []
     end
 
     def process_all_chapters(layout_config)
@@ -49,7 +49,7 @@ module EbookReader
         chapter = @doc.get_chapter(idx)
         next unless chapter
 
-        @dynamic_chapter_starts << total_lines
+        @state.dynamic_chapter_starts << total_lines
         context = ChapterContext.new(chapter, idx, total_lines)
         total_lines += process_single_chapter(context, layout_config)
       end
@@ -61,7 +61,7 @@ module EbookReader
       chapter_lines = wrapped.size
       chapter_pages = (chapter_lines.to_f / layout_config.lines_per_page).ceil
 
-      @dynamic_page_map << {
+      @state.dynamic_page_map << {
         chapter_index: context.index,
         lines: chapter_lines,
         pages: chapter_pages,
@@ -72,27 +72,27 @@ module EbookReader
     end
 
     def finalize_page_calculations(total_lines, lines_per_page)
-      @dynamic_total_pages = (total_lines.to_f / lines_per_page).ceil
-      @dynamic_total_pages = 1 if @dynamic_total_pages < 1
+      @state.dynamic_total_pages = (total_lines.to_f / lines_per_page).ceil
+      @state.dynamic_total_pages = 1 if @state.dynamic_total_pages < 1
 
       Infrastructure::Logger.debug('Dynamic page map built',
-                                   total_pages: @dynamic_total_pages,
+                                   total_pages: @state.dynamic_total_pages,
                                    total_lines: total_lines,
                                    lines_per_page: lines_per_page)
     end
 
     def cache_terminal_dimensions
-      @last_dynamic_width, @last_dynamic_height = Terminal.size
+      @state.last_dynamic_width, @state.last_dynamic_height = Terminal.size
     end
 
     def calculate_global_page_position(lines_per_page)
-      return 1 if @dynamic_page_map.nil? || @dynamic_page_map.empty?
+      return 1 if @state.dynamic_page_map.nil? || @state.dynamic_page_map.empty?
 
       # Get current line offset within chapter
-      current_line_offset = @config.view_mode == :split ? @left_page : @single_page
+      current_line_offset = @config.view_mode == :split ? @state.left_page : @state.single_page
 
       # Calculate total lines before current chapter
-      lines_before = @dynamic_chapter_starts[@current_chapter] || 0
+      lines_before = @state.dynamic_chapter_starts[@state.current_chapter] || 0
 
       # Total lines up to current position
       total_lines_read = lines_before + current_line_offset
@@ -101,13 +101,13 @@ module EbookReader
       current_page = (total_lines_read.to_f / lines_per_page).floor + 1
 
       # Ensure within bounds
-      [current_page, @dynamic_total_pages].min
+      [current_page, @state.dynamic_total_pages].min
     end
 
     def size_changed?(width, height)
-      changed = width != @last_dynamic_width || height != @last_dynamic_height
+      changed = width != @state.last_dynamic_width || height != @state.last_dynamic_height
       if changed && defined?(@chapter_cache)
-        @chapter_cache&.clear_cache_for_width(@last_dynamic_width)
+        @chapter_cache&.clear_cache_for_width(@state.last_dynamic_width)
       end
       changed
     end

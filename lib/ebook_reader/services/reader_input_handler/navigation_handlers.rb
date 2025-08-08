@@ -57,15 +57,15 @@ module EbookReader
         end
 
         def go_to_start_dynamic
-          @reader.instance_variable_set(:@current_page_index, 0)
+          @reader.current_page_index = 0
           @reader.send(:update_chapter_from_page_index)
         end
 
         def go_to_end_dynamic
-          pm = @reader.instance_variable_get(:@page_manager)
+          pm = @reader.page_manager
           return unless pm
 
-          @reader.instance_variable_set(:@current_page_index, pm.total_pages - 1)
+          @reader.current_page_index = pm.total_pages - 1
           @reader.send(:update_chapter_from_page_index)
         end
       end

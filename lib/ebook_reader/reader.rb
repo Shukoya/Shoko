@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 require_relative 'reader_controller'
-require_relative 'reader_view' # Ensure view class is loaded
+require_relative 'mouseable_reader'
 
 module EbookReader
-  # Backwards compatibility alias for the former Reader class.
-  Reader = ReaderController
+  # Single, authoritative Reader entrypoint for the application.
+  # We expose the mouse-enabled reader implementation as the default.
+  Reader = MouseableReader
 end

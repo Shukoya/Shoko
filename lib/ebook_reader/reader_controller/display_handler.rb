@@ -19,7 +19,7 @@ module EbookReader
         draw_header_if_changed(height, width, current_state)
         draw_content_if_changed(height, width, current_state)
         draw_footer_if_changed(height, width, current_state)
-        draw_message(height, width) if @message
+        draw_message(height, width) if @state.message
 
         Terminal.end_frame if full_redraw_needed?(size_changed)
 
@@ -30,23 +30,23 @@ module EbookReader
 
       def draw_header(_height, width)
         header_context = UI::ReaderRenderer::HeaderContext.new(
-          @doc, width, @config.view_mode, @mode
+          @doc, width, @config.view_mode, @state.mode
         )
         @renderer.render_header(header_context)
       end
 
       def draw_content(height, width)
-        case @mode
+        case @state.mode
         when :help
-          draw_help_screen(height, width)
+          @renderer.render_help_lines(height, width, EbookReader::ReaderDisplay::HELP_LINES)
         when :toc
-          draw_toc_screen(height, width)
+          @renderer.render_toc_screen(height, width, @doc, (@state.toc_selected || 0))
         when :bookmarks
           draw_bookmarks(height, width)
         when :annotations, :annotation_editor
           @current_mode&.draw(height, width)
         else
-          draw_reading_content(height, width)
+          render_reading_via_renderer(height, width)
         end
       end
 
@@ -74,7 +74,7 @@ module EbookReader
           width: width,
           doc: @doc,
           bookmarks: @bookmarks || [],
-          selected: (@bookmark_selected || 0)
+          selected: (@state.bookmark_selected || 0)
         )
         @renderer.render_bookmarks_screen(context)
       end
@@ -91,7 +91,7 @@ module EbookReader
       end
 
       def draw_reading_content_differential(height, width, state)
-        return draw_reading_content(height, width) unless @config.page_numbering_mode == :absolute
+        return render_reading_via_renderer(height, width) unless @config.page_numbering_mode == :absolute
 
         old_offset = @last_rendered_state[:page_offset]
         new_offset = state[:page_offset]
@@ -100,7 +100,7 @@ module EbookReader
         if old_offset && (new_offset - old_offset).abs == 1
           shift_and_draw_single_line(old_offset, new_offset, height, width)
         else
-          draw_reading_content(height, width)
+          render_reading_via_renderer(height, width)
         end
       end
 
@@ -126,11 +126,11 @@ module EbookReader
         chapter_lines = get_wrapped_chapter_lines(col_width)
 
         left_offset, right_offset = if direction == :down
-                                      [@left_page + actual_height - 1,
-                                       @right_page + actual_height - 1]
+                                      [@state.left_page + actual_height - 1,
+                                       @state.right_page + actual_height - 1]
                                     else
                                       [
-                                        @left_page, @right_page
+                                        @state.left_page, @state.right_page
                                       ]
                                     end
 
@@ -150,7 +150,7 @@ module EbookReader
         col_width, actual_height = get_layout_metrics(width, content_height)
         chapter_lines = get_wrapped_chapter_lines(col_width)
 
-        line_offset = direction == :down ? @single_page + actual_height - 1 : @single_page
+        line_offset = direction == :down ? @state.single_page + actual_height - 1 : @state.single_page
         line_to_draw = chapter_lines[line_offset]
 
         start_col = (width - col_width) / 2
@@ -163,8 +163,8 @@ module EbookReader
       def get_wrapped_chapter_lines(col_width)
         # Simple caching mechanism for wrapped lines per chapter
         @wrapped_lines_cache ||= {}
-        @wrapped_lines_cache[@current_chapter] ||= wrap_lines(
-          @doc.get_chapter(@current_chapter).lines, col_width
+        @wrapped_lines_cache[@state.current_chapter] ||= wrap_lines(
+          @doc.get_chapter(@state.current_chapter).lines, col_width
         )
       end
 
@@ -181,10 +181,29 @@ module EbookReader
         {
           width: width,
           height: height,
-          page_offset: @config.view_mode == :split ? @left_page : @single_page,
-          chapter: @current_chapter,
-          mode: @mode,
+          page_offset: @config.view_mode == :split ? @state.left_page : @state.single_page,
+          chapter: @state.current_chapter,
+          mode: @state.mode,
         }
+      end
+
+      def render_reading_via_renderer(height, width)
+        ctx = UI::ReaderRenderer::RenderContext.new(
+          height: height,
+          width: width,
+          doc: @doc,
+          current_chapter: @state.current_chapter,
+          view_mode: @config.view_mode,
+          line_spacing: @config.line_spacing,
+          page_numbering_mode: @config.page_numbering_mode,
+          page_manager: @page_manager,
+          current_page_index: @state.current_page_index,
+          left_page: @state.left_page,
+          right_page: @state.right_page,
+          single_page: @state.single_page,
+          wrap_lines_proc: method(:wrap_lines)
+        )
+        @renderer.render_reading_content(ctx)
       end
 
       def generate_content_hash(state)
@@ -202,11 +221,11 @@ module EbookReader
       end
 
       def draw_message(height, width)
-        msg_len = @message.length
+        msg_len = @state.message.length
         Terminal.write(
           height / 2,
           (width - msg_len) / 2,
-          "#{Terminal::ANSI::BG_DARK}#{Terminal::ANSI::BRIGHT_YELLOW} #{@message} " \
+          "#{Terminal::ANSI::BG_DARK}#{Terminal::ANSI::BRIGHT_YELLOW} #{@state.message} " \
           "#{Terminal::ANSI::RESET}"
         )
       end
@@ -219,8 +238,8 @@ module EbookReader
       def footer_context_params(height, width, pages)
         {
           height: height, width: width, doc: @doc,
-          chapter: @current_chapter, pages: pages,
-          view_mode: @config.view_mode, mode: @mode,
+          chapter: @state.current_chapter, pages: pages,
+          view_mode: @config.view_mode, mode: @state.mode,
           line_spacing: @config.line_spacing, bookmarks: @bookmarks
         }
       end

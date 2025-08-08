@@ -27,13 +27,8 @@ module EbookReader
       private
 
       def current_mode
-        if @reader.instance_variable_defined?(:@mode) &&
-           (m = @reader.instance_variable_get(:@mode))
-          m
-        else
-          state = @reader.instance_variable_get(:@state)
-          state ? state.mode : :read
-        end
+        state = @reader.instance_variable_get(:@state)
+        state ? state.mode : :read
       end
 
       def handlers_for_mode(mode)
@@ -196,16 +191,17 @@ module EbookReader
       end
 
       def handle_toc_navigation(key)
+        state = @reader.instance_variable_get(:@state)
         selected = handle_navigation_keys(
           key,
-          @reader.instance_variable_get(:@toc_selected),
+          state.toc_selected,
           @reader.doc.chapter_count - 1
         )
-        @reader.instance_variable_set(:@toc_selected, selected)
+        state.toc_selected = selected
       end
 
       def handle_toc_selection
-        chapter_index = @reader.instance_variable_get(:@toc_selected)
+        chapter_index = @reader.instance_variable_get(:@state).toc_selected
         @reader.send(:jump_to_chapter, chapter_index)
       end
 
@@ -233,12 +229,13 @@ module EbookReader
       end
 
       def handle_bookmark_navigation_key(bookmarks, key)
+        state = @reader.instance_variable_get(:@state)
         selected = handle_navigation_keys(
           key,
-          @reader.instance_variable_get(:@bookmark_selected),
+          state.bookmark_selected,
           bookmarks.length - 1
         )
-        @reader.instance_variable_set(:@bookmark_selected, selected)
+        state.bookmark_selected = selected
       end
 
       def handle_populated_bookmarks_input(key, bookmarks)

@@ -105,6 +105,165 @@ module EbookReader
                        WHITE + "[#{doc.language}]" + RESET)
       end
 
+      # ===== Reading Content Rendering =====
+      public
+      RenderContext = Struct.new(
+        :height, :width, :doc, :current_chapter,
+        :view_mode, :line_spacing, :page_numbering_mode,
+        :page_manager, :current_page_index,
+        :left_page, :right_page, :single_page,
+        :wrap_lines_proc,
+        keyword_init: true
+      )
+
+      def render_reading_content(ctx)
+        if ctx.view_mode == :split
+          render_split_screen(ctx)
+        else
+          if ctx.page_numbering_mode == :dynamic
+            render_single_dynamic(ctx)
+          else
+            render_single_absolute(ctx)
+          end
+        end
+      end
+
+      private
+
+      def render_split_screen(ctx)
+        chapter = ctx.doc.get_chapter(ctx.current_chapter)
+        return unless chapter
+
+        col_width, content_height = layout_metrics(ctx.width, ctx.height, ctx.view_mode)
+        display_height = adjust_for_line_spacing(content_height, ctx.line_spacing)
+        wrapped = wrap_lines(chapter.lines || [], col_width, ctx)
+
+        draw_chapter_info(ctx, chapter, ctx.width)
+
+        # Left column
+        draw_column(
+          lines: wrapped,
+          offset: ctx.left_page || 0,
+          col_width: col_width,
+          height: display_height,
+          row: 3,
+          col: 1,
+          show_page_num: true,
+          line_spacing: ctx.line_spacing
+        )
+
+        # Divider
+        draw_divider(ctx.height, col_width)
+
+        # Right column
+        draw_column(
+          lines: wrapped,
+          offset: ctx.right_page || 0,
+          col_width: col_width,
+          height: display_height,
+          row: 3,
+          col: col_width + 5,
+          show_page_num: false,
+          line_spacing: ctx.line_spacing
+        )
+      end
+
+      def render_single_dynamic(ctx)
+        return unless ctx.page_manager
+
+        page_data = ctx.page_manager.get_page(ctx.current_page_index)
+        return unless page_data
+
+        col_width, content_height = layout_metrics(ctx.width, ctx.height, ctx.view_mode)
+        col_start = [(ctx.width - col_width) / 2, 1].max
+        start_row = calculate_center_start_row(content_height, page_data[:lines].size, ctx.line_spacing)
+
+        page_data[:lines].each_with_index do |line, idx|
+          row = start_row + (ctx.line_spacing == :relaxed ? idx * 2 : idx)
+          break if row >= ctx.height - 2
+          draw_line(line: line, row: row, col: col_start, width: col_width)
+        end
+      end
+
+      def render_single_absolute(ctx)
+        chapter = ctx.doc.get_chapter(ctx.current_chapter)
+        return unless chapter
+
+        col_width, content_height = layout_metrics(ctx.width, ctx.height, ctx.view_mode)
+        col_start = [(ctx.width - col_width) / 2, 1].max
+        displayable = adjust_for_line_spacing(content_height, ctx.line_spacing)
+        wrapped = wrap_lines(chapter.lines || [], col_width, ctx)
+        lines = wrapped.slice(ctx.single_page || 0, displayable) || []
+
+        actual_lines = ctx.line_spacing == :relaxed ? [(lines.size * 2) - 1, 0].max : lines.size
+        padding = (content_height - actual_lines)
+        start_row = [3 + (padding / 2), 3].max
+
+        lines.each_with_index do |line, idx|
+          row = start_row + (ctx.line_spacing == :relaxed ? idx * 2 : idx)
+          break if row >= (3 + displayable)
+          draw_line(line: line, row: row, col: col_start, width: col_width)
+        end
+      end
+
+      def layout_metrics(width, height, view_mode)
+        col_width = if view_mode == :split
+                      [(width - 3) / 2, 20].max
+                    else
+                      (width * 0.9).to_i.clamp(30, 120)
+                    end
+        content_height = [height - 2, 1].max
+        [col_width, content_height]
+      end
+
+      def adjust_for_line_spacing(height, line_spacing)
+        return 1 if height <= 0
+        line_spacing == :relaxed ? [height / 2, 1].max : height
+      end
+
+      def wrap_lines(lines, width, ctx)
+        proc = ctx.wrap_lines_proc
+        return [] unless proc
+        proc.call(lines, width)
+      end
+
+      def draw_divider(height, col_width)
+        (3...[height - 1, 4].max).each do |row|
+          Terminal.write(row, col_width + 3, "#{Terminal::ANSI::GRAY}│#{Terminal::ANSI::RESET}")
+        end
+      end
+
+      def calculate_center_start_row(content_height, lines_count, line_spacing)
+        actual_lines = line_spacing == :relaxed ? [(lines_count * 2) - 1, 0].max : lines_count
+        padding = [(content_height - actual_lines) / 2, 0].max
+        [3 + padding, 3].max
+      end
+
+      def draw_line(line:, row:, col:, width:)
+        text = line.to_s[0, width]
+        text = highlight_keywords(text)
+        text = highlight_quotes(text)
+        Terminal.write(row, col, Terminal::ANSI::WHITE + text + Terminal::ANSI::RESET)
+      end
+
+      def highlight_keywords(line)
+        line.gsub(Constants::HIGHLIGHT_PATTERNS) do |match|
+          Terminal::ANSI::CYAN + match + Terminal::ANSI::WHITE
+        end
+      end
+
+      def highlight_quotes(line)
+        line.gsub(Constants::QUOTE_PATTERNS) do |match|
+          Terminal::ANSI::ITALIC + match + Terminal::ANSI::RESET + Terminal::ANSI::WHITE
+        end
+      end
+
+      def draw_chapter_info(ctx, chapter, width)
+        chapter_info = "[#{ctx.current_chapter + 1}] #{chapter.title || 'Unknown'}"
+        Terminal.write(2, 1, Terminal::ANSI::BLUE + chapter_info[0, width - 2] + Terminal::ANSI::RESET)
+      end
+
+      public
       # ===== Help / ToC Screens =====
 
       def render_help_lines(height, width, lines)

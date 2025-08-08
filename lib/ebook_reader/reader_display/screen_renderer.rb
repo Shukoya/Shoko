@@ -23,7 +23,7 @@ module EbookReader
       end
 
       def draw_split_screen(height, width)
-        chapter = @doc.get_chapter(@current_chapter)
+        chapter = @doc.get_chapter(@state.current_chapter)
         return unless chapter
 
         col_width, content_height = get_layout_metrics(width, height)
@@ -33,13 +33,13 @@ module EbookReader
         draw_chapter_info(chapter, width)
         context = SplitColumnDrawingContext.new(
           wrapped, col_width, content_height, height,
-          @left_page, @right_page
+          @state.left_page, @state.right_page
         )
         draw_split_columns(context)
       end
 
       def draw_chapter_info(chapter, width)
-        chapter_info = "[#{@current_chapter + 1}] #{chapter.title || 'Unknown'}"
+        chapter_info = "[#{@state.current_chapter + 1}] #{chapter.title || 'Unknown'}"
         Terminal.write(2, 1, Terminal::ANSI::BLUE + chapter_info[0, width - 2] + Terminal::ANSI::RESET)
       end
 
@@ -107,7 +107,7 @@ module EbookReader
       def draw_single_screen_dynamic(height, width)
         return unless @page_manager
 
-        page_data = @page_manager.get_page(@current_page_index)
+        page_data = @page_manager.get_page(@state.current_page_index)
         return unless page_data
 
         setup = calculate_dynamic_screen_setup(width, height, page_data)
@@ -163,7 +163,7 @@ module EbookReader
       end
 
       def draw_single_screen_absolute(height, width)
-        chapter = @doc.get_chapter(@current_chapter)
+        chapter = @doc.get_chapter(@state.current_chapter)
         return unless chapter
 
         setup = prepare_absolute_screen_setup(chapter, width, height)
@@ -194,7 +194,7 @@ module EbookReader
       end
 
       def extract_lines_in_page(wrapped, displayable_lines)
-        wrapped.slice(@single_page, displayable_lines) || []
+        wrapped.slice(@state.single_page, displayable_lines) || []
       end
 
       def draw_absolute_content(setup)
@@ -208,7 +208,7 @@ module EbookReader
       def build_single_screen_params(setup, start_row)
         Models::PageRenderingContext.new(
           lines: setup[:wrapped],
-          offset: @single_page,
+          offset: @state.single_page,
           dimensions: Models::Dimensions.new(width: setup[:col_width],
                                              height: setup[:displayable_lines]),
           position: Models::Position.new(row: start_row, col: setup[:col_start]),
