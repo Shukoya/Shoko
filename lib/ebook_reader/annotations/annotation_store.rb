@@ -50,7 +50,13 @@ module EbookReader
           annotations = load_all
           book_annotations = annotations[epub_path] || []
           book_annotations.reject! { |a| a['id'] == id }
-          annotations[epub_path] = book_annotations
+
+          if book_annotations.empty?
+            annotations.delete(epub_path)
+          else
+            annotations[epub_path] = book_annotations
+          end
+
           save_all(annotations)
         end
 

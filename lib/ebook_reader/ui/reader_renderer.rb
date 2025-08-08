@@ -104,6 +104,106 @@ module EbookReader
         Terminal.write(height, [width - 10, 50].max,
                        WHITE + "[#{doc.language}]" + RESET)
       end
+
+      # ===== Help / ToC Screens =====
+
+      def render_help_lines(height, width, lines)
+        start_row = [(height - lines.size) / 2, 1].max
+        lines.each_with_index do |line, idx|
+          row = start_row + idx
+          break if row >= height - 2
+          col = [(width - line.length) / 2, 1].max
+          Terminal.write(row, col, WHITE + line + RESET)
+        end
+      end
+
+      def render_toc_screen(height, width, doc, selected_index)
+        Terminal.write(1, 2, "#{BRIGHT_CYAN}📖 Table of Contents#{RESET}")
+        Terminal.write(1, [width - 30, 40].max, "#{DIM}[t/ESC] Back to Reading#{RESET}")
+
+        list_start = 4
+        list_height = height - 6
+        chapters = doc.chapters
+        return if chapters.empty?
+
+        visible_start = [selected_index - (list_height / 2), 0].max
+        visible_end = [visible_start + list_height, chapters.length].min
+        (visible_start...visible_end).each_with_index do |idx, row|
+          chapter = chapters[idx]
+          line = (chapter.title || 'Untitled')[0, width - 6]
+          y = list_start + row
+          if idx == selected_index
+            Terminal.write(y, 2, BRIGHT_GREEN + '▸ ' + RESET)
+            Terminal.write(y, 4, BRIGHT_WHITE + line + RESET)
+          else
+            Terminal.write(y, 4, WHITE + line + RESET)
+          end
+        end
+
+        Terminal.write(height - 1, 2, DIM + "↑↓ Navigate • Enter Jump • t/ESC Back" + RESET)
+      end
+
+      # ===== Bookmarks Screen Rendering =====
+      BookmarksContext = Struct.new(
+        :height, :width, :doc, :bookmarks, :selected,
+        keyword_init: true
+      )
+
+      def render_bookmarks_screen(context)
+        render_bookmarks_header(context.width)
+        if context.bookmarks.empty?
+          render_empty_bookmarks(context.height, context.width)
+        else
+          render_bookmarks_list(context)
+        end
+        render_bookmarks_footer(context.height)
+      end
+
+      def render_bookmarks_header(width)
+        Terminal.write(1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}🔖 Bookmarks#{Terminal::ANSI::RESET}")
+        Terminal.write(1, [width - 40, 40].max,
+                       "#{Terminal::ANSI::DIM}[B/ESC] Back [d] Delete#{Terminal::ANSI::RESET}")
+      end
+
+      def render_empty_bookmarks(height, width)
+        Terminal.write(height / 2, (width - 30) / 2,
+                       "#{Terminal::ANSI::DIM}No bookmarks yet. Press 'b' while reading to add one.#{Terminal::ANSI::RESET}")
+      end
+
+      def render_bookmarks_list(context)
+        list_start = 4
+        list_height = (context.height - 6) / 2
+        visible_start = [context.selected - (list_height / 2), 0].max
+        visible_end = [visible_start + list_height, context.bookmarks.length].min
+        (visible_start...visible_end).each_with_index do |idx, row_idx|
+          bookmark = context.bookmarks[idx]
+          chapter = context.doc.get_chapter(bookmark.chapter_index)
+          chapter_title = chapter&.title || "Chapter #{bookmark.chapter_index + 1}"
+
+          row = list_start + (row_idx * 2)
+          selected = (idx == context.selected)
+          draw_bookmark_item(row, context.width, bookmark, chapter_title, selected)
+        end
+      end
+
+      def draw_bookmark_item(row, width, bookmark, chapter_title, selected)
+        chapter_text = "Ch. #{bookmark.chapter_index + 1}: #{chapter_title[0, width - 20]}"
+        text_snippet = bookmark.text_snippet[0, width - 8]
+
+        if selected
+          Terminal.write(row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
+          Terminal.write(row, 4, "#{Terminal::ANSI::BRIGHT_WHITE}#{chapter_text}#{Terminal::ANSI::RESET}")
+          Terminal.write(row + 1, 6, "#{Terminal::ANSI::ITALIC}#{Terminal::ANSI::GRAY}#{text_snippet}#{Terminal::ANSI::RESET}")
+        else
+          Terminal.write(row, 4, "#{Terminal::ANSI::WHITE}#{chapter_text}#{Terminal::ANSI::RESET}")
+          Terminal.write(row + 1, 6, "#{Terminal::ANSI::DIM}#{Terminal::ANSI::GRAY}#{text_snippet}#{Terminal::ANSI::RESET}")
+        end
+      end
+
+      def render_bookmarks_footer(height)
+        Terminal.write(height - 1, 2,
+                       "#{Terminal::ANSI::DIM}↑↓ Navigate • Enter Jump • d Delete • B/ESC Back#{Terminal::ANSI::RESET}")
+      end
     end
   end
 end

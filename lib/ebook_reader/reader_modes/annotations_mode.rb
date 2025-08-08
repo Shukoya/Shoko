@@ -1,136 +1,79 @@
 # frozen_string_literal: true
 
 require_relative 'base_mode'
+require_relative '../annotations/annotation_store'
 
 module EbookReader
   module ReaderModes
-    # Mode for viewing all annotations
+    # Mode for displaying annotations for the current book
     class AnnotationsMode < BaseMode
-      include Concerns::InputHandler
-
       def initialize(reader)
         super
-        @selected = 0
-        load_annotations
+        @annotations = Annotations::AnnotationStore.get(reader.path)
+        @selected_annotation = 0
       end
 
-      def draw(height, width)
-        draw_header(width)
+      def draw(_height, _width)
+        Terminal.clear
+        Terminal.write(1, 2, "Annotations for #{File.basename(reader.path)}")
 
-        if @annotations.empty?
-          draw_empty_state(height, width)
-        else
-          draw_annotations_list(height, width)
+        return if @annotations.empty?
+
+        @annotations.each_with_index do |annotation, i|
+          text = annotation['text'].tr("\n", ' ').strip
+          note = annotation['note'].tr("\n", ' ').strip
+
+          display_text = "#{i == @selected_annotation ? '> ' : '  '} \"#{text[0, 30]}...\""
+          display_note = "    Note: #{note[0, 40]}..."
+
+          Terminal.write((i * 2) + 3, 4, display_text)
+          Terminal.write((i * 2) + 4, 4, display_note)
         end
-
-        draw_footer(height)
       end
 
       def handle_input(key)
-        return handle_empty_input(key) if @annotations.empty?
+        return unless key
 
-        case key
-        when "\e", 'A' then reader.switch_mode(:read)
-        when "\r", "\n" then edit_annotation
-        when 'd', 'D' then delete_annotation
-        else handle_navigation(key)
+        handlers = input_handlers
+        (handlers[key] || handlers[:__default__])&.call(key)
+      end
+
+      def input_handlers
+        @input_handlers ||= begin
+          h = {}
+          # Exit keys
+          ['q', "\e", "\u0001"].each { |k| h[k] = ->(_) { reader.switch_mode(:read) } }
+
+          # Navigation
+          if @annotations.any?
+            down = ['j', "\e[B"]
+            up = ['k', "\e[A"]
+            down.each do |k|
+              h[k] = lambda { |_|
+                @selected_annotation = [@selected_annotation + 1, @annotations.length - 1].min
+              }
+            end
+            up.each do |k|
+              h[k] = ->(_) { @selected_annotation = [@selected_annotation - 1, 0].max }
+            end
+            ["\r", "\n"].each { |k| h[k] = ->(_) { jump_to_annotation } }
+          end
+
+          h[:__default__] = ->(_) {}
+          h
         end
       end
 
       private
 
-      def load_annotations
-        path = reader.instance_variable_get(:@path)
-        @annotations = Annotations::AnnotationStore.get(path)
-      end
-
-      def draw_header(width)
-        terminal.write(1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}📝 Annotations#{Terminal::ANSI::RESET}")
-        terminal.write(1, [width - 40, 40].max,
-                       "#{Terminal::ANSI::DIM}[A/ESC] Back [d] Delete#{Terminal::ANSI::RESET}")
-      end
-
-      def draw_empty_state(height, width)
-        terminal.write(height / 2, (width - 25) / 2,
-                       "#{Terminal::ANSI::DIM}No annotations yet#{Terminal::ANSI::RESET}")
-        terminal.write((height / 2) + 2, (width - 35) / 2,
-                       "#{Terminal::ANSI::DIM}Select text to create one#{Terminal::ANSI::RESET}")
-      end
-
-      def draw_annotations_list(height, width)
-        list_start = 4
-        list_height = (height - 6) / 3
-
-        visible_range = calculate_visible_range(list_height)
-
-        visible_range.each_with_index do |idx, row_idx|
-          annotation = @annotations[idx]
-          draw_annotation_item(annotation, idx, list_start + (row_idx * 3), width)
-        end
-      end
-
-      def draw_annotation_item(annotation, idx, row, width)
-        is_selected = idx == @selected
-
-        # Selection indicator
-        if is_selected
-          terminal.write(row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
-        else
-          terminal.write(row, 2, '  ')
-        end
-
-        # Quoted text
-        text = annotation['text'].tr("\n", ' ').strip[0, width - 10]
-        terminal.write(row, 4,
-                       "#{Terminal::ANSI::DIM}\"#{text}\"#{Terminal::ANSI::RESET}")
-
-        # Note
-        note = annotation['note'].tr("\n", ' ').strip[0, width - 10]
-        color = is_selected ? Terminal::ANSI::BRIGHT_WHITE : Terminal::ANSI::WHITE
-        terminal.write(row + 1, 6, color + note + Terminal::ANSI::RESET)
-
-        # Timestamp
-        time = Time.parse(annotation['created_at']).strftime('%Y-%m-%d %H:%M')
-        terminal.write(row + 2, 6,
-                       Terminal::ANSI::DIM + Terminal::ANSI::GRAY + time + Terminal::ANSI::RESET)
-      end
-
-      def draw_footer(height)
-        terminal.write(height - 1, 2,
-                       "#{Terminal::ANSI::DIM}↑↓ Navigate • Enter Edit • d Delete • A/ESC Back#{Terminal::ANSI::RESET}")
-      end
-
-      def calculate_visible_range(items_per_page)
-        visible_start = [@selected - (items_per_page / 2), 0].max
-        visible_end = [visible_start + items_per_page, @annotations.length].min
-        visible_start...visible_end
-      end
-
-      def handle_empty_input(key)
-        reader.switch_mode(:read) if ["\e", 'A'].include?(key)
-      end
-
-      def handle_navigation(key)
-        @selected = handle_navigation_keys(key, @selected, @annotations.length - 1)
-      end
-
-      def edit_annotation
-        annotation = @annotations[@selected]
+      def jump_to_annotation
+        annotation = @annotations[@selected_annotation]
         return unless annotation
 
-        reader.switch_mode(:annotation_editor, annotation: annotation)
-      end
-
-      def delete_annotation
-        annotation = @annotations[@selected]
-        return unless annotation
-
-        path = reader.instance_variable_get(:@path)
-        Annotations::AnnotationStore.delete(path, annotation['id'])
-        load_annotations
-        @selected = [@selected, @annotations.length - 1].min if @annotations.any?
-        reader.refresh_annotations if reader.respond_to?(:refresh_annotations)
-        reader.send(:set_message, 'Annotation deleted!')
+        reader.current_chapter = annotation['chapter_index']
+        # For now, we just go to the chapter. Line-specific jumping is more complex.
+        reader.send(:reset_pages)
+        reader.switch_mode(:read)
       end
     end
   end

@@ -42,7 +42,7 @@ module EbookReader
         when :toc
           draw_toc_screen(height, width)
         when :bookmarks
-          draw_bookmarks_screen(height, width)
+          draw_bookmarks(height, width)
         when :annotations, :annotation_editor
           @current_mode&.draw(height, width)
         else
@@ -66,6 +66,17 @@ module EbookReader
         @render_cache.get_or_render(:footer, hash) do
           draw_footer(height, width)
         end
+      end
+
+      def draw_bookmarks(height, width)
+        context = UI::ReaderRenderer::BookmarksContext.new(
+          height: height,
+          width: width,
+          doc: @doc,
+          bookmarks: @bookmarks || [],
+          selected: (@bookmark_selected || 0)
+        )
+        @renderer.render_bookmarks_screen(context)
       end
 
       def draw_content_if_changed(height, width, state)

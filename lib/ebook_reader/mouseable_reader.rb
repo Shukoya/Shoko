@@ -1,22 +1,18 @@
 # frozen_string_literal: true
 
+require_relative 'reader_controller'
+require_relative 'annotations/mouse_handler'
+require_relative 'annotations/annotation_store'
+require_relative 'ui/components/popup_menu'
+require_relative 'reader_modes/annotation_editor_mode'
+require_relative 'reader_modes/annotations_mode'
+require_relative 'terminal_mouse_patch'
+
 module EbookReader
-  # Extension to add mouse support to Reader.
-  # Every mouse event triggers an immediate redraw, including while dragging,
-  # so selection highlighting and popup menus appear with no delay.
-  module ReaderMouseExtension
-    def self.included(base)
-      base.class_eval do
-        alias_method :initialize_without_mouse, :initialize
-        alias_method :initialize, :initialize_with_mouse
-
-        alias_method :draw_screen_without_mouse, :draw_screen
-        alias_method :draw_screen, :draw_screen_with_mouse
-      end
-    end
-
-    def initialize_with_mouse(*)
-      initialize_without_mouse(*)
+  # A Reader that supports mouse interactions for annotations.
+  class MouseableReader < ReaderController
+    def initialize(epub_path, config = Config.new)
+      super
       @mouse_handler = Annotations::MouseHandler.new
       @popup_menu = nil
       @selected_text = nil
@@ -25,9 +21,16 @@ module EbookReader
       refresh_annotations
     end
 
-    def draw_screen_with_mouse
+    def run
+      Terminal.enable_mouse
+      super
+    ensure
+      Terminal.disable_mouse
+    end
+
+    def draw_screen
       @rendered_lines.clear
-      draw_screen_without_mouse
+      super
 
       highlight_saved_annotations
       highlight_selection if @mouse_handler.selecting || @selection_range
@@ -36,30 +39,42 @@ module EbookReader
       Terminal.end_frame
     end
 
+    def read_input_keys
+      key = Terminal.read_input_with_mouse
+      return [] unless key
+
+      if key.start_with?("\e[<")
+        handle_mouse_input(key)
+        return []
+      end
+
+      keys = [key]
+      while (extra = Terminal.read_key)
+        keys << extra
+        break if keys.size > 10
+      end
+      keys
+    end
+
     def handle_mouse_input(input)
       event = @mouse_handler.parse_mouse_event(input)
       return unless event
 
-      # Handle popup menu clicks first, as they are highest priority
       if @popup_menu&.visible && event[:released]
         handle_popup_click(event)
         return
       end
 
-      # Process text selection events
       result = @mouse_handler.handle_event(event)
       return unless result
 
       case result[:type]
       when :selection_drag
-        # Fast path for dragging: only redraw content and highlights
         refresh_highlighting
       when :selection_end
-        # Finalize selection and show popup menu
         handle_selection_end
-        draw_screen # Full redraw to show popup
+        draw_screen
       else
-        # For selection_start or other events, a full but quick redraw is fine
         draw_screen
       end
     end
@@ -72,28 +87,18 @@ module EbookReader
       if item
         handle_popup_action(item)
       else
-        # Clicked outside the menu, so close it and reset state
         @popup_menu = nil
         @mouse_handler.reset
         @selection_range = nil
       end
-      draw_screen # Redraw to remove the popup
+      draw_screen
     end
 
-    # A lightweight renderer that only redraws the reading content and highlights.
-    # This is called repeatedly during a mouse drag.
     def refresh_highlighting
       height, width = Terminal.size
-
-      # This is the key optimization: we call a content-only renderer
-      # instead of the full draw_screen, avoiding header/footer/cache logic.
       draw_reading_content(height, width)
-
-      # Re-apply any saved annotations and the current selection highlight
       highlight_saved_annotations
       highlight_selection
-
-      # Ensure the terminal updates visually
       Terminal.end_frame
     end
 
@@ -114,24 +119,19 @@ module EbookReader
     def show_popup_menu
       return unless @selection_range
 
-      # Position menu below selected text
       end_pos = @selection_range[:end]
       menu_items = ['Create Annotation', 'Copy to Clipboard']
-      menu_width = menu_items.map(&:length).max + 4 # Add padding
+      menu_width = menu_items.map(&:length).max + 4
       menu_x = [end_pos[:x], Terminal.size[1] - menu_width].min
       menu_y = [end_pos[:y] + 1, Terminal.size[0] - 5].min
 
-      @popup_menu = UI::Components::PopupMenu.new(
-        menu_x, menu_y,
-        menu_items
-      )
-      switch_mode(:popup_menu) # Switch to dedicated popup mode
+      @popup_menu = UI::Components::PopupMenu.new(menu_x, menu_y, menu_items)
+      switch_mode(:popup_menu)
     end
 
     def handle_popup_action(action)
       case action
       when 'Create Annotation'
-        # Important: Switch back to read mode BEFORE switching to annotation editor
         switch_mode(:read)
         switch_mode(:annotation_editor,
                     text: @selected_text,
@@ -140,7 +140,7 @@ module EbookReader
       when 'Copy to Clipboard'
         copy_to_clipboard(@selected_text)
         set_message('Copied to clipboard!')
-        switch_mode(:read) # Switch back to read mode
+        switch_mode(:read)
       end
 
       @popup_menu = nil
@@ -183,14 +183,11 @@ module EbookReader
         line_text = line_info[:text].dup
         line_start_col = line_info[:col]
 
-        start_idx = y == start_y ? start_x - line_start_col : 0
-        end_idx = y == end_y ? end_x - line_start_col : line_text.length - 1
-
-        start_idx = [[start_idx, line_text.length - 1].min, 0].max
-        end_idx = [[end_idx, line_text.length - 1].min, 0].max
+        start_idx = (y == start_y ? start_x - line_start_col : 0).clamp(0, line_text.length - 1)
+        end_idx = (y == end_y ? end_x - line_start_col : line_text.length - 1).clamp(0,
+                                                                                     line_text.length - 1)
         next if end_idx < start_idx
 
-        # Build the new line with highlighting
         new_line = ''
         new_line += line_text[0...start_idx] if start_idx.positive?
         new_line += "#{color}#{Terminal::ANSI::WHITE}#{line_text[start_idx..end_idx]}#{Terminal::ANSI::RESET}"
@@ -212,18 +209,18 @@ module EbookReader
       text = []
 
       (start_pos[:y]..end_pos[:y]).each do |y|
-        row = y + 1 # @rendered_lines keys are 1-based row numbers
+        row = y + 1
         line_info = @rendered_lines[row]
         next unless line_info
 
         line_text = line_info[:text]
         line_start_col = line_info[:col]
 
-        start_char_index = y == start_pos[:y] ? start_pos[:x] - line_start_col : 0
-        end_char_index = y == end_pos[:y] ? end_pos[:x] - line_start_col : line_text.length - 1
-
-        start_char_index = [0, start_char_index].max
-        end_char_index = [line_text.length - 1, end_char_index].min
+        start_char_index = (y == start_pos[:y] ? start_pos[:x] - line_start_col : 0).clamp(0,
+                                                                                           line_text.length - 1)
+        end_char_index = (y == end_pos[:y] ? end_pos[:x] - line_start_col : line_text.length - 1).clamp(
+          0, line_text.length - 1
+        )
 
         text << line_text[start_char_index..end_char_index] if end_char_index >= start_char_index
       end

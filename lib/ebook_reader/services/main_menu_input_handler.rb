@@ -14,10 +14,49 @@ module EbookReader
       def handle_input(key)
         return unless key
 
-        mode = @menu.instance_variable_get(:@mode)
-        mode_handler = "handle_#{mode}_input"
+        handlers = handlers_for_mode(@menu.instance_variable_get(:@mode))
+        (handlers[key] || handlers[:__default__])&.call(key)
+      end
 
-        send(mode_handler, key) if respond_to?(mode_handler, true)
+      def handlers_for_mode(mode)
+        case mode
+        when :menu then menu_handlers
+        when :browse then browse_handlers
+        when :recent then recent_handlers
+        when :settings then settings_handlers
+        when :annotations then annotations_handlers
+        when :annotation_editor then annotation_editor_handlers
+        when :open_file then open_file_handlers
+        else {}
+        end
+      end
+
+      def menu_handlers
+        handlers = {}
+        # Primary actions
+        { 'q' => ->(_) { handle_quit }, 'Q' => ->(_) { handle_quit },
+          'f' => ->(_) { @menu.send(:switch_to_browse) }, 'F' => lambda { |_|
+                                                            @menu.send(:switch_to_browse)
+                                                          },
+          'r' => ->(_) { @menu.send(:switch_to_mode, :recent) }, 'R' => lambda { |_|
+                                                                   @menu.send(:switch_to_mode, :recent)
+                                                                 },
+          'o' => ->(_) { @menu.send(:open_file_dialog) }, 'O' => lambda { |_|
+                                                            @menu.send(:open_file_dialog)
+                                                          },
+          's' => ->(_) { @menu.send(:switch_to_mode, :settings) }, 'S' => lambda { |_|
+                                                                     @menu.send(:switch_to_mode, :settings)
+                                                                   } }.each do |k, v|
+          handlers[k] =
+            v
+        end
+
+        # Navigation within menu
+        navigation_down_keys.each { |k| handlers[k] = ->(_) { navigate_menu_down } }
+        navigation_up_keys.each { |k| handlers[k] = ->(_) { navigate_menu_up } }
+        enter_keys.each { |k| handlers[k] = ->(_) { @menu.send(:handle_menu_selection) } }
+
+        handlers
       end
 
       def handle_menu_input(key)
@@ -67,53 +106,28 @@ module EbookReader
         @menu.instance_variable_set(:@selected, selected)
       end
 
-      def handle_browse_input(key)
-        handler = browse_input_handlers[key]
-
-        if handler
-          handler.call
-        elsif navigation_key?(key)
-          @menu.send(:navigate_browse, key)
-        elsif searchable_key?(key)
-          add_to_search(key)
+      def browse_handlers
+        handlers = {}
+        # Refresh
+        %w[r R].each { |k| handlers[k] = ->(_) { @menu.send(:refresh_scan) } }
+        # Open selection
+        ["\r", "\n"].each { |k| handlers[k] = ->(_) { @menu.send(:open_selected_book) } }
+        # Start search
+        handlers['/'] = ->(_) { reset_search }
+        # Delete key
+        handlers["\e[3~"] = ->(_) { @menu.send(:handle_delete) }
+        # Switch back
+        switch_keys.each { |k| handlers[k] = ->(_) { @menu.send(:switch_to_mode, :menu) } }
+        # Cursor left/right for search
+        cursor_handlers.each { |k, v| handlers[k] = ->(_) { v.call } }
+        # Backspace handling
+        backspace_keys.each { |k| handlers[k] = ->(_) { handle_backspace } }
+        # Navigation
+        ['j', "\e[B", "\eOB", 'k', "\e[A", "\eOA"].each do |k|
+          handlers[k] = ->(key) { @menu.send(:navigate_browse, key) }
         end
-      end
-
-      def browse_input_handlers
-        @browse_input_handlers ||= begin
-          merged = base_browse_handlers.merge(cursor_handlers)
-          merged.merge(backspace_handlers)
-        end
-      end
-
-      def base_browse_handlers
-        {}.merge(
-          refresh_handlers,
-          navigation_handlers,
-          action_handlers
-        )
-      end
-
-      def refresh_handlers
-        {
-          'r' => -> { @menu.send(:refresh_scan) },
-          'R' => -> { @menu.send(:refresh_scan) },
-        }
-      end
-
-      def navigation_handlers
-        {
-          "\r" => -> { @menu.send(:open_selected_book) },
-          "\n" => -> { @menu.send(:open_selected_book) },
-          '/' => -> { reset_search },
-        }
-      end
-
-      def action_handlers
-        handlers = { "\e[3~" => -> { @menu.send(:handle_delete) } }
-        switch_keys.each do |key|
-          handlers[key] = -> { @menu.send(:switch_to_mode, :menu) }
-        end
+        # Default: searchable text input
+        handlers[:__default__] = ->(k) { add_to_search(k) if searchable_key?(k) }
         handlers
       end
 
@@ -143,16 +157,20 @@ module EbookReader
         @menu.instance_variable_set(:@search_cursor, 0)
       end
 
-      def handle_recent_input(key)
+      def recent_handlers
+        handlers = {}
         recent = @menu.send(:load_recent_books)
-
-        if escape_key?(key)
-          @menu.send(:switch_to_mode, :menu)
-        elsif navigation_key?(key) && recent.any?
-          handle_recent_navigation(key, recent)
-        elsif enter_key?(key)
-          handle_recent_selection(recent)
+        # Exit
+        handlers['q'] = ->(_) { @menu.send(:switch_to_mode, :menu) }
+        handlers["\e"] = ->(_) { @menu.send(:switch_to_mode, :menu) }
+        # Navigation
+        if recent.any?
+          ['j', "\e[B", "\eOB", 'k', "\e[A", "\eOA"].each do |k|
+            handlers[k] = ->(key) { handle_recent_navigation(key, recent) }
+          end
+          ["\r", "\n"].each { |k| handlers[k] = ->(_) { handle_recent_selection(recent) } }
         end
+        handlers
       end
 
       def handle_recent_navigation(key, recent)
@@ -184,12 +202,110 @@ module EbookReader
         scanner.scan_status = :error
       end
 
-      def handle_settings_input(key)
-        if escape_key?(key)
+      def settings_handlers
+        handlers = { "\e" => lambda { |_|
           @menu.send(:switch_to_mode, :menu)
           @menu.instance_variable_get(:@config).save
-        else
-          handle_setting_change(key)
+        } }
+        # Numeric toggles
+        {
+          '1' => :toggle_view_mode,
+          '2' => :toggle_page_numbers,
+          '3' => :cycle_line_spacing,
+          '4' => :toggle_highlight_quotes,
+          '5' => :clear_cache,
+          '6' => :toggle_page_numbering_mode,
+        }.each do |k, action|
+          handlers[k] = ->(_) { @menu.send(action) }
+        end
+        handlers
+      end
+
+      def annotations_handlers
+        screen = @menu.instance_variable_get(:@annotations_screen)
+        handlers = {}
+        # Exit
+        ['q', "\e"].each { |k| handlers[k] = ->(_) { @menu.send(:switch_to_mode, :menu) } }
+        # Navigation
+        ['j', "\e[B"].each { |k| handlers[k] = ->(_) { navigate_annotations_down(screen) } }
+        ['k', "\e[A"].each { |k| handlers[k] = ->(_) { navigate_annotations_up(screen) } }
+        # Delete
+        handlers['d'] = ->(_) { delete_annotation(screen) }
+        # Enter
+        ["\r", "\n"].each do |k|
+          handlers[k] = lambda { |_|
+            annotation = screen.current_annotation
+            book_path = screen.current_book_path
+            @menu.send(:switch_to_edit_annotation, annotation, book_path) if annotation && book_path
+          }
+        end
+        handlers
+      end
+
+      def annotation_editor_handlers
+        screen = @menu.instance_variable_get(:@annotation_editor_screen)
+        {
+          __default__: lambda do |k|
+            result = screen.handle_input(k)
+            next unless %i[saved cancelled].include?(result)
+
+            @menu.instance_variable_get(:@annotations_screen).send(:initialize)
+            @menu.send(:switch_to_mode, :annotations)
+          end,
+        }
+      end
+
+      def delete_annotation(screen)
+        # For now, this is a placeholder.
+        # A confirmation dialog should be added here.
+        book_path = screen.instance_variable_get(:@books)[screen.selected_book_index]
+        return unless book_path
+
+        annotations = screen.instance_variable_get(:@annotations_by_book)[book_path]
+        annotation = annotations[screen.selected_annotation_index]
+
+        return unless annotation
+
+        EbookReader::Annotations::AnnotationStore.delete(book_path, annotation['id'])
+        # Refresh annotations
+        new_annotations = EbookReader::Annotations::AnnotationStore.send(:load_all)
+        screen.instance_variable_set(:@annotations_by_book, new_annotations)
+        screen.instance_variable_set(:@books, new_annotations.keys)
+        screen.selected_book_index = [screen.selected_book_index, screen.book_count - 1].max
+        return unless screen.selected_book_index >= 0
+
+        screen.selected_annotation_index = [screen.selected_annotation_index,
+                                            screen.annotation_count_for_selected_book - 1].max
+      end
+
+      def edit_annotation(screen)
+        # This is a placeholder for now.
+        # It needs to launch the annotation editor.
+      end
+
+      def navigate_annotations_down(screen)
+        book_count = screen.book_count
+        return if book_count.zero?
+
+        annotation_count = screen.annotation_count_for_selected_book
+
+        if screen.selected_annotation_index < annotation_count - 1
+          screen.selected_annotation_index += 1
+        elsif screen.selected_book_index < book_count - 1
+          screen.selected_book_index += 1
+          screen.selected_annotation_index = 0
+        end
+      end
+
+      def navigate_annotations_up(screen)
+        book_count = screen.book_count
+        return if book_count.zero?
+
+        if screen.selected_annotation_index.positive?
+          screen.selected_annotation_index -= 1
+        elsif screen.selected_book_index.positive?
+          screen.selected_book_index -= 1
+          screen.selected_annotation_index = screen.annotation_count_for_selected_book - 1
         end
       end
 
@@ -236,13 +352,11 @@ module EbookReader
         @menu.send(:filter_books)
       end
 
-      def handle_open_file_input(key)
-        @menu.send(:handle_open_file_input, key)
+      def open_file_handlers
+        { __default__: ->(k) { @menu.send(:handle_open_file_input, k) } }
       end
 
-      public :handle_browse_input,
-             :handle_recent_input,
-             :handle_setting_change,
+      public :handle_setting_change,
              :searchable_key?
     end
   end

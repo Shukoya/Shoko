@@ -7,22 +7,23 @@ module EbookReader
       class OpenFileScreen
         attr_accessor :input
 
-        def initialize
+        def initialize(renderer = nil)
           @input = ''
+          @renderer = renderer
         end
 
         def draw(height, width)
-          Terminal.write(1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}󰷏 Open File#{Terminal::ANSI::RESET}")
-          Terminal.write(1, [width - 20, 60].max, "#{Terminal::ANSI::DIM}[ESC] Cancel#{Terminal::ANSI::RESET}")
+          renderer.render_open_file_screen(
+            UI::MainMenuRenderer::OpenFileContext.new(
+              height: height, width: width, input: @input
+            )
+          )
+        end
 
-          prompt = 'Enter EPUB path: '
-          col = [(width - prompt.length - 40) / 2, 2].max
-          row = height / 2
-          Terminal.write(row, col, Terminal::ANSI::WHITE + prompt + Terminal::ANSI::RESET)
-          Terminal.write(row, col + prompt.length, "#{Terminal::ANSI::BRIGHT_WHITE}#{@input}_#{Terminal::ANSI::RESET}")
+        private
 
-          footer = 'Enter to open • Backspace delete • ESC cancel'
-          Terminal.write(height - 1, 2, Terminal::ANSI::DIM + footer + Terminal::ANSI::RESET)
+        def renderer
+          @renderer ||= UI::MainMenuRenderer.new(EbookReader::Config.new)
         end
       end
     end

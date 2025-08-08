@@ -5,13 +5,12 @@ require 'spec_helper'
 RSpec.describe EbookReader::Reader, 'drawing' do
   let(:epub_path) { '/book.epub' }
   let(:config) { EbookReader::Config.new }
+  let(:chapter1) { EbookReader::Models::Chapter.new(number: '1', title: 'Chapter 1', lines: ['Line 1'], metadata: nil) }
+  let(:chapter2) { EbookReader::Models::Chapter.new(number: '2', title: 'Chapter 2', lines: ['Line 2'], metadata: nil) }
   let(:doc) do
     instance_double(EbookReader::EPUBDocument,
                     title: 'Test Book',
-                    chapters: [
-                      { title: 'Chapter 1', lines: ['Line 1'] },
-                      { title: 'Chapter 2', lines: ['Line 2'] },
-                    ],
+                    chapters: [chapter1, chapter2],
                     chapter_count: 2,
                     language: 'en')
   end

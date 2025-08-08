@@ -10,7 +10,6 @@ require_relative 'constants/messages'
 require_relative 'helpers/reader_helpers'
 require_relative 'ui/reader_renderer'
 require_relative 'concerns/input_handler'
-require_relative 'concerns/bookmarks_ui'
 require_relative 'core/reader_state'
 require_relative 'services/navigation_service'
 require_relative 'services/bookmark_service'
@@ -47,7 +46,6 @@ module EbookReader
     include Constants::UIConstants
     include Helpers::ReaderHelpers
     include Concerns::InputHandler
-    include Concerns::BookmarksUI
     include DynamicPageCalculator
     include ReaderDisplay
 
@@ -58,9 +56,10 @@ module EbookReader
     def initialize(epub_path, config = Config.new)
       @path = epub_path
       @config = config
+      @state = Core::ReaderState.new
+      @mode = @state.mode
       @renderer = UI::ReaderRenderer.new(@config)
       @presenter = Presenters::ReaderPresenter.new(self, @config)
-      initialize_state
       load_document
       @page_manager = Services::PageManager.new(@doc, @config) if @doc
       @navigation_service = Services::NavigationService.new(self)
@@ -72,6 +71,7 @@ module EbookReader
       @render_cache = Rendering::RenderCache.new
       @chapter_cache = Services::ChapterCache.new
       @last_rendered_state = {}
+      @view = ReaderView.new(self)
     end
 
     def run
@@ -86,16 +86,30 @@ module EbookReader
       @view.draw_screen
     end
 
-    def switch_mode(mode)
+    def switch_mode(mode, **)
+      @state.mode = mode
       @mode = mode
+
+      case mode
+      when :annotation_editor
+        @current_mode = ReaderModes::AnnotationEditorMode.new(self, **)
+      when :annotations
+        @current_mode = ReaderModes::AnnotationsMode.new(self)
+      when :read, :help, :toc, :bookmarks
+        @current_mode = nil
+      when :popup_menu
+        # Popup handled separately via @popup_menu
+      else
+        @current_mode = nil
+      end
     end
 
     def scroll_down
       return if @config.page_numbering_mode == :dynamic
 
       if @config.view_mode == :split
-        @left_page = [@left_page + 1, @max_page || 0].min
-        @right_page = [@right_page + 1, @max_page || 0].min
+        @state.left_page = [@state.left_page + 1, @max_page || 0].min
+        @state.right_page = [@state.right_page + 1, @max_page || 0].min
       else
         @single_page = [@single_page + 1, @max_page || 0].min
       end
@@ -105,8 +119,8 @@ module EbookReader
       return if @config.page_numbering_mode == :dynamic
 
       if @config.view_mode == :split
-        @left_page = [@left_page - 1, 0].max
-        @right_page = [@right_page - 1, 0].max
+        @state.left_page = [@state.left_page - 1, 0].max
+        @state.right_page = [@state.right_page - 1, 0].max
       else
         @single_page = [@single_page - 1, 0].max
       end
@@ -151,20 +165,20 @@ module EbookReader
     end
 
     def prev_page_absolute
-      return if @current_chapter.zero? && @single_page.zero? && @left_page.zero?
+      return if @state.current_chapter.zero? && @single_page.zero? && @state.left_page.zero?
 
       if @config.view_mode == :split
-        if @left_page.positive?
-          @right_page = @left_page
-          @left_page = [@left_page - (Terminal.size[0] - 2), 0].max
-        elsif @current_chapter.positive?
-          @current_chapter -= 1
+        if @state.left_page.positive?
+          @state.right_page = @state.left_page
+          @state.left_page = [@state.left_page - (Terminal.size[0] - 2), 0].max
+        elsif @state.current_chapter.positive?
+          @state.current_chapter -= 1
           position_at_chapter_end
         end
       elsif @single_page.positive?
         @single_page = [@single_page - (Terminal.size[0] - 2), 0].max
-      elsif @current_chapter.positive?
-        @current_chapter -= 1
+      elsif @state.current_chapter.positive?
+        @state.current_chapter -= 1
         position_at_chapter_end
       end
     end
@@ -173,7 +187,7 @@ module EbookReader
       page_data = @page_manager.get_page(@current_page_index)
       return unless page_data
 
-      @current_chapter = page_data[:chapter_index]
+      @state.current_chapter = page_data[:chapter_index]
     end
 
     def go_to_start
@@ -186,7 +200,7 @@ module EbookReader
 
     def quit_to_menu
       save_progress
-      @running = false
+      @state.running = false
     end
 
     def quit_application
@@ -247,19 +261,6 @@ module EbookReader
 
     private
 
-    def initialize_state
-      @current_chapter = @left_page = @right_page = @single_page = @current_page_index = 0
-      @running = true
-      @mode = :read
-      @toc_selected = 0
-      @bookmarks = []
-      @bookmark_selected = 0
-      @message = nil
-      @page_map = []
-      @total_pages = 0
-      @last_width = @last_height = 0
-    end
-
     def load_document
       @doc = EPUBDocument.new(@path)
     rescue StandardError => e
@@ -273,12 +274,15 @@ module EbookReader
 
     def main_loop
       draw_screen
-      while @running
+      while @state.running
         keys = read_input_keys
         next if keys.empty?
 
-        # If the popup menu is active, it gets exclusive access to input
-        if @mode == :popup_menu
+        # If a special mode is active, it gets exclusive access to input
+        if @current_mode
+          keys.each { |k| @current_mode.handle_input(k) }
+          draw_screen # Redraw after every input in a special mode
+        elsif @state.mode == :popup_menu
           handle_popup_menu_input(keys)
         else
           # Otherwise, process input normally
@@ -329,47 +333,47 @@ module EbookReader
       page_value = if @config.page_numbering_mode == :dynamic
                      @current_page_index
                    else
-                     @config.view_mode == :split ? @left_page : @single_page
+                     @config.view_mode == :split ? @state.left_page : @single_page
                    end
 
-      { chapter: @current_chapter, page: page_value, mode: @mode, message: @message }
+      { chapter: @state.current_chapter, page: page_value, mode: @state.mode, message: @message }
     end
 
     def state_changed?(old_state)
       new_page = if @config.page_numbering_mode == :dynamic
                    @current_page_index
                  else
-                   @config.view_mode == :split ? @left_page : @single_page
+                   @config.view_mode == :split ? @state.left_page : @single_page
                  end
 
-      old_state[:chapter] != @current_chapter ||
+      old_state[:chapter] != @state.current_chapter ||
         old_state[:page] != new_page ||
-        old_state[:mode] != @mode ||
+        old_state[:mode] != @state.mode ||
         old_state[:message] != @message
     end
 
     def handle_split_next_page(max_page, content_height)
-      if @right_page < max_page
-        @left_page = @right_page
-        @right_page = [@right_page + content_height, max_page].min
+      if @state.right_page < max_page
+        @state.left_page = @state.right_page
+        @state.right_page = [@state.right_page + content_height, max_page].min
       else
-        @left_page = @right_page
+        @state.left_page = @state.right_page
       end
     end
 
     def handle_single_next_page(max_page, content_height)
       if @single_page < max_page
         @single_page = [@single_page + content_height, max_page].min
-      elsif @current_chapter < @doc.chapter_count - 1
+      elsif @state.current_chapter < @doc.chapter_count - 1
         next_chapter
       end
     end
 
     def handle_split_prev_page(content_height)
-      if @left_page.positive?
-        @right_page = @left_page
-        @left_page = [@left_page - content_height, 0].max
-      elsif @current_chapter.positive?
+      if @state.left_page.positive?
+        @state.right_page = @state.left_page
+        @state.left_page = [@state.left_page - content_height, 0].max
+      elsif @state.current_chapter.positive?
         prev_chapter_with_end_position
       end
     end
@@ -377,14 +381,14 @@ module EbookReader
     def handle_single_prev_page(content_height)
       if @single_page.positive?
         @single_page = [@single_page - content_height, 0].max
-      elsif @current_chapter.positive?
-        @current_chapter -= 1
+      elsif @state.current_chapter.positive?
+        @state.current_chapter -= 1
         position_at_chapter_end
       end
     end
 
     def prev_chapter_with_end_position
-      @current_chapter -= 1
+      @state.current_chapter -= 1
       position_at_chapter_end
     end
 
@@ -437,14 +441,14 @@ module EbookReader
       progress = @state_service.load_progress
       return unless progress
 
-      @current_chapter = progress.fetch('chapter', 0)
+      @state.current_chapter = progress.fetch('chapter', 0)
       @single_page = progress.fetch('line_offset', 0)
     end
 
     def page_offsets=(offset)
       @single_page = offset
-      @left_page = offset
-      @right_page = offset
+      @state.left_page = offset
+      @state.right_page = offset
     end
 
     def save_progress
@@ -495,61 +499,30 @@ module EbookReader
     end
 
     def open_toc
-      @mode = :toc
-      @toc_selected = @current_chapter
+      switch_mode(:toc)
+      @toc_selected = @state.current_chapter
     end
 
     def open_bookmarks
-      @mode = :bookmarks
+      switch_mode(:bookmarks)
       @bookmark_selected = 0
     end
 
-    def handle_navigation_input(key)
-      @input_handler.handle_navigation_input(key)
+    def open_annotations
+      @state.mode = :annotations
     end
 
-    def navigate_by_key(key, content_height, max_page)
-      @input_handler.navigate_by_key(key, content_height, max_page)
-    end
-
-    def scroll_down_with_max(max_page)
-      @input_handler.scroll_down_with_max(max_page)
-    end
-
-    def next_page_with_params(content_height, max_page)
-      @input_handler.next_page_with_params(content_height, max_page)
-    end
-
-    def prev_page_with_params(content_height)
-      @input_handler.prev_page_with_params(content_height)
-    end
-
-    def go_to_end_with_params(content_height, max_page)
-      @input_handler.go_to_end_with_params(content_height, max_page)
-    end
-
-    def handle_next_chapter
-      @input_handler.handle_next_chapter
-    end
-
-    def handle_prev_chapter
-      @input_handler.handle_prev_chapter
-    end
-
-    def handle_toc_input(key)
-      @input_handler.handle_toc_input(key)
-    end
+    # Legacy delegators removed; input handling is centralized via
+    # Services::ReaderInputHandler#process_input and renderer-driven drawing.
 
     def jump_to_chapter(chapter_index)
-      @current_chapter = chapter_index
+      @state.current_chapter = chapter_index
       reset_pages
       save_progress
-      @mode = :read
+      @state.mode = :read
     end
 
-    def handle_bookmarks_input(key)
-      @input_handler.handle_bookmarks_input(key)
-    end
+    # Bookmarks input handled via centralized handler as well
 
     def handle_empty_bookmarks_input(key)
       @input_handler.handle_empty_bookmarks_input(key)
@@ -559,10 +532,10 @@ module EbookReader
       bookmark = @bookmarks[@bookmark_selected]
       return unless bookmark
 
-      @current_chapter = bookmark.chapter_index
+      @state.current_chapter = bookmark.chapter_index
       self.page_offsets = bookmark.line_offset
       save_progress
-      @mode = :read
+      @state.mode = :read
     end
 
     def delete_selected_bookmark
@@ -580,7 +553,7 @@ module EbookReader
     end
 
     def position_at_chapter_end
-      chapter = @doc.get_chapter(@current_chapter)
+      chapter = @doc.get_chapter(@state.current_chapter)
       return unless chapter&.lines
 
       col_width, content_height = end_of_chapter_metrics
@@ -599,8 +572,8 @@ module EbookReader
 
     def set_page_end(max_page, content_height)
       if @config.view_mode == :split
-        @right_page = max_page
-        @left_page = [max_page - content_height, 0].max
+        @state.right_page = max_page
+        @state.left_page = [max_page - content_height, 0].max
       else
         @single_page = max_page
       end

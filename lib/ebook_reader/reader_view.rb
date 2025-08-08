@@ -11,6 +11,8 @@ module EbookReader
 
     def draw_screen
       sync_from_controller
+      # Ensure view's @mode mirrors controller's state for rendering branches
+      @mode = @state&.mode if defined?(@state)
       super
       sync_to_controller
     end

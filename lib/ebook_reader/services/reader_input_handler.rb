@@ -17,81 +17,69 @@ module EbookReader
       def process_input(key)
         return unless key
 
-        send(mode_handler_method, key)
+        Thread.current[:ebook_reader_last_key] = key
+        handlers = handlers_for_mode(current_mode)
+        (handlers[key] || handlers[:__default__])&.call(key)
+      ensure
+        Thread.current[:ebook_reader_last_key] = nil
       end
 
       private
 
-      def mode_handler_method
-        "handle_#{@reader.instance_variable_get(:@mode)}_mode"
-      end
-
-      def handle_help_mode(_key)
-        @reader.switch_mode(:read)
-      end
-
-      def handle_toc_mode(key)
-        handle_toc_input(key)
-      end
-
-      def handle_bookmarks_mode(key)
-        handle_bookmarks_input(key)
-      end
-
-      def handle_read_mode(key)
-        handle_reading_input(key)
-      end
-
-      def handle_reading_input(key)
-        handler = reading_input_handlers[key]
-
-        if handler
-          handler.call
+      def current_mode
+        if @reader.instance_variable_defined?(:@mode) &&
+           (m = @reader.instance_variable_get(:@mode))
+          m
         else
-          handle_navigation_input(key)
+          state = @reader.instance_variable_get(:@state)
+          state ? state.mode : :read
         end
       end
 
-      def reading_input_handlers
-        @reading_input_handlers ||= basic_reading_handlers.merge(toggle_handlers)
+      def handlers_for_mode(mode)
+        case mode
+        when :help then help_mode_handlers
+        when :toc then toc_mode_handlers
+        when :bookmarks then bookmarks_mode_handlers
+        else read_mode_handlers
+        end
+      end
+
+      def help_mode_handlers
+        # Any key returns to read mode
+        { __default__: ->(_) { @reader.switch_mode(:read) } }
+      end
+
+      def read_mode_handlers
+        # Build fresh each time to reflect dynamic/absolute navigation
+        nav = navigation_handlers_for_current_mode || {}
+        basic_reading_handlers.merge(toggle_handlers).merge(nav)
       end
 
       def basic_reading_handlers
         {
-          'q' => -> { @reader.quit_to_menu },
-          'Q' => -> { @reader.quit_application },
-          '?' => -> { @reader.switch_mode(:help) },
-          't' => -> { @reader.send(:open_toc) },
-          'T' => -> { @reader.send(:open_toc) },
-          'b' => -> { @reader.add_bookmark },
-          'B' => -> { @reader.send(:open_bookmarks) },
+          'q' => ->(_) { @reader.quit_to_menu },
+          'Q' => ->(_) { @reader.quit_application },
+          '?' => ->(_) { @reader.switch_mode(:help) },
+          't' => ->(_) { @reader.send(:open_toc) },
+          'T' => ->(_) { @reader.send(:open_toc) },
+          'b' => ->(_) { @reader.add_bookmark },
+          'B' => ->(_) { @reader.send(:open_bookmarks) },
+          "\u0001" => ->(_) { @reader.send(:open_annotations) },
         }
       end
 
       def toggle_handlers
         {
-          'v' => -> { @reader.toggle_view_mode },
-          'V' => -> { @reader.toggle_view_mode },
-          'P' => -> { @reader.toggle_page_numbering_mode },
-          '+' => -> { @reader.increase_line_spacing },
-          '-' => -> { @reader.decrease_line_spacing },
+          'v' => ->(_) { @reader.toggle_view_mode },
+          'V' => ->(_) { @reader.toggle_view_mode },
+          'P' => ->(_) { @reader.toggle_page_numbering_mode },
+          '+' => ->(_) { @reader.increase_line_spacing },
+          '-' => ->(_) { @reader.decrease_line_spacing },
         }
       end
 
-      def handle_navigation_input(key)
-        if @reader.config.page_numbering_mode == :dynamic
-          handle_navigation_input_dynamic(key)
-        else
-          handle_navigation_input_absolute(key)
-        end
-      end
-
-      def handle_navigation_input_dynamic(key)
-        handler = dynamic_navigation_handlers[key]
-        handler&.call
-      end
-
-      def handle_navigation_input_absolute(key)
+      def navigation_handlers_for_current_mode
         height, width = Terminal.size
         col_width, content_height = @reader.send(:get_layout_metrics, width, height)
         content_height = @reader.send(:adjust_for_line_spacing, content_height)
@@ -102,37 +90,58 @@ module EbookReader
         wrapped = @reader.send(:wrap_lines, chapter.lines || [], col_width)
         max_page = [wrapped.size - content_height, 0].max
 
-        navigate_by_key(key, content_height, max_page)
+        if @reader.config.page_numbering_mode == :dynamic
+          dynamic_navigation_handlers
+        else
+          absolute_navigation_handlers(content_height, max_page)
+        end
       end
 
-      def navigate_by_key(key, content_height, max_page)
-        command = navigation_commands[key]
-        return unless command
-
-        command.call(content_height, max_page)
+      def absolute_navigation_handlers(content_height, max_page)
+        {
+          'j' => ->(_) { scroll_down_with_max(max_page) },
+          "\e[B" => ->(_) { scroll_down_with_max(max_page) },
+          "\eOB" => ->(_) { scroll_down_with_max(max_page) },
+          'k' => ->(_) { @reader.scroll_up },
+          "\e[A" => ->(_) { @reader.scroll_up },
+          "\eOA" => ->(_) { @reader.scroll_up },
+          'l' => ->(_) { next_page_with_params(content_height, max_page) },
+          ' ' => ->(_) { next_page_with_params(content_height, max_page) },
+          "\e[C" => ->(_) { next_page_with_params(content_height, max_page) },
+          "\eOC" => ->(_) { next_page_with_params(content_height, max_page) },
+          'h' => ->(_) { prev_page_with_params(content_height) },
+          "\e[D" => ->(_) { prev_page_with_params(content_height) },
+          "\eOD" => ->(_) { prev_page_with_params(content_height) },
+          'n' => ->(_) { handle_next_chapter },
+          'N' => ->(_) { handle_next_chapter },
+          'p' => ->(_) { handle_prev_chapter },
+          'P' => ->(_) { handle_prev_chapter },
+          'g' => ->(_) { @reader.send(:reset_pages) },
+          'G' => ->(_) { go_to_end_with_params(content_height, max_page) },
+        }
       end
 
-      def navigation_commands
-        @navigation_commands ||= {
-          'j' => ->(_, max) { scroll_down_with_max(max) },
-          "\e[B" => ->(_, max) { scroll_down_with_max(max) },
-          "\eOB" => ->(_, max) { scroll_down_with_max(max) },
-          'k' => ->(_, _) { @reader.scroll_up },
-          "\e[A" => ->(_, _) { @reader.scroll_up },
-          "\eOA" => ->(_, _) { @reader.scroll_up },
-          'l' => ->(ch, max) { next_page_with_params(ch, max) },
-          ' ' => ->(ch, max) { next_page_with_params(ch, max) },
-          "\e[C" => ->(ch, max) { next_page_with_params(ch, max) },
-          "\eOC" => ->(ch, max) { next_page_with_params(ch, max) },
-          'h' => ->(ch, _) { prev_page_with_params(ch) },
-          "\e[D" => ->(ch, _) { prev_page_with_params(ch) },
-          "\eOD" => ->(ch, _) { prev_page_with_params(ch) },
-          'n' => ->(_, _) { handle_next_chapter },
-          'N' => ->(_, _) { handle_next_chapter },
-          'p' => ->(_, _) { handle_prev_chapter },
-          'P' => ->(_, _) { handle_prev_chapter },
-          'g' => ->(_, _) { @reader.send(:reset_pages) },
-          'G' => ->(ch, max) { go_to_end_with_params(ch, max) },
+      def dynamic_navigation_handlers
+        {
+          'j' => ->(_) { @reader.next_page },
+          "\e[B" => ->(_) { @reader.next_page },
+          "\eOB" => ->(_) { @reader.next_page },
+          'l' => ->(_) { @reader.next_page },
+          ' ' => ->(_) { @reader.next_page },
+          "\e[C" => ->(_) { @reader.next_page },
+          "\eOC" => ->(_) { @reader.next_page },
+          'k' => ->(_) { @reader.prev_page },
+          "\e[A" => ->(_) { @reader.prev_page },
+          "\eOA" => ->(_) { @reader.prev_page },
+          'h' => ->(_) { @reader.prev_page },
+          "\e[D" => ->(_) { @reader.prev_page },
+          "\eOD" => ->(_) { @reader.prev_page },
+          'n' => ->(_) { handle_next_chapter },
+          'N' => ->(_) { handle_next_chapter },
+          'p' => ->(_) { handle_prev_chapter },
+          'P' => ->(_) { handle_prev_chapter },
+          'g' => ->(_) { @reader.go_to_start },
+          'G' => ->(_) { @reader.go_to_end },
         }
       end
 
@@ -163,14 +172,23 @@ module EbookReader
         @reader.prev_chapter if @reader.current_chapter.positive?
       end
 
-      def handle_toc_input(key)
-        if toc_exit_key?(key)
-          @reader.switch_mode(:read)
-        elsif navigation_key?(key)
-          handle_toc_navigation(key)
-        elsif enter_key?(key)
-          handle_toc_selection
+      def toc_mode_handlers
+        nav_keys = {
+          'j' => true, "\e[B" => true, "\eOB" => true,
+          'k' => true, "\e[A" => true, "\eOA" => true
+        }
+        handlers = {
+          't' => ->(_) { @reader.switch_mode(:read) },
+          'T' => ->(_) { @reader.switch_mode(:read) },
+          "\r" => ->(_) { handle_toc_selection },
+          "\n" => ->(_) { handle_toc_selection },
+        }
+        nav_keys.each_key do |k|
+          handlers[k] = ->(key) { handle_toc_navigation(key) }
         end
+        # ESC as default exit
+        handlers[:__default__] = ->(k) { @reader.switch_mode(:read) if escape_key?(k) }
+        handlers
       end
 
       def toc_exit_key?(key)
@@ -191,14 +209,36 @@ module EbookReader
         @reader.send(:jump_to_chapter, chapter_index)
       end
 
-      def handle_bookmarks_input(key)
+      def bookmarks_mode_handlers
         bookmarks = @reader.instance_variable_get(:@bookmarks)
-
         if bookmarks.empty?
-          handle_empty_bookmarks_input(key)
+          { __default__: lambda { |k|
+            @reader.switch_mode(:read) if ['B'].include?(k) || escape_key?(k)
+          } }
         else
-          handle_populated_bookmarks_input(key, bookmarks)
+          handlers = {}
+          nav_keys = {
+            'j' => true, "\e[B" => true, "\eOB" => true,
+            'k' => true, "\e[A" => true, "\eOA" => true
+          }
+          nav_keys.each_key do |k|
+            handlers[k] = ->(key) { handle_bookmark_navigation_key(bookmarks, key) }
+          end
+          handlers['B'] = ->(_) { @reader.switch_mode(:read) }
+          handlers["\r"] = ->(_) { @reader.send(:jump_to_bookmark) }
+          handlers['d'] = ->(_) { @reader.send(:delete_selected_bookmark) }
+          handlers[:__default__] = ->(k) { @reader.switch_mode(:read) if escape_key?(k) }
+          handlers
         end
+      end
+
+      def handle_bookmark_navigation_key(bookmarks, key)
+        selected = handle_navigation_keys(
+          key,
+          @reader.instance_variable_get(:@bookmark_selected),
+          bookmarks.length - 1
+        )
+        @reader.instance_variable_set(:@bookmark_selected, selected)
       end
 
       def handle_populated_bookmarks_input(key, bookmarks)
@@ -234,11 +274,7 @@ module EbookReader
         @reader.switch_mode(:read) if ['B'].include?(key) || escape_key?(key)
       end
 
-      public :handle_navigation_input,
-             :scroll_down_with_max,
-             :next_page_with_params,
-             :prev_page_with_params,
-             :go_to_end_with_params
+      # All interaction is driven via #process_input; helper methods remain private.
     end
   end
 end

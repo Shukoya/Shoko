@@ -7,14 +7,23 @@ require_relative 'ui/screens/menu_screen'
 require_relative 'ui/screens/settings_screen'
 require_relative 'ui/screens/recent_screen'
 require_relative 'ui/screens/open_file_screen'
+require_relative 'ui/screens/annotations_screen'
+require_relative 'ui/screens/annotation_editor_screen'
 require_relative 'services/library_scanner'
 require_relative 'concerns/input_handler'
 require_relative 'main_menu/screen_manager'
+require_relative 'mouseable_reader'
+require_relative 'main_menu/actions/file_actions'
+require_relative 'main_menu/actions/search_actions'
+require_relative 'main_menu/actions/settings_actions'
 
 module EbookReader
   # Main menu (LazyVim style)
   class MainMenu
     include Concerns::InputHandler
+    include Actions::FileActions
+    include Actions::SearchActions
+    include Actions::SettingsActions
 
     def initialize
       setup_state
@@ -56,11 +65,13 @@ module EbookReader
 
     def setup_ui
       @renderer = UI::MainMenuRenderer.new(@config)
-      @browse_screen = UI::Screens::BrowseScreen.new(@scanner)
+      @browse_screen = UI::Screens::BrowseScreen.new(@scanner, @renderer)
       @menu_screen = UI::Screens::MenuScreen.new(@renderer, @selected)
       @settings_screen = UI::Screens::SettingsScreen.new(@config, @scanner)
-      @recent_screen = UI::Screens::RecentScreen.new(self)
-      @open_file_screen = UI::Screens::OpenFileScreen.new
+      @recent_screen = UI::Screens::RecentScreen.new(self, @renderer)
+      @open_file_screen = UI::Screens::OpenFileScreen.new(@renderer)
+      @annotations_screen = UI::Screens::AnnotationsScreen.new
+      @annotation_editor_screen = UI::Screens::AnnotationEditorScreen.new
     end
 
     def main_loop
@@ -129,13 +140,20 @@ module EbookReader
       @browse_selected = 0
     end
 
+    def switch_to_edit_annotation(annotation, book_path)
+      editor = instance_variable_get(:@annotation_editor_screen)
+      editor.set_annotation(annotation, book_path)
+      switch_to_mode(:annotation_editor)
+    end
+
     def handle_menu_selection
       case @selected
       when 0 then switch_to_browse
       when 1 then switch_to_mode(:recent)
-      when 2 then open_file_dialog
-      when 3 then switch_to_mode(:settings)
-      when 4 then cleanup_and_exit(0, '')
+      when 2 then switch_to_mode(:annotations)
+      when 3 then open_file_dialog
+      when 4 then switch_to_mode(:settings)
+      when 5 then cleanup_and_exit(0, '')
       end
     end
 
@@ -164,10 +182,6 @@ module EbookReader
         @scanner.scan_message = 'File not found'
         @scanner.scan_status = :error
       end
-    end
-
-    def handle_backspace
-      @input_handler.send(:handle_backspace)
     end
 
     def searchable_key?(key)
@@ -237,63 +251,6 @@ module EbookReader
       @open_file_screen.input = @file_input
     end
 
-    def handle_setting_change(key)
-      @input_handler.handle_setting_change(key)
-    end
-
-    def toggle_view_mode
-      @config.view_mode = @config.view_mode == :split ? :single : :split
-      @config.save
-    end
-
-    def toggle_page_numbers
-      @config.show_page_numbers = !@config.show_page_numbers
-      @config.save
-    end
-
-    def cycle_line_spacing
-      modes = %i[compact normal relaxed]
-      current = modes.index(@config.line_spacing) || 1
-      @config.line_spacing = modes[(current + 1) % 3]
-      @config.save
-    end
-
-    def toggle_highlight_quotes
-      @config.highlight_quotes = !@config.highlight_quotes
-      @config.save
-    end
-
-    def toggle_page_numbering_mode
-      @config.page_numbering_mode = @config.page_numbering_mode == :absolute ? :dynamic : :absolute
-      @config.save
-    end
-
-    def clear_cache
-      EPUBFinder.clear_cache
-      @scanner.epubs = []
-      @filtered_epubs = []
-      @scanner.scan_status = :idle
-      @scanner.scan_message = "Cache cleared! Use 'Find Book' to rescan"
-    end
-
-    def filter_books
-      @filtered_epubs = if @search_query.empty?
-                          @scanner.epubs
-                        else
-                          filter_by_query
-                        end
-      @browse_selected = 0
-    end
-
-    def filter_by_query
-      query = @search_query.downcase
-      @scanner.epubs.select do |book|
-        name = book['name'] || ''
-        path = book['path'] || ''
-        name.downcase.include?(query) || path.downcase.include?(query)
-      end
-    end
-
     def open_book(path)
       return file_not_found unless File.exist?(path)
 
@@ -307,7 +264,7 @@ module EbookReader
     def run_reader(path)
       Terminal.cleanup
       RecentFiles.add(path)
-      Reader.new(path, @config).run
+      MouseableReader.new(path, @config).run
     end
 
     def file_not_found
@@ -319,7 +276,14 @@ module EbookReader
       Infrastructure::Logger.error('Failed to open book', error: error.message, path: path)
       @scanner.scan_message = "Failed: #{error.class}: #{error.message[0, 60]}"
       @scanner.scan_status = :error
-      puts error.backtrace.join("\n") if EPUBFinder::DEBUG_MODE
+      def filter_by_query
+        query = @search_query.downcase
+        @scanner.epubs.select do |book|
+          name = book['name'] || ''
+          path = book['path'] || ''
+          name.downcase.include?(query) || path.downcase.include?(query)
+        end
+      end
     end
 
     def open_file_dialog

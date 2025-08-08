@@ -26,12 +26,23 @@ module EbookReader
       end
 
       def handle_input(key)
-        case key
-        when "\e" then reader.switch_mode(:read)
-        when "\x13" then save_annotation # Ctrl+S
-        when "\x7F", "\b" then handle_backspace
-        when "\r" then handle_enter
-        else handle_character(key)
+        return unless key
+
+        handlers = input_handlers
+        (handlers[key] || handlers[:__default__])&.call(key)
+      end
+
+      def input_handlers
+        @input_handlers ||= begin
+          h = {
+            "\e" => ->(_) { reader.switch_mode(:read) },
+            "\x13" => ->(_) { save_annotation },
+            "\x7F" => ->(_) { handle_backspace },
+            "\b" => ->(_) { handle_backspace },
+            "\r" => ->(_) { handle_enter },
+          }
+          h[:__default__] = ->(k) { handle_character(k) }
+          h
         end
       end
 

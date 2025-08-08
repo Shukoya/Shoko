@@ -33,6 +33,7 @@ module EbookReader
           [
             { key: 'f', icon: '', text: 'Find Book', desc: 'Browse all EPUBs' },
             { key: 'r', icon: '󰁯', text: 'Recent', desc: 'Recently opened books' },
+            { key: 'a', icon: '󰠮', text: 'Annotations', desc: 'View all annotations' },
             { key: 'o', icon: '󰷏', text: 'Open File', desc: 'Enter path manually' },
             { key: 's', icon: '', text: 'Settings', desc: 'Configure reader' },
             { key: 'q', icon: '󰿅', text: 'Quit', desc: 'Exit application' },

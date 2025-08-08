@@ -5,13 +5,9 @@ module EbookReader
     # Renders help and table of contents screens
     module ContentRenderer
       def draw_help_screen(height, width)
-        start_row = [(height - HELP_LINES.size) / 2, 1].max
-
-        HELP_LINES.each_with_index do |line, idx|
-          row = start_row + idx
-          break if row >= height - 2
-
-          draw_help_line(line, row, width)
+        # Delegate to ReaderRenderer for consistent rendering pattern
+        (@renderer || UI::ReaderRenderer.new(@config)).tap do |renderer|
+          renderer.send(:render_help_lines, height, width, HELP_LINES)
         end
       end
 
@@ -25,27 +21,14 @@ module EbookReader
       end
 
       def draw_toc_screen(height, width)
-        draw_toc_header(width)
-        draw_toc_list(height, width)
-        draw_toc_footer(height)
+        (@renderer || UI::ReaderRenderer.new(@config)).tap do |renderer|
+          renderer.send(:render_toc_screen, height, width, @doc, @toc_selected)
+        end
       end
 
-      def draw_toc_header(width)
-        Terminal.write(1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}📖 Table of Contents#{Terminal::ANSI::RESET}")
-        Terminal.write(1, [width - 30, 40].max,
-                       "#{Terminal::ANSI::DIM}[t/ESC] Back to Reading#{Terminal::ANSI::RESET}")
-      end
+      def draw_toc_header(_width); end
 
-      def draw_toc_list(height, width)
-        list_start = 4
-        list_height = height - 6
-        chapters = @doc.chapters
-        return if chapters.empty?
-
-        visible_range = calculate_toc_visible_range(list_height, chapters.length)
-        context = TocItemsContext.new(visible_range, chapters, list_start, width, @toc_selected)
-        draw_toc_items(context)
-      end
+      def draw_toc_list(_height, _width); end
 
       def calculate_toc_visible_range(list_height, chapter_count)
         visible_start = [@toc_selected - (list_height / 2), 0].max
@@ -75,10 +58,7 @@ module EbookReader
         end
       end
 
-      def draw_toc_footer(height)
-        Terminal.write(height - 1, 2,
-                       "#{Terminal::ANSI::DIM}↑↓ Navigate • Enter Jump • t/ESC Back#{Terminal::ANSI::RESET}")
-      end
+      def draw_toc_footer(_height); end
 
       private
 
