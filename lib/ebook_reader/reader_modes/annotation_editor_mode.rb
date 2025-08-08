@@ -37,13 +37,13 @@ module EbookReader
 
       private
 
-      def draw_header(width)
+      def draw_header(_width)
         title = @is_editing ? 'Editing Annotation' : 'Creating Annotation'
         terminal.write(1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}#{title}#{Terminal::ANSI::RESET}")
       end
 
-      def draw_selected_text(width)
-        text = "Selected: #{@selected_text.gsub("\n", " ")[0..60]}..."
+      def draw_selected_text(_width)
+        text = "Selected: #{@selected_text.tr("\n", ' ')[0..60]}..."
         terminal.write(2, 2, "#{Terminal::ANSI::DIM}#{text}#{Terminal::ANSI::RESET}")
       end
 
@@ -55,45 +55,46 @@ module EbookReader
         box_y = 5
         box_height = height - 8
         box_width = width - 4
-        
+
         draw_box(box_y, 2, box_height, box_width)
         draw_text_content(box_y + 1, 4, box_height - 2, box_width - 4)
       end
 
       def draw_box(y, x, height, width)
         # Top border
-        terminal.write(y, x, "╭" + ("─" * (width - 2)) + "╮")
-        terminal.write(y, x + 2, "[ Annotation Note ]")
-        
+        terminal.write(y, x, "╭#{'─' * (width - 2)}╮")
+        terminal.write(y, x + 2, '[ Annotation Note ]')
+
         # Side borders
-        (1...height - 1).each do |i|
-          terminal.write(y + i, x, "│")
-          terminal.write(y + i, x + width - 1, "│")
+        (1...(height - 1)).each do |i|
+          terminal.write(y + i, x, '│')
+          terminal.write(y + i, x + width - 1, '│')
         end
-        
+
         # Bottom border
-        terminal.write(y + height - 1, x, "╰" + ("─" * (width - 2)) + "╯")
+        terminal.write(y + height - 1, x, "╰#{'─' * (width - 2)}╯")
       end
 
       def draw_text_content(y, x, height, width)
         wrapped = word_wrap(@note, width)
-        
+
         wrapped.each_with_index do |line, i|
           break if i >= height
+
           terminal.write(y + i, x, Terminal::ANSI::WHITE + line + Terminal::ANSI::RESET)
         end
-        
+
         # Draw cursor
         cursor_lines = word_wrap(@note[0...@cursor_pos], width)
         cursor_y = y + cursor_lines.length - 1
         cursor_x = x + (cursor_lines.last || '').length
-        
-        terminal.write(cursor_y, cursor_x, Terminal::ANSI::BRIGHT_WHITE + '_' + Terminal::ANSI::RESET)
+
+        terminal.write(cursor_y, cursor_x, "#{Terminal::ANSI::BRIGHT_WHITE}_#{Terminal::ANSI::RESET}")
       end
 
       def draw_footer(height)
-        terminal.write(height - 1, 2, 
-          "#{Terminal::ANSI::DIM}Ctrl+S Save • ESC Cancel#{Terminal::ANSI::RESET}")
+        terminal.write(height - 1, 2,
+                       "#{Terminal::ANSI::DIM}Ctrl+S Save • ESC Cancel#{Terminal::ANSI::RESET}")
       end
 
       def save_annotation
@@ -111,10 +112,10 @@ module EbookReader
       end
 
       def handle_backspace
-        if @cursor_pos > 0
-          @note.slice!(@cursor_pos - 1)
-          @cursor_pos -= 1
-        end
+        return unless @cursor_pos.positive?
+
+        @note.slice!(@cursor_pos - 1)
+        @cursor_pos -= 1
       end
 
       def handle_enter
@@ -123,17 +124,18 @@ module EbookReader
       end
 
       def handle_character(key)
-        if key.length == 1 && key.ord >= 32 && key.ord < 127
-          @note.insert(@cursor_pos, key)
-          @cursor_pos += 1
-        end
+        return unless key.length == 1 && key.ord >= 32 && key.ord < 127
+
+        @note.insert(@cursor_pos, key)
+        @cursor_pos += 1
       end
 
       def word_wrap(text, width)
         return [''] if text.empty?
-        text.split("\n", -1).flat_map { |line| 
+
+        text.split("\n", -1).flat_map do |line|
           line.empty? ? [''] : line.scan(/.{1,#{width}}/)
-        }
+        end
       end
     end
   end

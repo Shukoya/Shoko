@@ -78,19 +78,4 @@ RSpec.describe 'Refactoring Integration' do
       end
     end
   end
-
-  context 'services' do
-    describe EbookReader::Services::ReaderNavigation do
-      let(:state) { EbookReader::Core::ReaderState.new }
-      let(:doc) { instance_double(EbookReader::EPUBDocument, chapter_count: 5) }
-      let(:config) { instance_double(EbookReader::Config, view_mode: :single) }
-      let(:nav) { described_class.new(state, doc, config) }
-
-      it 'navigates between chapters' do
-        expect(nav.can_go_to_next_chapter?).to be true
-        nav.go_to_next_chapter
-        expect(state.current_chapter).to eq(1)
-      end
-    end
-  end
 end

@@ -22,8 +22,8 @@ RSpec.describe EbookReader::Annotations::MouseHandler do
       handler.handle_event(button: 32, x: 3, y: 2, released: false)
       handler.handle_event(button: 0, x: 3, y: 2, released: true)
       range = handler.selection_range
-      expect(range[:start]).to eq(x:1, y:2)
-      expect(range[:end]).to eq(x:3, y:2)
+      expect(range[:start]).to eq(x: 1, y: 2)
+      expect(range[:end]).to eq(x: 3, y: 2)
       handler.reset
       expect(handler.selection_range).to be_nil
     end

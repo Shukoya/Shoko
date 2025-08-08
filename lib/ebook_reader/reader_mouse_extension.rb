@@ -9,14 +9,14 @@ module EbookReader
       base.class_eval do
         alias_method :initialize_without_mouse, :initialize
         alias_method :initialize, :initialize_with_mouse
-        
+
         alias_method :draw_screen_without_mouse, :draw_screen
         alias_method :draw_screen, :draw_screen_with_mouse
       end
     end
 
-    def initialize_with_mouse(*args)
-      initialize_without_mouse(*args)
+    def initialize_with_mouse(*)
+      initialize_without_mouse(*)
       @mouse_handler = Annotations::MouseHandler.new
       @popup_menu = nil
       @selected_text = nil
@@ -100,9 +100,9 @@ module EbookReader
     def handle_selection_end
       @selection_range = @mouse_handler.selection_range
       return unless @selection_range
-      
+
       @selected_text = extract_selected_text(@selection_range)
-      
+
       if @selected_text && !@selected_text.strip.empty?
         show_popup_menu
       else
@@ -113,16 +113,16 @@ module EbookReader
 
     def show_popup_menu
       return unless @selection_range
-      
+
       # Position menu below selected text
       end_pos = @selection_range[:end]
       menu_items = ['Create Annotation', 'Copy to Clipboard']
       menu_width = menu_items.map(&:length).max + 4 # Add padding
       menu_x = [end_pos[:x], Terminal.size[1] - menu_width].min
       menu_y = [end_pos[:y] + 1, Terminal.size[0] - 5].min
-      
+
       @popup_menu = UI::Components::PopupMenu.new(
-        menu_x, menu_y, 
+        menu_x, menu_y,
         menu_items
       )
       switch_mode(:popup_menu) # Switch to dedicated popup mode
@@ -133,17 +133,16 @@ module EbookReader
       when 'Create Annotation'
         # Important: Switch back to read mode BEFORE switching to annotation editor
         switch_mode(:read)
-        switch_mode(:annotation_editor, 
-          text: @selected_text, 
-          range: @selection_range,
-          chapter_index: @current_chapter
-        )
+        switch_mode(:annotation_editor,
+                    text: @selected_text,
+                    range: @selection_range,
+                    chapter_index: @current_chapter)
       when 'Copy to Clipboard'
         copy_to_clipboard(@selected_text)
         set_message('Copied to clipboard!')
         switch_mode(:read) # Switch back to read mode
       end
-      
+
       @popup_menu = nil
       @mouse_handler.reset
       @selection_range = nil
@@ -156,6 +155,7 @@ module EbookReader
 
     def highlight_saved_annotations
       return unless @annotations
+
       @annotations.select { |a| a['chapter_index'] == @current_chapter }
                   .each do |ann|
         highlight_range(ann['range'], Terminal::ANSI::BG_CYAN)
@@ -183,8 +183,8 @@ module EbookReader
         line_text = line_info[:text].dup
         line_start_col = line_info[:col]
 
-        start_idx = (y == start_y) ? start_x - line_start_col : 0
-        end_idx = (y == end_y) ? end_x - line_start_col : line_text.length - 1
+        start_idx = y == start_y ? start_x - line_start_col : 0
+        end_idx = y == end_y ? end_x - line_start_col : line_text.length - 1
 
         start_idx = [[start_idx, line_text.length - 1].min, 0].max
         end_idx = [[end_idx, line_text.length - 1].min, 0].max
@@ -192,9 +192,9 @@ module EbookReader
 
         # Build the new line with highlighting
         new_line = ''
-        new_line += line_text[0...start_idx] if start_idx > 0
+        new_line += line_text[0...start_idx] if start_idx.positive?
         new_line += "#{color}#{Terminal::ANSI::WHITE}#{line_text[start_idx..end_idx]}#{Terminal::ANSI::RESET}"
-        new_line += line_text[end_idx + 1..-1] if end_idx < line_text.length - 1
+        new_line += line_text[(end_idx + 1)..] if end_idx < line_text.length - 1
 
         Terminal.write(row, line_start_col, new_line)
       end
@@ -205,7 +205,7 @@ module EbookReader
     end
 
     def extract_selected_text(range)
-      return "" unless range && @rendered_lines
+      return '' unless range && @rendered_lines
 
       start_pos = range[:start]
       end_pos = range[:end]
@@ -219,15 +219,13 @@ module EbookReader
         line_text = line_info[:text]
         line_start_col = line_info[:col]
 
-        start_char_index = (y == start_pos[:y]) ? start_pos[:x] - line_start_col : 0
-        end_char_index = (y == end_pos[:y]) ? end_pos[:x] - line_start_col : line_text.length - 1
+        start_char_index = y == start_pos[:y] ? start_pos[:x] - line_start_col : 0
+        end_char_index = y == end_pos[:y] ? end_pos[:x] - line_start_col : line_text.length - 1
 
         start_char_index = [0, start_char_index].max
         end_char_index = [line_text.length - 1, end_char_index].min
 
-        if end_char_index >= start_char_index
-          text << line_text[start_char_index..end_char_index]
-        end
+        text << line_text[start_char_index..end_char_index] if end_char_index >= start_char_index
       end
 
       text.join("\n")
@@ -235,18 +233,16 @@ module EbookReader
 
     def copy_to_clipboard(text)
       cmd = case RUBY_PLATFORM
-      when /darwin/ then "pbcopy"
-      when /linux/
-        if system("which wl-copy > /dev/null 2>&1") 
-          "wl-copy"
-        elsif system("which xclip > /dev/null 2>&1")
-          "xclip -selection clipboard"
-        end
-      end
-      
-      if cmd
-        IO.popen(cmd, 'w') { |io| io.write(text) }
-      end
+            when /darwin/ then 'pbcopy'
+            when /linux/
+              if system('which wl-copy > /dev/null 2>&1')
+                'wl-copy'
+              elsif system('which xclip > /dev/null 2>&1')
+                'xclip -selection clipboard'
+              end
+            end
+
+      IO.popen(cmd, 'w') { |io| io.write(text) } if cmd
     rescue StandardError
       nil
     end

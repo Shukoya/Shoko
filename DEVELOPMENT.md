@@ -138,7 +138,7 @@ end
 
 ### Naming Conventions
 
-- **Classes**: `PascalCase` (e.g., `ReaderNavigation`)
+- **Classes**: `PascalCase` (e.g., `NavigationService`)
 - **Methods**: `snake_case` (e.g., `calculate_width`)
 - **Constants**: `SCREAMING_SNAKE_CASE` (e.g., `MAX_WIDTH`)
 - **Predicates**: End with `?` (e.g., `valid?`)

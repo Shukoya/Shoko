@@ -3,7 +3,7 @@
 require 'spec_helper'
 
 RSpec.describe EbookReader::UI::Components::PopupMenu do
-  let(:menu) { described_class.new(5, 5, ['One', 'Two']) }
+  let(:menu) { described_class.new(5, 5, %w[One Two]) }
 
   it 'tracks selected item with keyboard navigation' do
     expect(menu.get_selected_item).to eq('One')

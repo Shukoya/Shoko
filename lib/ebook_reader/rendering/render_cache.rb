@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'set'
-
 module EbookReader
   module Rendering
     # Cache for rendered regions with dirty tracking

@@ -161,7 +161,7 @@ The application follows a modular, layered architecture:
 
 ### Services Layer
 
-- **ReaderNavigation**: Navigation logic and state management
+- **NavigationService**: Navigation logic and state management
 - **BookmarkManager**: Bookmark persistence and retrieval
 - **ProgressManager**: Reading position tracking
 - **RecentFiles**: Recent file history management

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module EbookReader
-  class Reader
+  class ReaderController
     # Handles screen rendering coordination
     module DisplayHandler
       def draw_screen
@@ -14,18 +14,14 @@ module EbookReader
           Terminal.clear_buffer_cache if Terminal.respond_to?(:clear_buffer_cache)
         end
 
-        if full_redraw_needed?(size_changed)
-          Terminal.start_frame
-        end
+        Terminal.start_frame if full_redraw_needed?(size_changed)
 
         draw_header_if_changed(height, width, current_state)
         draw_content_if_changed(height, width, current_state)
         draw_footer_if_changed(height, width, current_state)
         draw_message(height, width) if @message
 
-        if full_redraw_needed?(size_changed)
-          Terminal.end_frame
-        end
+        Terminal.end_frame if full_redraw_needed?(size_changed)
 
         @last_rendered_state = current_state
       end
@@ -88,7 +84,7 @@ module EbookReader
 
         old_offset = @last_rendered_state[:page_offset]
         new_offset = state[:page_offset]
-        
+
         # We can only do differential updates for single-line scrolls
         if old_offset && (new_offset - old_offset).abs == 1
           shift_and_draw_single_line(old_offset, new_offset, height, width)
@@ -99,11 +95,11 @@ module EbookReader
 
       def shift_and_draw_single_line(old_offset, new_offset, height, width)
         direction = new_offset > old_offset ? :down : :up
-        
+
         # Define the scrollable content area (excluding header and footer)
         content_top = 2
         content_height = height - 2
-        
+
         Terminal.scroll_area(content_top, content_height, direction)
 
         # Now, draw the new line that has scrolled into view
@@ -117,40 +113,55 @@ module EbookReader
       def draw_new_line_in_split_view(direction, content_height, width)
         col_width, actual_height = get_layout_metrics(width, content_height)
         chapter_lines = get_wrapped_chapter_lines(col_width)
-        
-        left_offset, right_offset = (direction == :down) ? [@left_page + actual_height - 1, @right_page + actual_height - 1] : [@left_page, @right_page]
-        
+
+        left_offset, right_offset = if direction == :down
+                                      [@left_page + actual_height - 1,
+                                       @right_page + actual_height - 1]
+                                    else
+                                      [
+                                        @left_page, @right_page
+                                      ]
+                                    end
+
         # Draw left page line
         left_line = chapter_lines[left_offset]
         draw_line_at(left_line, direction == :down ? content_height : 1, 1, col_width) if left_line
 
         # Draw right page line
         right_line = chapter_lines[right_offset]
-        draw_line_at(right_line, direction == :down ? content_height : 1, col_width + 3, col_width) if right_line
+        return unless right_line
+
+        draw_line_at(right_line, direction == :down ? content_height : 1, col_width + 3,
+                     col_width)
       end
 
       def draw_new_line_in_single_view(direction, content_height, width)
         col_width, actual_height = get_layout_metrics(width, content_height)
         chapter_lines = get_wrapped_chapter_lines(col_width)
-        
-        line_offset = (direction == :down) ? @single_page + actual_height - 1 : @single_page
+
+        line_offset = direction == :down ? @single_page + actual_height - 1 : @single_page
         line_to_draw = chapter_lines[line_offset]
-        
+
         start_col = (width - col_width) / 2
-        draw_line_at(line_to_draw, direction == :down ? content_height : 1, start_col, col_width) if line_to_draw
+        return unless line_to_draw
+
+        draw_line_at(line_to_draw, direction == :down ? content_height : 1, start_col,
+                     col_width)
       end
 
       def get_wrapped_chapter_lines(col_width)
         # Simple caching mechanism for wrapped lines per chapter
         @wrapped_lines_cache ||= {}
-        @wrapped_lines_cache[@current_chapter] ||= wrap_lines(@doc.get_chapter(@current_chapter).lines, col_width)
+        @wrapped_lines_cache[@current_chapter] ||= wrap_lines(
+          @doc.get_chapter(@current_chapter).lines, col_width
+        )
       end
 
       def draw_line_at(text, row, col, width)
         # This is a simplified drawing method. In a real scenario, you'd
         # use the existing `draw_line` or a similar helper.
         Terminal.write(row, col, text.to_s.ljust(width)[0, width])
-        
+
         # Also update the @rendered_lines cache for the new line
         (@rendered_lines ||= {})[row] = { col: col, text: text.to_s }
       end

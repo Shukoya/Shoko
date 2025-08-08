@@ -54,7 +54,6 @@ require_relative 'ebook_reader/epub_document'
 
 # Core reader components
 require_relative 'ebook_reader/core/reader_state'
-require_relative 'ebook_reader/services/reader_navigation'
 require_relative 'ebook_reader/services/navigation_service'
 require_relative 'ebook_reader/services/bookmark_service'
 require_relative 'ebook_reader/services/state_service'

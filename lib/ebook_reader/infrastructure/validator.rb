@@ -49,6 +49,28 @@ module EbookReader
 
       RangeValidationContext = Struct.new(:value, :range, :field, :message)
       FormatValidationContext = Struct.new(:value, :pattern, :field, :message)
+
+      # Validate that a value falls within a range
+      #
+      # @param context [RangeValidationContext] Validation parameters
+      # @return [Boolean] Validation result
+      def range_valid?(context)
+        return true if context.range.include?(context.value)
+
+        add_error(context.field, context.message || 'must be between')
+        false
+      end
+
+      # Validate that a value matches a regular expression pattern
+      #
+      # @param context [FormatValidationContext] Validation parameters
+      # @return [Boolean] Validation result
+      def format_valid?(context)
+        return true if context.value&.match?(context.pattern)
+
+        add_error(context.field, context.message || 'has invalid format')
+        false
+      end
     end
   end
 end

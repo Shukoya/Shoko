@@ -43,6 +43,7 @@ module EbookReader
         wrapped = []
         lines.each do |line|
           next if line.nil?
+
           if line.strip.empty?
             wrapped << ''
           else
@@ -57,6 +58,7 @@ module EbookReader
         current = ''
         words.each do |word|
           next if word.nil?
+
           if current.empty?
             current = word
           elsif current.length + 1 + word.length <= width

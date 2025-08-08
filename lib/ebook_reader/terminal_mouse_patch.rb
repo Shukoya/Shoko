@@ -27,6 +27,7 @@ module EbookReader
           while input[-1] != 'm' && input[-1] != 'M'
             extra = read_key
             break unless extra
+
             input += extra
           end
         end

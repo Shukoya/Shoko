@@ -63,8 +63,8 @@ module EbookReader
         end
 
         def contains?(x, y)
-          x >= @x && x < (@x + @width) && 
-          y >= @y && y < (@y + @height)
+          x >= @x && x < (@x + @width) &&
+            y >= @y && y < (@y + @height)
         end
 
         private
@@ -76,7 +76,8 @@ module EbookReader
         def draw_shadow
           # A more subtle, modern shadow
           (0...@height).each do |i|
-            Terminal.write(@y + i + 1, @x + 1, "#{Terminal::ANSI::BG_GREY} #{Terminal::ANSI::RESET}" * @width)
+            Terminal.write(@y + i + 1, @x + 1,
+                           "#{Terminal::ANSI::BG_GREY} #{Terminal::ANSI::RESET}" * @width)
           end
         end
 

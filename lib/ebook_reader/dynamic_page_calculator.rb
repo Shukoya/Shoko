@@ -106,7 +106,9 @@ module EbookReader
 
     def size_changed?(width, height)
       changed = width != @last_dynamic_width || height != @last_dynamic_height
-      @chapter_cache&.clear_cache_for_width(@last_dynamic_width) if changed && defined?(@chapter_cache)
+      if changed && defined?(@chapter_cache)
+        @chapter_cache&.clear_cache_for_width(@last_dynamic_width)
+      end
       changed
     end
   end

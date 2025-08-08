@@ -136,7 +136,7 @@ module EbookReader
 
       (@rendered_lines ||= {})[params.position.row] = {
         col: params.position.col,
-        text: line_text
+        text: line_text,
       }
     end
 

@@ -14,12 +14,12 @@ module EbookReader
     include ReaderMouseExtension
 
     # Override switch_mode to support annotation modes
-    alias_method :switch_mode_original, :switch_mode
-    def switch_mode(mode, **options)
+    alias switch_mode_original switch_mode
+    def switch_mode(mode, **)
       case mode
       when :annotation_editor
         @mode = :annotation_editor
-        @current_mode = ReaderModes::AnnotationEditorMode.new(self, **options)
+        @current_mode = ReaderModes::AnnotationEditorMode.new(self, **)
       when :annotations
         @mode = :annotations
         @current_mode = ReaderModes::AnnotationsMode.new(self)
@@ -29,7 +29,7 @@ module EbookReader
     end
 
     # Override run to enable mouse
-    alias_method :run_original, :run
+    alias run_original run
     def run
       Terminal.enable_mouse
       run_original
@@ -38,7 +38,7 @@ module EbookReader
     end
 
     # Override main_loop to handle mouse input
-    alias_method :read_input_keys_original, :read_input_keys
+    alias read_input_keys_original read_input_keys
     def read_input_keys
       key = Terminal.read_input_with_mouse
       return [] unless key

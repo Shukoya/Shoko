@@ -15,16 +15,16 @@ module EbookReader
         def add(epub_path, text, note, range, chapter_index)
           annotations = load_all
           book_annotations = annotations[epub_path] || []
-          
+
           new_annotation = {
             'id' => Time.now.to_f,
             'text' => text,
             'note' => note,
             'range' => range,
             'chapter_index' => chapter_index,
-            'created_at' => Time.now.iso8601
+            'created_at' => Time.now.iso8601,
           }
-          
+
           book_annotations << new_annotation
           annotations[epub_path] = book_annotations
           save_all(annotations)
@@ -37,13 +37,13 @@ module EbookReader
         def update(epub_path, id, note)
           annotations = load_all
           book_annotations = annotations[epub_path] || []
-          
+
           annotation = book_annotations.find { |a| a['id'] == id }
-          if annotation
-            annotation['note'] = note
-            annotation['updated_at'] = Time.now.iso8601
-            save_all(annotations)
-          end
+          return unless annotation
+
+          annotation['note'] = note
+          annotation['updated_at'] = Time.now.iso8601
+          save_all(annotations)
         end
 
         def delete(epub_path, id)
@@ -58,6 +58,7 @@ module EbookReader
 
         def load_all
           return {} unless File.exist?(ANNOTATIONS_FILE)
+
           JSON.parse(File.read(ANNOTATIONS_FILE))
         rescue StandardError
           {}

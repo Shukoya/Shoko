@@ -15,10 +15,10 @@ module EbookReader
         return nil unless input =~ /\e\[<(\d+);(\d+);(\d+)([Mm])/
 
         {
-          button: $1.to_i,
-          x: $2.to_i - 1, # Convert to 0-based
-          y: $3.to_i - 1,
-          released: $4 == 'm'
+          button: ::Regexp.last_match(1).to_i,
+          x: ::Regexp.last_match(2).to_i - 1, # Convert to 0-based
+          y: ::Regexp.last_match(3).to_i - 1,
+          released: ::Regexp.last_match(4) == 'm',
         }
       end
 
@@ -26,12 +26,11 @@ module EbookReader
       def handle_event(event)
         return nil unless event
 
-        case
-        when event[:button] == 0 && !event[:released] # Left button pressed
+        if event[:button].zero? && !event[:released] # Left button pressed
           start_selection(event[:x], event[:y])
-        when event[:button] == 32 && @selecting # Mouse dragged
+        elsif event[:button] == 32 && @selecting # Mouse dragged
           update_selection(event[:x], event[:y])
-        when event[:released] && @selecting # Button released
+        elsif event[:released] && @selecting # Button released
           finish_selection
         end
       end
@@ -44,7 +43,7 @@ module EbookReader
         end_pos = @selection_end
 
         # Ensure start comes before end
-        if start_pos[:y] > end_pos[:y] || 
+        if start_pos[:y] > end_pos[:y] ||
            (start_pos[:y] == end_pos[:y] && start_pos[:x] > end_pos[:x])
           start_pos, end_pos = end_pos, start_pos
         end
