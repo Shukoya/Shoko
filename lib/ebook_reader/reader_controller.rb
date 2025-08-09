@@ -8,13 +8,11 @@ require_relative 'constants/ui_constants'
 require_relative 'errors'
 require_relative 'constants/messages'
 require_relative 'helpers/reader_helpers'
-require_relative 'ui/reader_renderer'
 require_relative 'concerns/input_handler'
 require_relative 'core/reader_state'
 require_relative 'services/navigation_service'
 require_relative 'services/bookmark_service'
 require_relative 'services/state_service'
-require_relative 'renderers/components/text_renderer'
 require_relative 'dynamic_page_calculator'
 require_relative 'presenters/reader_presenter'
 require_relative 'rendering/render_cache'
@@ -142,8 +140,9 @@ module EbookReader
       # Special-case full-screen modes that render their own UI
       if @state.mode == :annotation_editor && @current_mode
         # Clear the frame area to avoid artifacts from reading view
-        blank = ' ' * width
-        (1..height).each { |row| Terminal.write(row, 1, blank) }
+        surface = Components::Surface.new(Terminal)
+        bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
+        surface.fill(bounds, ' ')
         @current_mode.draw(height, width)
         Terminal.end_frame
         return

@@ -16,23 +16,45 @@ module EbookReader
           @selected_annotation_index = 0
           @scroll_offset = 0
           @popup = nil
-          @renderer = UI::MainMenuRenderer.new(EbookReader::Config.new)
+          @renderer = nil
         end
 
         def draw(height, width)
-          @renderer.render_annotations_screen(
-            UI::MainMenuRenderer::AnnotationsContext.new(
-              height: height,
-              width: width,
-              books: @books,
-              annotations_by_book: @annotations_by_book,
-              selected_book_index: @selected_book_index,
-              selected_annotation_index: @selected_annotation_index,
-              popup: @popup && UI::MainMenuRenderer::PopupContext.new(
-                title: @popup[:title], text: @popup[:text], visible: true
-              )
-            )
-          )
+          surface = EbookReader::Components::Surface.new(Terminal)
+          bounds = EbookReader::Components::Rect.new(x: 1, y: 1, width: width, height: height)
+
+          if @popup
+            render_popup(surface, bounds, height, width)
+            return
+          end
+
+          surface.write(bounds, 1, 2, Terminal::ANSI::BOLD + 'All Annotations' + Terminal::ANSI::RESET)
+          surface.write(bounds, 2, 1, Terminal::ANSI::DIM + ('─' * width) + Terminal::ANSI::RESET)
+
+          row = 4
+          @books.each_with_index do |book_path, i|
+            break if row > height - 3
+
+            book_title = File.basename(book_path.to_s, '.epub')
+            if i == @selected_book_index
+              surface.write(bounds, row, 2, Terminal::ANSI::BRIGHT_BLUE + '‣ ' + book_title + Terminal::ANSI::RESET)
+              row += 1
+              (@annotations_by_book[book_path] || []).each_with_index do |annotation, j|
+                break if row > height - 3
+                render_annotation_item(surface, bounds, annotation, j, row, width, j == @selected_annotation_index)
+                row += 2
+              end
+            else
+              surface.write(bounds, row, 2, '  ' + book_title)
+              row += 1
+            end
+
+            row += 1
+          end
+
+          footer_text = '↑↓/jk: Navigate | Enter: Edit | d: Delete | q: Back'
+          surface.write(bounds, height - 1, 2, Terminal::ANSI::DIM + footer_text + Terminal::ANSI::RESET)
+          surface.write(bounds, height - 2, 1, Terminal::ANSI::DIM + ('─' * width) + Terminal::ANSI::RESET)
         end
 
         def show_annotation_popup
@@ -78,7 +100,45 @@ module EbookReader
         end
 
         private
+
+        def render_annotation_item(surface, bounds, annotation, index, row, width, selected)
+          text = annotation['text'].to_s.tr("\n", ' ').strip
+          note = annotation['note'].to_s.tr("\n", ' ').strip
+          color = selected ? Terminal::ANSI::BRIGHT_WHITE : Terminal::ANSI::WHITE
+          surface.write(bounds, row, 4, color + "• #{text[0, width - 6]}" + Terminal::ANSI::RESET)
+          surface.write(bounds, row + 1, 6, Terminal::ANSI::DIM + note[0, width - 8] + Terminal::ANSI::RESET)
+        end
+
+        def render_popup(surface, bounds, height, width)
+          title = @popup[:title]
+          text = @popup[:text]
+          lines = text.to_s.split("\n")
+
+          box_width = [lines.map(&:length).max.to_i + 4, title.length + 4, 20].max.clamp(20, width - 4)
+          box_height = [lines.length + 4, 5].max.clamp(5, height - 4)
+          start_row = [(height - box_height) / 2, 2].max
+          start_col = [(width - box_width) / 2, 2].max
+
+          # Box border
+          surface.write(bounds, start_row, start_col, '╭' + ('─' * (box_width - 2)) + '╮')
+          surface.write(bounds, start_row, start_col + 2, '[ Annotation ]')
+          (1...(box_height - 1)).each do |i|
+            surface.write(bounds, start_row + i, start_col, '│')
+            surface.write(bounds, start_row + i, start_col + box_width - 1, '│')
+          end
+          surface.write(bounds, start_row + box_height - 1, start_col, '╰' + ('─' * (box_width - 2)) + '╯')
+
+          # Title and content
+          surface.write(bounds, start_row + 1, start_col + 2, Terminal::ANSI::BRIGHT_WHITE + title + Terminal::ANSI::RESET)
+          lines.each_with_index do |line, i|
+            break if i >= box_height - 4
+            surface.write(bounds, start_row + 2 + i, start_col + 2,
+                          Terminal::ANSI::WHITE + line[0, box_width - 4] + Terminal::ANSI::RESET)
+          end
+        end
       end
     end
   end
 end
+require_relative '../../components/surface'
+require_relative '../../components/rect'

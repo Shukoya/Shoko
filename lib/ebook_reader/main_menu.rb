@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'ui/main_menu_renderer'
-require_relative 'ui/recent_item_renderer'
 require_relative 'ui/screens/browse_screen'
 require_relative 'ui/screens/menu_screen'
 require_relative 'ui/screens/settings_screen'
@@ -62,12 +60,12 @@ module EbookReader
     end
 
     def setup_ui
-      @renderer = UI::MainMenuRenderer.new(@config)
-      @browse_screen = UI::Screens::BrowseScreen.new(@scanner, @renderer)
-      @menu_screen = UI::Screens::MenuScreen.new(@renderer, @state.selected)
+      @renderer = nil
+      @browse_screen = UI::Screens::BrowseScreen.new(@scanner)
+      @menu_screen = UI::Screens::MenuScreen.new(nil, @state.selected)
       @settings_screen = UI::Screens::SettingsScreen.new(@config, @scanner)
-      @recent_screen = UI::Screens::RecentScreen.new(self, @renderer)
-      @open_file_screen = UI::Screens::OpenFileScreen.new(@renderer)
+      @recent_screen = UI::Screens::RecentScreen.new(self)
+      @open_file_screen = UI::Screens::OpenFileScreen.new(nil)
       @annotations_screen = UI::Screens::AnnotationsScreen.new
       @annotation_editor_screen = UI::Screens::AnnotationEditorScreen.new
     end

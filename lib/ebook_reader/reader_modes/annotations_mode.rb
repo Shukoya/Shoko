@@ -13,9 +13,10 @@ module EbookReader
         @selected_annotation = 0
       end
 
-      def draw(_height, _width)
-        Terminal.clear
-        Terminal.write(1, 2, "Annotations for #{File.basename(reader.path)}")
+      def draw(height, width)
+        surface = Components::Surface.new(Terminal)
+        bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
+        surface.write(bounds, 1, 2, "Annotations for #{File.basename(reader.path)}")
 
         return if @annotations.empty?
 
@@ -26,8 +27,8 @@ module EbookReader
           display_text = "#{i == @selected_annotation ? '> ' : '  '} \"#{text[0, 30]}...\""
           display_note = "    Note: #{note[0, 40]}..."
 
-          Terminal.write((i * 2) + 3, 4, display_text)
-          Terminal.write((i * 2) + 4, 4, display_note)
+          surface.write(bounds, (i * 2) + 3, 4, display_text)
+          surface.write(bounds, (i * 2) + 4, 4, display_note)
         end
       end
 

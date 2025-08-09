@@ -17,10 +17,7 @@ module EbookReader
           @height = @items.length
         end
 
-        def render
-          return unless @visible
-          draw_menu_items
-        end
+        # Non-surface render path removed to enforce Surface-only writes
 
         # Component-friendly render path using Surface within given bounds
         def render_with_surface(surface, root_bounds)
@@ -79,29 +76,7 @@ module EbookReader
           @items.map(&:length).max + 4
         end
 
-        def draw_menu_items
-          @items.each_with_index do |item, i|
-            draw_menu_item(item, i)
-          end
-        end
-
-        def draw_menu_item(item, index)
-          item_y = @y + index
-          is_selected = (index == @selected_index)
-
-          # High-contrast colors for clear visibility
-          bg = is_selected ? Terminal::ANSI::BG_BRIGHT_YELLOW : Terminal::ANSI::BG_DARK
-          fg = is_selected ? Terminal::ANSI::BLACK : Terminal::ANSI::WHITE
-
-          # Clear the line with the background color first
-          Terminal.write(item_y, @x, "#{bg}#{' ' * @width}#{Terminal::ANSI::RESET}")
-
-          # Render the text with an icon
-          icon = is_selected ? '❯' : ' '
-          line_text = " #{icon} #{item} ".ljust(@width)
-
-          Terminal.write(item_y, @x, "#{bg}#{fg}#{line_text}#{Terminal::ANSI::RESET}")
-        end
+        # draw_menu_item removed; use draw_menu_item_with_surface instead
 
         def draw_menu_item_with_surface(surface, bounds, item, index)
           item_y = @y + index

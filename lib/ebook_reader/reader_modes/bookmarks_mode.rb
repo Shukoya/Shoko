@@ -14,16 +14,8 @@ module EbookReader
         @bookmarks = reader.send(:bookmarks)
       end
 
-      def draw(height, width)
-        renderer = reader.instance_variable_get(:@renderer)
-        context = UI::ReaderRenderer::BookmarksContext.new(
-          height: height,
-          width: width,
-          doc: reader.send(:doc),
-          bookmarks: @bookmarks,
-          selected: @selected
-        )
-        renderer.render_bookmarks_screen(context)
+      def draw(_height, _width)
+        # Drawing handled by component-based layout (ContentComponent/FooterComponent)
       end
 
       def handle_input(key)

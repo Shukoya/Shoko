@@ -39,11 +39,6 @@ module EbookReader
         highlight_selection if @mouse_handler.selecting || @state.selection
       end
 
-      # Ensure the popup menu is drawn last and fully visible
-      if @state.mode == :popup_menu && @popup_menu&.visible
-        @popup_menu.render
-      end
-
       Terminal.end_frame
     end
 
@@ -186,6 +181,8 @@ module EbookReader
       end_x   = end_pos[:x] || end_pos['x']
       return unless start_y && end_y && start_x && end_x
 
+      surface = Components::Surface.new(Terminal)
+      bounds = Components::Rect.new(x: 1, y: 1, width: Terminal.size[1], height: Terminal.size[0])
       (start_y..end_y).each do |y|
         row = y + 1
         line_info = @rendered_lines[row]
@@ -204,7 +201,7 @@ module EbookReader
         new_line += "#{color}#{Terminal::ANSI::WHITE}#{line_text[start_idx..end_idx]}#{Terminal::ANSI::RESET}"
         new_line += line_text[(end_idx + 1)..] if end_idx < line_text.length - 1
 
-        Terminal.write(row, line_start_col, new_line)
+        surface.write(bounds, row, line_start_col, new_line)
       end
     end
 
