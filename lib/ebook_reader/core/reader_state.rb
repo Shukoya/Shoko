@@ -8,54 +8,87 @@ module EbookReader
     # This class encapsulates all mutable state for the Reader,
     # making it easier to test and reason about state changes.
     class ReaderState
-      # Current chapter index (0-based)
-      attr_accessor :current_chapter
+      # Lightweight observable implementation tailored for field changes
+      def self.attr_state(*fields)
+        fields.each do |field|
+          define_method(field) do
+            instance_variable_get(:"@#{field}")
+          end
 
-      # Current page offset in split view mode
-      attr_accessor :left_page, :right_page
+          define_method(:"#{field}=") do |value|
+            update(field, value)
+          end
+        end
+      end
 
-      # Current page offset in single view mode
-      attr_accessor :single_page
-
-      # Current reader mode (:read, :help, :toc, :bookmarks)
-      attr_accessor :mode
-
-      # Selected item in ToC view
-      attr_accessor :toc_selected
-
-      # Selected item in bookmarks view
-      attr_accessor :bookmark_selected
-
-      # Temporary message to display
-      attr_accessor :message
-
-      # Whether the reader is still running
-      attr_accessor :running
-
-      # Cached page map for navigation
-      attr_accessor :page_map
-
-      # Total pages across all chapters
-      attr_accessor :total_pages
-
-      # Current page index for dynamic pagination
-      attr_accessor :current_page_index
-
-      # Array storing page count per chapter when in dynamic mode
-      attr_accessor :pages_per_chapter
-
-      # Last known terminal dimensions
-      attr_accessor :last_width, :last_height
-
-      # Dynamic pagination caches/state
-      attr_accessor :dynamic_page_map, :dynamic_total_pages,
-                    :dynamic_chapter_starts, :last_dynamic_width,
-                    :last_dynamic_height
-
-      # Initialize a new reader state
       def initialize
+        @observers_by_field = Hash.new { |h, k| h[k] = [] }
+        @observers_all = []
         reset_to_defaults
       end
+
+      # Register an observer for specific fields (or all if none given)
+      # Observer should respond to `state_changed(field, old, new)`
+      def add_observer(observer, *fields)
+        if fields.nil? || fields.empty?
+          @observers_all << observer unless @observers_all.include?(observer)
+        else
+          fields.each do |f|
+            list = @observers_by_field[f]
+            list << observer unless list.include?(observer)
+          end
+        end
+      end
+
+      def remove_observer(observer)
+        @observers_all.delete(observer)
+        @observers_by_field.each_value { |list| list.delete(observer) }
+      end
+
+      # Update a field and notify observers if changed
+      def update(field, value)
+        iv = :"@#{field}"
+        old_value = instance_variable_get(iv)
+        return value if old_value == value
+
+        instance_variable_set(iv, value)
+        notify_observers(field, old_value, value)
+        value
+      end
+
+      def notify_observers(field, old_value, new_value)
+        # Specific field observers first
+        @observers_by_field[field].each do |obs|
+          safe_notify(obs, field, old_value, new_value)
+        end
+        # Then general observers
+        @observers_all.each do |obs|
+          safe_notify(obs, field, old_value, new_value)
+        end
+      end
+
+      def safe_notify(observer, field, old_value, new_value)
+        return unless observer.respond_to?(:state_changed)
+        observer.state_changed(field, old_value, new_value)
+      rescue StandardError
+        # Swallow notifications errors to avoid breaking app flow
+        nil
+      end
+
+      # === State fields ===
+      # Core reading fields
+      attr_state :current_chapter, :left_page, :right_page, :single_page, :mode, :selection
+      # Selections / lists
+      attr_state :toc_selected, :bookmark_selected
+      # Messaging & running
+      attr_state :message, :running
+      # Pagination maps
+      attr_state :page_map, :total_pages, :current_page_index, :pages_per_chapter
+      # Terminal sizing
+      attr_state :last_width, :last_height
+      # Dynamic pagination caches/state
+      attr_state :dynamic_page_map, :dynamic_total_pages, :dynamic_chapter_starts,
+                 :last_dynamic_width, :last_dynamic_height
 
       # Reset all state to initial values
       def reset_to_defaults
@@ -126,8 +159,8 @@ module EbookReader
       # @param width [Integer] New width
       # @param height [Integer] New height
       def update_terminal_size(width, height)
-        @last_width = width
-        @last_height = height
+        self.last_width = width
+        self.last_height = height
       end
 
       # Create a snapshot of current state for persistence
@@ -146,9 +179,9 @@ module EbookReader
       #
       # @param snapshot [Hash] State snapshot
       def restore_from(snapshot)
-        @current_chapter = snapshot['current_chapter'] || 0
+        self.current_chapter = snapshot['current_chapter'] || 0
         self.page_offset = snapshot['page_offset'] || 0
-        @mode = (snapshot['mode'] || 'read').to_sym
+        self.mode = (snapshot['mode'] || 'read').to_sym
       end
 
       # Determine if reader is using dynamic page mode

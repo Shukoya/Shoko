@@ -16,7 +16,7 @@ module EbookReader
       @mouse_handler = Annotations::MouseHandler.new
       @popup_menu = nil
       @selected_text = nil
-      @selection_range = nil
+      @state.selection = nil
       @rendered_lines = {}
       refresh_annotations
     end
@@ -29,12 +29,20 @@ module EbookReader
     end
 
     def draw_screen
+      # Render the base UI via components
       @rendered_lines.clear
-      ReaderController::DisplayHandler.instance_method(:draw_screen).bind(self).call
+      super
 
-      highlight_saved_annotations
-      highlight_selection if @mouse_handler.selecting || @selection_range
-      @popup_menu&.render
+      # Overlays for mouse selection/annotations (reading and popup menu)
+      if [:read, :popup_menu].include?(@state.mode)
+        highlight_saved_annotations
+        highlight_selection if @mouse_handler.selecting || @state.selection
+      end
+
+      # Ensure the popup menu is drawn last and fully visible
+      if @state.mode == :popup_menu && @popup_menu&.visible
+        @popup_menu.render
+      end
 
       Terminal.end_frame
     end
@@ -89,37 +97,38 @@ module EbookReader
       else
         @popup_menu = nil
         @mouse_handler.reset
-        @selection_range = nil
+        @state.selection = nil
       end
       draw_screen
     end
 
     def refresh_highlighting
       height, width = Terminal.size
-      draw_reading_content(height, width)
+      # Re-render content area only
+      super
       highlight_saved_annotations
       highlight_selection
       Terminal.end_frame
     end
 
     def handle_selection_end
-      @selection_range = @mouse_handler.selection_range
-      return unless @selection_range
+      @state.selection = @mouse_handler.selection_range
+      return unless @state.selection
 
-      @selected_text = extract_selected_text(@selection_range)
+      @selected_text = extract_selected_text(@state.selection)
 
       if @selected_text && !@selected_text.strip.empty?
         show_popup_menu
       else
         @mouse_handler.reset
-        @selection_range = nil
+        @state.selection = nil
       end
     end
 
     def show_popup_menu
-      return unless @selection_range
+      return unless @state.selection
 
-      end_pos = @selection_range[:end]
+      end_pos = @state.selection[:end]
       menu_items = ['Create Annotation', 'Copy to Clipboard']
       menu_width = menu_items.map(&:length).max + 4
       menu_x = [end_pos[:x], Terminal.size[1] - menu_width].min
@@ -127,6 +136,8 @@ module EbookReader
 
       @popup_menu = UI::Components::PopupMenu.new(menu_x, menu_y, menu_items)
       switch_mode(:popup_menu)
+      # Draw immediately so the menu appears in full without extra input
+      draw_screen
     end
 
     def handle_popup_action(action)
@@ -135,7 +146,7 @@ module EbookReader
         switch_mode(:read)
         switch_mode(:annotation_editor,
                     text: @selected_text,
-                    range: @selection_range,
+                    range: @state.selection,
                     chapter_index: @state.current_chapter)
       when 'Copy to Clipboard'
         copy_to_clipboard(@selected_text)
@@ -145,11 +156,11 @@ module EbookReader
 
       @popup_menu = nil
       @mouse_handler.reset
-      @selection_range = nil
+      @state.selection = nil
     end
 
     def highlight_selection
-      range = @mouse_handler.selection_range || @selection_range
+      range = @mouse_handler.selection_range || @state.selection
       highlight_range(range, Terminal::ANSI::BG_BLUE) if range
     end
 

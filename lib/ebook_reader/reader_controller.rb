@@ -16,11 +16,17 @@ require_relative 'services/bookmark_service'
 require_relative 'services/state_service'
 require_relative 'renderers/components/text_renderer'
 require_relative 'dynamic_page_calculator'
-require_relative 'reader_display'
-require_relative 'reader_controller/display_handler'
 require_relative 'presenters/reader_presenter'
 require_relative 'rendering/render_cache'
 require_relative 'services/chapter_cache'
+require_relative 'components/surface'
+require_relative 'components/rect'
+require_relative 'components/layouts/vertical'
+require_relative 'components/header_component'
+require_relative 'components/content_component'
+require_relative 'components/footer_component'
+require_relative 'components/popup_overlay_component'
+require_relative 'input/dispatcher'
 
 module EbookReader
   # Main reader interface for displaying EPUB content.
@@ -46,8 +52,7 @@ module EbookReader
     include Helpers::ReaderHelpers
     include Concerns::InputHandler
     include DynamicPageCalculator
-    include ReaderDisplay
-    include ReaderController::DisplayHandler
+    # All rendering is now component-based
 
     # All reader state should live in @state (Core::ReaderState)
     attr_reader :doc, :config, :page_manager, :path
@@ -56,7 +61,6 @@ module EbookReader
       @path = epub_path
       @config = config
       @state = Core::ReaderState.new
-      @renderer = UI::ReaderRenderer.new(@config)
       @presenter = Presenters::ReaderPresenter.new(self, @config)
       load_document
       @page_manager = Services::PageManager.new(@doc, @config) if @doc
@@ -69,6 +73,8 @@ module EbookReader
       @render_cache = Rendering::RenderCache.new
       @chapter_cache = Services::ChapterCache.new
       @last_rendered_state = {}
+      build_component_layout
+      setup_input_dispatcher
     end
 
     # State accessors (delegate to @state) for compatibility
@@ -119,7 +125,47 @@ module EbookReader
       Terminal.cleanup
     end
 
-    # draw_screen provided by DisplayHandler
+    # Component-based drawing
+    def draw_screen
+      height, width = Terminal.size
+
+      # Update page maps on resize
+      if size_changed?(width, height)
+        refresh_page_map(width, height)
+        @chapter_cache&.clear_cache_for_width(@state.last_width) if defined?(@chapter_cache)
+      end
+
+      # Prepare frame
+      Terminal.start_frame
+      @state.update_terminal_size(width, height)
+
+      # Special-case full-screen modes that render their own UI
+      if @state.mode == :annotation_editor && @current_mode
+        # Clear the frame area to avoid artifacts from reading view
+        blank = ' ' * width
+        (1..height).each { |row| Terminal.write(row, 1, blank) }
+        @current_mode.draw(height, width)
+        Terminal.end_frame
+        return
+      end
+
+      # Default: component-driven layout
+      @rendered_lines = {}
+      surface = Components::Surface.new(Terminal)
+      root_bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
+      @layout.render(surface, root_bounds)
+      # Render overlay components (e.g., popup menus) last
+      @overlay ||= Components::PopupOverlayComponent.new(self)
+      @overlay.render(surface, root_bounds)
+      # Note: MouseableReader will call Terminal.end_frame after overlays
+    end
+
+    # Partial refresh hook for subclasses.
+    # By default, re-renders the current screen without ending the frame.
+    # MouseableReader layers selection/annotation highlights on top and then ends the frame.
+    def refresh_highlighting
+      draw_screen
+    end
 
     def switch_mode(mode, **)
       @state.mode = mode
@@ -136,6 +182,10 @@ module EbookReader
       else
         @current_mode = nil
       end
+      # Activate appropriate input bindings stack
+      stack = [:read]
+      stack << mode if mode && mode != :read
+      @dispatcher.activate_stack(stack) if defined?(@dispatcher)
     end
 
     def scroll_down
@@ -294,6 +344,168 @@ module EbookReader
     end
 
     private
+    def build_component_layout
+      @layout = Components::Layouts::Vertical.new([
+        Components::HeaderComponent.new(self),
+        Components::ContentComponent.new(self),
+        Components::FooterComponent.new(self),
+      ])
+    end
+
+    def setup_input_dispatcher
+      @dispatcher = Input::Dispatcher.new(self)
+      register_reading_bindings
+      register_help_bindings
+      register_toc_bindings
+      register_bookmarks_bindings
+      register_annotation_editor_bindings
+      register_popup_bindings
+      @dispatcher.activate_stack([:read])
+    end
+
+    def register_reading_bindings
+      bindings = {}
+      ['j', "\e[B", "\eOB"].each { |k| bindings[k] = :scroll_down }
+      ['k', "\e[A", "\eOA"].each { |k| bindings[k] = :scroll_up }
+      ['l', ' ', "\e[C", "\eOC"].each { |k| bindings[k] = :next_page }
+      ['h', "\e[D", "\eOD"].each { |k| bindings[k] = :prev_page }
+      bindings['n'] = :next_chapter
+      bindings['p'] = :prev_chapter
+      bindings['g'] = :go_to_start
+      bindings['G'] = :go_to_end
+      bindings['v'] = :toggle_view_mode
+      bindings['P'] = :toggle_page_numbering_mode
+      bindings['+'] = :increase_line_spacing
+      bindings['-'] = :decrease_line_spacing
+      bindings['t'] = :open_toc
+      bindings['b'] = :add_bookmark
+      bindings['B'] = :open_bookmarks
+      bindings['?'] = ->(ctx, _) { ctx.switch_mode(:help); :handled }
+      bindings['q'] = :quit_to_menu
+      bindings['Q'] = :quit_application
+      @dispatcher.register_mode(:read, bindings)
+    end
+
+    def register_help_bindings
+      bindings = { __default__: ->(ctx, _) { ctx.switch_mode(:read); :handled } }
+      @dispatcher.register_mode(:help, bindings)
+    end
+
+    def register_toc_bindings
+      bindings = {}
+      bindings['t'] = ->(ctx, _) { ctx.switch_mode(:read); :handled }
+      bindings["\e"] = ->(ctx, _) { ctx.switch_mode(:read); :handled }
+      ['j', "\e[B", "\eOB"].each do |k|
+        bindings[k] = ->(ctx, _) { s = ctx.instance_variable_get(:@state); s.toc_selected = s.toc_selected + 1; :handled }
+      end
+      ['k', "\e[A", "\eOA"].each do |k|
+        bindings[k] = ->(ctx, _) { s = ctx.instance_variable_get(:@state); s.toc_selected = [s.toc_selected - 1, 0].max; :handled }
+      end
+      ["\r", "\n"].each do |k|
+        bindings[k] = ->(ctx, _) { ctx.jump_to_chapter(ctx.instance_variable_get(:@state).toc_selected); :handled }
+      end
+      @dispatcher.register_mode(:toc, bindings)
+    end
+
+    def register_bookmarks_bindings
+      bindings = {}
+      bindings['B'] = ->(ctx, _) { ctx.switch_mode(:read); :handled }
+      bindings["\e"] = ->(ctx, _) { ctx.switch_mode(:read); :handled }
+      ['j', "\e[B", "\eOB"].each do |k|
+        bindings[k] = ->(ctx, _) { s = ctx.instance_variable_get(:@state); s.bookmark_selected = [s.bookmark_selected + 1, (ctx.instance_variable_get(:@bookmarks) || []).length - 1].max; :handled }
+      end
+      ['k', "\e[A", "\eOA"].each do |k|
+        bindings[k] = ->(ctx, _) { s = ctx.instance_variable_get(:@state); s.bookmark_selected = [s.bookmark_selected - 1, 0].max; :handled }
+      end
+      ["\r", "\n"].each do |k|
+        bindings[k] = ->(ctx, _) { ctx.jump_to_bookmark; :handled }
+      end
+      bindings['d'] = ->(ctx, _) { ctx.delete_selected_bookmark; :handled }
+      @dispatcher.register_mode(:bookmarks, bindings)
+    end
+
+    def register_popup_bindings
+      bindings = {}
+      bindings["\e"] = ->(ctx, _) { ctx.switch_mode(:read); :handled }
+      bindings[:__default__] = ->(ctx, key) do
+        # Call private handler via send to respect visibility
+        ctx.send(:handle_popup_menu_input, [key]) if ctx.instance_variable_get(:@popup_menu)
+        :handled
+      end
+      @dispatcher.register_mode(:popup_menu, bindings)
+    end
+
+    def register_annotation_editor_bindings
+      bindings = {}
+      bindings[:__default__] = ->(ctx, key) do
+        mode = ctx.instance_variable_get(:@current_mode)
+        if mode
+          mode.handle_input(key)
+          # Force redraw so the editor updates immediately
+          ctx.draw_screen
+        end
+        :handled
+      end
+      @dispatcher.register_mode(:annotation_editor, bindings)
+    end
+
+    # ===== Rendering helpers migrated from legacy display =====
+    def refresh_page_map(width, height)
+      if @config.page_numbering_mode == :dynamic && @page_manager
+        if size_changed?(width, height)
+          @page_manager.build_page_map(width, height)
+          @state.current_page_index = [@state.current_page_index, @page_manager.total_pages - 1].min
+          @state.current_page_index = [0, @state.current_page_index].max
+        end
+      elsif size_changed?(width, height)
+        update_page_map(width, height)
+      end
+    end
+
+    def size_changed?(width, height)
+      @state.terminal_size_changed?(width, height)
+    end
+
+    def calculate_current_pages
+      return { current: 0, total: 0 } unless @config.show_page_numbers
+
+      if @config.page_numbering_mode == :dynamic
+        return { current: 0, total: 0 } unless @page_manager
+        { current: @state.current_page_index + 1, total: @page_manager.total_pages }
+      else
+        height, width = Terminal.size
+        _, content_height = get_layout_metrics(width, height)
+        actual_height = adjust_for_line_spacing(content_height)
+
+        return { current: 0, total: 0 } if actual_height <= 0
+
+        update_page_map(width, height) if size_changed?(width, height) || @state.page_map.empty?
+        return { current: 0, total: 0 } unless @state.total_pages.positive?
+
+        pages_before = @state.page_map[0...@state.current_chapter].sum
+        line_offset = @config.view_mode == :split ? @state.left_page : @state.single_page
+        page_in_chapter = (line_offset.to_f / actual_height).floor + 1
+        current_global_page = pages_before + page_in_chapter
+
+        { current: current_global_page, total: @state.total_pages }
+      end
+    end
+
+    # Mirrors metrics used by rendering code
+    def get_layout_metrics(width, height)
+      col_width = if @config.view_mode == :split
+                    [(width - 3) / 2, 20].max
+                  else
+                    (width * 0.9).to_i.clamp(30, 120)
+                  end
+      content_height = [height - 2, 1].max
+      [col_width, content_height]
+    end
+
+    def adjust_for_line_spacing(height)
+      return 1 if height <= 0
+      @config.line_spacing == :relaxed ? [height / 2, 1].max : height
+    end
 
     def load_document
       @doc = EPUBDocument.new(@path)
@@ -312,18 +524,9 @@ module EbookReader
         keys = read_input_keys
         next if keys.empty?
 
-        # If a special mode is active, it gets exclusive access to input
-        if @current_mode
-          keys.each { |k| @current_mode.handle_input(k) }
-          draw_screen # Redraw after every input in a special mode
-        elsif @state.mode == :popup_menu
-          handle_popup_menu_input(keys)
-        else
-          # Otherwise, process input normally
-          old_state = capture_state
-          keys.each { |k| @input_handler.process_input(k) }
-          draw_screen if state_changed?(old_state)
-        end
+        old_state = capture_state
+        keys.each { |k| @dispatcher.handle_key(k) }
+        draw_screen if state_changed?(old_state)
       end
     end
 
@@ -344,7 +547,7 @@ module EbookReader
           # Close the popup and return to reading mode
           @popup_menu = nil
           @mouse_handler.reset
-          @selection_range = nil
+          @state.selection = nil
           switch_mode(:read)
           draw_screen
         end

@@ -14,7 +14,8 @@ module EbookReader
       def handle_input(key)
         return unless key
 
-        handlers = handlers_for_mode(@menu.instance_variable_get(:@mode))
+        state = @menu.instance_variable_get(:@state)
+        handlers = handlers_for_mode(state.mode)
         (handlers[key] || handlers[:__default__])&.call(key)
       end
 
@@ -78,6 +79,30 @@ module EbookReader
         end
       end
 
+      def handle_recent_input(key)
+        if escape_key?(key)
+          @menu.send(:switch_to_mode, :menu)
+          return
+        end
+
+        recent_screen = @menu.instance_variable_get(:@recent_screen)
+        state = @menu.instance_variable_get(:@state)
+        # Use MainMenu's helper to respect RecentScreen's method visibility
+        recent_books = @menu.send(:load_recent_books)
+
+        return if recent_books.empty?
+
+        if navigation_key?(key)
+          new_selection = handle_navigation_keys(key, state.browse_selected, recent_books.size - 1)
+          state.browse_selected = new_selection
+        elsif enter_key?(key)
+          selected_book = recent_books[state.browse_selected]
+          if selected_book && selected_book['path']
+            @menu.send(:open_book, selected_book['path'])
+          end
+        end
+      end
+
       private
 
       def handle_quit
@@ -97,13 +122,13 @@ module EbookReader
       end
 
       def navigate_menu_down
-        selected = (@menu.instance_variable_get(:@selected) + 1) % 5
-        @menu.instance_variable_set(:@selected, selected)
+        state = @menu.instance_variable_get(:@state)
+        state.selected = (state.selected + 1) % 5
       end
 
       def navigate_menu_up
-        selected = (@menu.instance_variable_get(:@selected) - 1 + 5) % 5
-        @menu.instance_variable_set(:@selected, selected)
+        state = @menu.instance_variable_get(:@state)
+        state.selected = (state.selected - 1 + 5) % 5
       end
 
       def browse_handlers
@@ -153,37 +178,23 @@ module EbookReader
       end
 
       def reset_search
-        @menu.instance_variable_set(:@search_query, '')
-        @menu.instance_variable_set(:@search_cursor, 0)
+        state = @menu.instance_variable_get(:@state)
+        state.search_query = ''
+        state.search_cursor = 0
       end
 
       def recent_handlers
-        handlers = {}
-        recent = @menu.send(:load_recent_books)
-        # Exit
-        handlers['q'] = ->(_) { @menu.send(:switch_to_mode, :menu) }
-        handlers["\e"] = ->(_) { @menu.send(:switch_to_mode, :menu) }
-        # Navigation
-        if recent.any?
-          ['j', "\e[B", "\eOB", 'k', "\e[A", "\eOA"].each do |k|
-            handlers[k] = ->(key) { handle_recent_navigation(key, recent) }
-          end
-          ["\r", "\n"].each { |k| handlers[k] = ->(_) { handle_recent_selection(recent) } }
-        end
-        handlers
+        { __default__: ->(k) { handle_recent_input(k) } }
       end
 
       def handle_recent_navigation(key, recent)
-        selected = handle_navigation_keys(
-          key,
-          @menu.instance_variable_get(:@browse_selected),
-          recent.length - 1
-        )
-        @menu.instance_variable_set(:@browse_selected, selected)
+        state = @menu.instance_variable_get(:@state)
+        selected = handle_navigation_keys(key, state.browse_selected, recent.length - 1)
+        state.browse_selected = selected
       end
 
       def handle_recent_selection(recent)
-        book = recent[@menu.instance_variable_get(:@browse_selected)]
+        book = recent[@menu.instance_variable_get(:@state).browse_selected]
 
         if valid_book?(book)
           @menu.send(:open_book, book['path'])

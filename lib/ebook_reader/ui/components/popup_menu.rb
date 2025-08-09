@@ -19,9 +19,15 @@ module EbookReader
 
         def render
           return unless @visible
-
-          draw_shadow
           draw_menu_items
+        end
+
+        # Component-friendly render path using Surface within given bounds
+        def render_with_surface(surface, root_bounds)
+          return unless @visible
+          @items.each_with_index do |item, i|
+            draw_menu_item_with_surface(surface, root_bounds, item, i)
+          end
         end
 
         def move_selection(direction)
@@ -73,14 +79,6 @@ module EbookReader
           @items.map(&:length).max + 4
         end
 
-        def draw_shadow
-          # A more subtle, modern shadow
-          (0...@height).each do |i|
-            Terminal.write(@y + i + 1, @x + 1,
-                           "#{Terminal::ANSI::BG_GREY} #{Terminal::ANSI::RESET}" * @width)
-          end
-        end
-
         def draw_menu_items
           @items.each_with_index do |item, i|
             draw_menu_item(item, i)
@@ -91,9 +89,9 @@ module EbookReader
           item_y = @y + index
           is_selected = (index == @selected_index)
 
-          # Modern, flat design with better contrast
-          bg = is_selected ? Terminal::ANSI::BLUE : Terminal::ANSI::BG_BLACK
-          fg = is_selected ? Terminal::ANSI::WHITE : Terminal::ANSI::LIGHT_GREY
+          # High-contrast colors for clear visibility
+          bg = is_selected ? Terminal::ANSI::BG_BRIGHT_YELLOW : Terminal::ANSI::BG_DARK
+          fg = is_selected ? Terminal::ANSI::BLACK : Terminal::ANSI::WHITE
 
           # Clear the line with the background color first
           Terminal.write(item_y, @x, "#{bg}#{' ' * @width}#{Terminal::ANSI::RESET}")
@@ -103,6 +101,19 @@ module EbookReader
           line_text = " #{icon} #{item} ".ljust(@width)
 
           Terminal.write(item_y, @x, "#{bg}#{fg}#{line_text}#{Terminal::ANSI::RESET}")
+        end
+
+        def draw_menu_item_with_surface(surface, bounds, item, index)
+          item_y = @y + index
+          is_selected = (index == @selected_index)
+
+          bg = is_selected ? Terminal::ANSI::BG_BRIGHT_YELLOW : Terminal::ANSI::BG_DARK
+          fg = is_selected ? Terminal::ANSI::BLACK : Terminal::ANSI::WHITE
+
+          surface.write(bounds, item_y, @x, "#{bg}#{' ' * @width}#{Terminal::ANSI::RESET}")
+          icon = is_selected ? '❯' : ' '
+          line_text = " #{icon} #{item} ".ljust(@width)
+          surface.write(bounds, item_y, @x, "#{bg}#{fg}#{line_text}#{Terminal::ANSI::RESET}")
         end
       end
     end

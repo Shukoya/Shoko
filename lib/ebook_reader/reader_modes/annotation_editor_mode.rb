@@ -35,7 +35,7 @@ module EbookReader
       def input_handlers
         @input_handlers ||= begin
           h = {
-            "\e" => ->(_) { reader.switch_mode(:read) },
+            "\e" => ->(_) { reader.switch_mode(:read); reader.draw_screen },
             "\x13" => ->(_) { save_annotation },
             "\x7F" => ->(_) { handle_backspace },
             "\b" => ->(_) { handle_backspace },
@@ -120,6 +120,8 @@ module EbookReader
         reader.refresh_annotations if reader.respond_to?(:refresh_annotations)
         reader.send(:set_message, 'Annotation saved!')
         reader.switch_mode(:read)
+        # Redraw immediately so highlights and message appear without extra input
+        reader.draw_screen
       end
 
       def handle_backspace

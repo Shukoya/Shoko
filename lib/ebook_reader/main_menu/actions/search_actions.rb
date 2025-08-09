@@ -18,29 +18,29 @@ module EbookReader
         end
 
         def move_search_cursor(delta)
-          @search_cursor = (@search_cursor + delta).clamp(0, @search_query.length)
+          @state.search_cursor = (@state.search_cursor + delta).clamp(0, @state.search_query.length)
         end
 
         def handle_delete
-          return if @search_cursor >= @search_query.length
+          return if @state.search_cursor >= @state.search_query.length
 
-          query = @search_query.dup
-          query.slice!(@search_cursor)
-          @search_query = query
+          query = @state.search_query.dup
+          query.slice!(@state.search_cursor)
+          @state.search_query = query
           filter_books
         end
 
         def filter_books
-          @filtered_epubs = if @search_query.empty?
+          @filtered_epubs = if @state.search_query.empty?
                               @scanner.epubs
                             else
                               filter_by_query
                             end
-          @browse_selected = 0
+          @state.browse_selected = 0
         end
 
         def filter_by_query
-          query = @search_query.downcase
+          query = @state.search_query.downcase
           @scanner.epubs.select do |book|
             name = book['name'] || ''
             path = book['path'] || ''

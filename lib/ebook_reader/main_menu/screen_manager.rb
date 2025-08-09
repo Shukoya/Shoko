@@ -12,7 +12,8 @@ module EbookReader
         Terminal.start_frame
         height, width = Terminal.size
 
-        case @menu.instance_variable_get(:@mode)
+        state = @menu.instance_variable_get(:@state)
+        case state.mode
         when :menu then draw_main_menu(height, width)
         when :browse then draw_browse_screen(height, width)
         when :recent then draw_recent_screen(height, width)
@@ -37,22 +38,23 @@ module EbookReader
 
       def draw_main_menu(height, width)
         screen = @menu.instance_variable_get(:@menu_screen)
-        screen.selected = @menu.instance_variable_get(:@selected)
+        screen.selected = @menu.instance_variable_get(:@state).selected
         screen.draw(height, width)
       end
 
       def draw_browse_screen(height, width)
         screen = @menu.instance_variable_get(:@browse_screen)
-        screen.selected = @menu.instance_variable_get(:@browse_selected)
-        screen.search_query = @menu.instance_variable_get(:@search_query)
-        screen.search_cursor = @menu.instance_variable_get(:@search_cursor)
+        state = @menu.instance_variable_get(:@state)
+        screen.selected = state.browse_selected
+        screen.search_query = state.search_query
+        screen.search_cursor = state.search_cursor
         screen.filtered_epubs = @menu.instance_variable_get(:@filtered_epubs)
         screen.draw(height, width)
       end
 
       def draw_recent_screen(height, width)
         screen = @menu.instance_variable_get(:@recent_screen)
-        screen.selected = @menu.instance_variable_get(:@browse_selected)
+        screen.selected = @menu.instance_variable_get(:@state).browse_selected
         screen.draw(height, width)
       end
 

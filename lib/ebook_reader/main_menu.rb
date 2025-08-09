@@ -16,6 +16,8 @@ require_relative 'mouseable_reader'
 require_relative 'main_menu/actions/file_actions'
 require_relative 'main_menu/actions/search_actions'
 require_relative 'main_menu/actions/settings_actions'
+require_relative 'core/main_menu_state'
+require_relative 'input/dispatcher'
 
 module EbookReader
   # Main menu (LazyVim style)
@@ -49,24 +51,20 @@ module EbookReader
     private
 
     def setup_state
-      @selected = 0
-      @mode = :menu
-      @browse_selected = 0
-      @search_query = ''
-      @search_cursor = 0
-      @file_input = ''
+      @state = Core::MainMenuState.new
     end
 
     def setup_services
       @config = Config.new
       @scanner = Services::LibraryScanner.new
       @input_handler = Services::MainMenuInputHandler.new(self)
+      setup_input_dispatcher
     end
 
     def setup_ui
       @renderer = UI::MainMenuRenderer.new(@config)
       @browse_screen = UI::Screens::BrowseScreen.new(@scanner, @renderer)
-      @menu_screen = UI::Screens::MenuScreen.new(@renderer, @selected)
+      @menu_screen = UI::Screens::MenuScreen.new(@renderer, @state.selected)
       @settings_screen = UI::Screens::SettingsScreen.new(@config, @scanner)
       @recent_screen = UI::Screens::RecentScreen.new(self, @renderer)
       @open_file_screen = UI::Screens::OpenFileScreen.new(@renderer)
@@ -85,7 +83,7 @@ module EbookReader
 
     def handle_user_input
       keys = read_input_keys
-      keys.each { |k| @input_handler.handle_input(k) }
+      keys.each { |k| @dispatcher.handle_key(k) }
     end
 
     def read_input_keys
@@ -120,6 +118,124 @@ module EbookReader
       @screen_manager.draw_screen
     end
 
+    def setup_input_dispatcher
+      @dispatcher = Input::Dispatcher.new(self)
+      register_menu_bindings
+      register_browse_bindings
+      register_recent_bindings
+      register_settings_bindings
+      register_open_file_bindings
+      register_annotations_bindings
+      register_annotation_editor_bindings
+      @dispatcher.activate(@state.mode)
+    end
+
+    def register_menu_bindings
+      b = {}
+      ['j', "\e[B", "\eOB"].each { |k| b[k] = ->(ctx, _) { s = ctx.instance_variable_get(:@state); s.selected = (s.selected + 1) % 6; :handled } }
+      ['k', "\e[A", "\eOA"].each { |k| b[k] = ->(ctx, _) { s = ctx.instance_variable_get(:@state); s.selected = (s.selected - 1) % 6; :handled } }
+      ["\r", "\n"].each { |k| b[k] = ->(ctx, _) { ctx.send(:handle_menu_selection); :handled } }
+      b['q'] = ->(ctx, _) { ctx.send(:cleanup_and_exit, 0, ''); :handled }
+      b['f'] = ->(ctx, _) { ctx.send(:switch_to_browse); :handled }
+      b['r'] = ->(ctx, _) { ctx.send(:switch_to_mode, :recent); :handled }
+      b['o'] = ->(ctx, _) { ctx.send(:open_file_dialog); :handled }
+      b['s'] = ->(ctx, _) { ctx.send(:switch_to_mode, :settings); :handled }
+      @dispatcher.register_mode(:menu, b)
+    end
+
+    def register_browse_bindings
+      b = {}
+      ['j', "\e[B", "\eOB", 'k', "\e[A", "\eOA"].each { |k| b[k] = :navigate_browse }
+      ["\r", "\n"].each { |k| b[k] = :open_selected_book }
+      b['/'] = ->(ctx, _) { s = ctx.instance_variable_get(:@state); s.search_query = ''; s.search_cursor = 0; :handled }
+      b["\e[D"] = ->(ctx, _) { ctx.send(:move_search_cursor, -1); :handled }
+      b["\eOD"] = ->(ctx, _) { ctx.send(:move_search_cursor, -1); :handled }
+      b["\e[C"] = ->(ctx, _) { ctx.send(:move_search_cursor, 1); :handled }
+      b["\eOC"] = ->(ctx, _) { ctx.send(:move_search_cursor, 1); :handled }
+      b["\e[3~"] = ->(ctx, _) { ctx.send(:handle_delete); :handled }
+      ['\b', "\x7F"].each { |k| b[k] = ->(ctx, _) { ctx.send(:handle_backspace_input); :handled } }
+      ["\e", 'q'].each { |k| b[k] = ->(ctx, _) { ctx.send(:switch_to_mode, :menu); :handled } }
+      b[:__default__] = ->(ctx, key) do
+        ch = key.to_s
+        if ch.length == 1 && ch.ord >= 32
+          ctx.send(:add_to_search, key)
+          :handled
+        else
+          :pass
+        end
+      end
+      @dispatcher.register_mode(:browse, b)
+    end
+
+    def register_recent_bindings
+      b = {}
+      ["\e", 'q'].each { |k| b[k] = ->(ctx, _) { ctx.send(:switch_to_mode, :menu); :handled } }
+      ['j', 'k', "\e[A", "\e[B", "\eOA", "\eOB"].each { |k| b[k] = ->(ctx, key) { ctx.send(:handle_recent_input, key); :handled } }
+      ["\r", "\n"].each { |k| b[k] = ->(ctx, key) { ctx.send(:handle_recent_input, key); :handled } }
+      @dispatcher.register_mode(:recent, b)
+    end
+
+    def register_settings_bindings
+      b = {}
+      b["\e"] = ->(ctx, _) { ctx.send(:switch_to_mode, :menu); ctx.instance_variable_get(:@config).save; :handled }
+      %w[1 2 3 4 5 6].each { |k| b[k] = ->(ctx, key) { ctx.send(:handle_settings_input, key); :handled } }
+      @dispatcher.register_mode(:settings, b)
+    end
+
+    def register_open_file_bindings
+      b = {}
+      b["\e"] = ->(ctx, _) { ctx.send(:handle_escape); :handled }
+      ["\r", "\n"].each { |k| b[k] = ->(ctx, _) { ctx.send(:handle_enter); :handled } }
+      ['\b', "\x7F", "\x08"].each { |k| b[k] = ->(ctx, _) { ctx.send(:handle_backspace_input); :handled } }
+      b[:__default__] = ->(ctx, key) { ctx.send(:handle_character_input, key); :handled }
+      @dispatcher.register_mode(:open_file, b)
+    end
+
+    def register_annotations_bindings
+      b = {}
+      screen_getter = ->(ctx) { ctx.instance_variable_get(:@annotations_screen) }
+      # Exit
+      ["\e", 'q'].each { |k| b[k] = ->(ctx, _) { ctx.send(:switch_to_mode, :menu); :handled } }
+      # Navigation
+      ['j', "\e[B", "\eOB"].each do |k|
+        b[k] = ->(ctx, _) do
+          screen = screen_getter.call(ctx)
+          ctx.instance_variable_get(:@input_handler).send(:navigate_annotations_down, screen)
+          :handled
+        end
+      end
+      ['k', "\e[A", "\eOA"].each do |k|
+        b[k] = ->(ctx, _) do
+          screen = screen_getter.call(ctx)
+          ctx.instance_variable_get(:@input_handler).send(:navigate_annotations_up, screen)
+          :handled
+        end
+      end
+      # Delete annotation
+      b['d'] = ->(ctx, _) do
+        screen = screen_getter.call(ctx)
+        ctx.instance_variable_get(:@input_handler).send(:delete_annotation, screen)
+        :handled
+      end
+      # Enter to edit selected annotation
+      ["\r", "\n"].each do |k|
+        b[k] = ->(ctx, _) do
+          screen = screen_getter.call(ctx)
+          annotation = screen.current_annotation
+          book_path = screen.current_book_path
+          ctx.send(:switch_to_edit_annotation, annotation, book_path) if annotation && book_path
+          :handled
+        end
+      end
+      @dispatcher.register_mode(:annotations, b)
+    end
+
+    def register_annotation_editor_bindings
+      b = {}
+      b[:__default__] = ->(ctx, key) { ctx.instance_variable_get(:@annotation_editor_screen).handle_input(key); :handled }
+      @dispatcher.register_mode(:annotation_editor, b)
+    end
+
     def handle_input(key)
       @input_handler.handle_input(key)
     end
@@ -129,15 +245,17 @@ module EbookReader
     end
 
     def switch_to_browse
-      @mode = :browse
-      @browse_selected = 0
-      @search_cursor = @search_query.length
+      @state.mode = :browse
+      @state.browse_selected = 0
+      @state.search_cursor = @state.search_query.length
       @scanner.start_scan if @scanner.epubs.empty? && @scanner.scan_status == :idle
+      @dispatcher.activate(@state.mode)
     end
 
     def switch_to_mode(mode)
-      @mode = mode
-      @browse_selected = 0
+      @state.mode = mode
+      @state.browse_selected = 0
+      @dispatcher.activate(@state.mode)
     end
 
     def switch_to_edit_annotation(annotation, book_path)
@@ -147,7 +265,7 @@ module EbookReader
     end
 
     def handle_menu_selection
-      case @selected
+      case @state.selected
       when 0 then switch_to_browse
       when 1 then switch_to_mode(:recent)
       when 2 then switch_to_mode(:annotations)
@@ -164,7 +282,7 @@ module EbookReader
     def navigate_browse(key)
       return unless @filtered_epubs.any?
 
-      @browse_selected = handle_navigation_keys(key, @browse_selected, @filtered_epubs.length - 1)
+      @state.browse_selected = handle_navigation_keys(key, @state.browse_selected, @filtered_epubs.length - 1)
     end
 
     def refresh_scan
@@ -173,9 +291,9 @@ module EbookReader
     end
 
     def open_selected_book
-      return unless @filtered_epubs[@browse_selected]
+      return unless @filtered_epubs[@state.browse_selected]
 
-      path = @filtered_epubs[@browse_selected]['path']
+      path = @filtered_epubs[@state.browse_selected]['path']
       if path && File.exist?(path)
         open_book(path)
       else
@@ -193,15 +311,15 @@ module EbookReader
     end
 
     def move_search_cursor(delta)
-      @search_cursor = (@search_cursor + delta).clamp(0, @search_query.length)
+      @state.search_cursor = (@state.search_cursor + delta).clamp(0, @state.search_query.length)
     end
 
     def handle_delete
-      return if @search_cursor >= @search_query.length
+      return if @state.search_cursor >= @state.search_query.length
 
-      query = @search_query.dup
-      query.slice!(@search_cursor)
-      @search_query = query
+      query = @state.search_query.dup
+      query.slice!(@state.search_cursor)
+      @state.search_query = query
       filter_books
     end
 
@@ -233,22 +351,24 @@ module EbookReader
     end
 
     def handle_enter
-      path = sanitize_input_path(@file_input)
+      path = sanitize_input_path(@state.file_input)
       handle_file_path(path) if path && !path.empty?
       switch_to_mode(:menu)
     end
 
     def handle_backspace_input
-      @file_input = @file_input[0...-1] if @file_input.length.positive?
-      @open_file_screen.input = @file_input
+      if @state.file_input.length.positive?
+        @state.file_input = @state.file_input[0...-1]
+      end
+      @open_file_screen.input = @state.file_input
     end
 
     def handle_character_input(key)
       char = key.to_s
       return unless char.length == 1 && char.ord >= 32
 
-      @file_input += char
-      @open_file_screen.input = @file_input
+      @state.file_input = (@state.file_input + char)
+      @open_file_screen.input = @state.file_input
     end
 
     def open_book(path)
@@ -277,7 +397,7 @@ module EbookReader
       @scanner.scan_message = "Failed: #{error.class}: #{error.message[0, 60]}"
       @scanner.scan_status = :error
       def filter_by_query
-        query = @search_query.downcase
+        query = @state.search_query.downcase
         @scanner.epubs.select do |book|
           name = book['name'] || ''
           path = book['path'] || ''
@@ -287,9 +407,10 @@ module EbookReader
     end
 
     def open_file_dialog
-      @file_input = ''
+      @state.file_input = ''
       @open_file_screen.input = ''
-      @mode = :open_file
+      @state.mode = :open_file
+      @dispatcher.activate(@state.mode)
     end
 
     def sanitize_input_path(input)
@@ -317,7 +438,7 @@ module EbookReader
 
     def load_recent_books
       books = @recent_screen.send(:load_recent_books)
-      @browse_selected = @recent_screen.selected
+      @state.browse_selected = @recent_screen.selected
       books
     end
 
