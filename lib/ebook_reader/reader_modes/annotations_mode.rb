@@ -47,8 +47,9 @@ module EbookReader
 
           # Navigation
           if @annotations.any?
-            down = ['j', "\e[B"]
-            up = ['k', "\e[A"]
+            # Support vim-style j/k and arrow keys
+            down = ['j', "\e[B", "\eOB"]
+            up = ['k', "\e[A", "\eOA"]
             down.each do |k|
               h[k] = lambda { |_|
                 @selected_annotation = [@selected_annotation + 1, @annotations.length - 1].min

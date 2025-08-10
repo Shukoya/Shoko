@@ -69,6 +69,7 @@ module EbookReader
 
       def safe_notify(observer, field, old_value, new_value)
         return unless observer.respond_to?(:state_changed)
+
         observer.state_changed(field, old_value, new_value)
       rescue StandardError
         # Swallow notifications errors to avoid breaking app flow

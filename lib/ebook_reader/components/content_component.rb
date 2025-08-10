@@ -46,17 +46,15 @@ module EbookReader
       private
 
       def render_reading(surface, bounds, doc, state, config)
-        height = bounds.height
-        width = bounds.width
+        bounds.height
+        bounds.width
 
         if config.view_mode == :split
           render_split(surface, bounds, doc, state, config)
+        elsif config.page_numbering_mode == :dynamic
+          render_single_dynamic(surface, bounds, doc, state, config)
         else
-          if config.page_numbering_mode == :dynamic
-            render_single_dynamic(surface, bounds, doc, state, config)
-          else
-            render_single_absolute(surface, bounds, doc, state, config)
-          end
+          render_single_absolute(surface, bounds, doc, state, config)
         end
       end
 
@@ -70,7 +68,8 @@ module EbookReader
 
         # Chapter info on first row
         chapter_info = "[#{state.current_chapter + 1}] #{chapter.title || 'Unknown'}"
-        surface.write(bounds, 1, 1, Terminal::ANSI::BLUE + chapter_info[0, bounds.width - 2].to_s + Terminal::ANSI::RESET)
+        surface.write(bounds, 1, 1,
+                      Terminal::ANSI::BLUE + chapter_info[0, bounds.width - 2].to_s + Terminal::ANSI::RESET)
 
         # Left column
         draw_column(surface, bounds,
@@ -94,7 +93,7 @@ module EbookReader
                     line_spacing: config.line_spacing)
       end
 
-      def render_single_dynamic(surface, bounds, doc, state, config)
+      def render_single_dynamic(surface, bounds, _doc, state, config)
         page_manager = @controller.instance_variable_get(:@page_manager)
         return unless page_manager
 
@@ -103,11 +102,13 @@ module EbookReader
 
         col_width, content_height = layout_metrics(bounds.width, bounds.height, :single)
         col_start = [(bounds.width - col_width) / 2, 1].max
-        start_row = calculate_center_start_row(content_height, page_data[:lines].size, config.line_spacing)
+        start_row = calculate_center_start_row(content_height, page_data[:lines].size,
+                                               config.line_spacing)
 
         page_data[:lines].each_with_index do |line, idx|
           row = start_row + (config.line_spacing == :relaxed ? idx * 2 : idx)
           break if row > bounds.height - 2
+
           draw_line(surface, bounds, line: line, row: row, col: col_start, width: col_width)
         end
       end
@@ -129,6 +130,7 @@ module EbookReader
         lines.each_with_index do |line, idx|
           row = start_row + (config.line_spacing == :relaxed ? idx * 2 : idx)
           break if row >= (3 + displayable)
+
           draw_line(surface, bounds, line: line, row: row, col: col_start, width: col_width)
         end
       end
@@ -140,11 +142,13 @@ module EbookReader
         end
       end
 
-      def draw_column(surface, bounds, lines:, offset:, col_width:, height:, row:, col:, line_spacing:)
+      def draw_column(surface, bounds, lines:, offset:, col_width:, height:, row:, col:,
+                      line_spacing:)
         display_lines = lines.slice(offset, height) || []
         display_lines.each_with_index do |line, idx|
           r = row + (line_spacing == :relaxed ? idx * 2 : idx)
           break if r >= bounds.height - 1
+
           draw_line(surface, bounds, line: line, row: r, col: col, width: col_width)
         end
       end
@@ -152,8 +156,11 @@ module EbookReader
       def draw_line(surface, bounds, line:, row:, col:, width:)
         # Keep for highlighting integrations
         text = line.to_s[0, width]
-        text = highlight_keywords(text)
-        text = highlight_quotes(text)
+        config = @controller.config
+        if config.respond_to?(:highlight_keywords) && config.highlight_keywords
+          text = highlight_keywords(text)
+        end
+        text = highlight_quotes(text) if config.highlight_quotes
 
         abs_row = bounds.y + row - 1
         (@controller.instance_variable_get(:@rendered_lines) || {})[abs_row] = {
@@ -176,6 +183,7 @@ module EbookReader
 
       def adjust_for_line_spacing(height, line_spacing)
         return 1 if height <= 0
+
         line_spacing == :relaxed ? [height / 2, 1].max : height
       end
 
@@ -223,6 +231,7 @@ module EbookReader
         lines.each_with_index do |line, idx|
           row = start_row + idx
           break if row >= bounds.height - 2
+
           col = [(bounds.width - line.length) / 2, 1].max
           surface.write(bounds, row, col, Terminal::ANSI::WHITE + line + Terminal::ANSI::RESET)
         end
@@ -245,7 +254,7 @@ module EbookReader
           line = (chapter.title || 'Untitled')[0, bounds.width - 6]
           y = list_start + row
           if idx == selected_index
-            surface.write(bounds, y, 2, Terminal::ANSI::BRIGHT_GREEN + '▸ ' + Terminal::ANSI::RESET)
+            surface.write(bounds, y, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
             surface.write(bounds, y, 4, Terminal::ANSI::BRIGHT_WHITE + line + Terminal::ANSI::RESET)
           else
             surface.write(bounds, y, 4, Terminal::ANSI::WHITE + line + Terminal::ANSI::RESET)
@@ -253,7 +262,7 @@ module EbookReader
         end
 
         surface.write(bounds, bounds.height - 1, 2,
-                      Terminal::ANSI::DIM + "↑↓ Navigate • Enter Jump • t/ESC Back" + Terminal::ANSI::RESET)
+                      "#{Terminal::ANSI::DIM}↑↓ Navigate • Enter Jump • t/ESC Back#{Terminal::ANSI::RESET}")
       end
 
       def render_bookmarks(surface, bounds, doc)
@@ -264,7 +273,7 @@ module EbookReader
 
         if bookmarks.empty?
           surface.write(bounds, bounds.height / 2, (bounds.width - 30) / 2,
-                        Terminal::ANSI::DIM + 'No bookmarks yet. Press \"b\" while reading to add one.' + Terminal::ANSI::RESET)
+                        "#{Terminal::ANSI::DIM}No bookmarks yet. Press \\\"b\\\" while reading to add one.#{Terminal::ANSI::RESET}")
           return
         end
 
@@ -280,7 +289,8 @@ module EbookReader
 
           row = list_start + (row_idx * 2)
           is_selected = (idx == selected)
-          draw_bookmark_item(surface, bounds, row, bounds.width, bookmark, chapter_title, is_selected)
+          draw_bookmark_item(surface, bounds, row, bounds.width, bookmark, chapter_title,
+                             is_selected)
         end
       end
 
@@ -291,10 +301,12 @@ module EbookReader
         if selected
           surface.write(bounds, row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
           surface.write(bounds, row, 4, "#{Terminal::ANSI::BRIGHT_WHITE}#{chapter_text}#{Terminal::ANSI::RESET}")
-          surface.write(bounds, row + 1, 6, "#{Terminal::ANSI::ITALIC}#{Terminal::ANSI::GRAY}#{text_snippet}#{Terminal::ANSI::RESET}")
+          surface.write(bounds, row + 1, 6,
+                        "#{Terminal::ANSI::ITALIC}#{Terminal::ANSI::GRAY}#{text_snippet}#{Terminal::ANSI::RESET}")
         else
           surface.write(bounds, row, 4, "#{Terminal::ANSI::WHITE}#{chapter_text}#{Terminal::ANSI::RESET}")
-          surface.write(bounds, row + 1, 6, "#{Terminal::ANSI::DIM}#{Terminal::ANSI::GRAY}#{text_snippet}#{Terminal::ANSI::RESET}")
+          surface.write(bounds, row + 1, 6,
+                        "#{Terminal::ANSI::DIM}#{Terminal::ANSI::GRAY}#{text_snippet}#{Terminal::ANSI::RESET}")
         end
       end
 
@@ -312,7 +324,8 @@ module EbookReader
     end
   end
 end
-      # Observer callback triggered by ReaderState
-      def state_changed(_field, _old_value, _new_value)
-        @needs_redraw = true
-      end
+
+# Observer callback triggered by ReaderState
+def state_changed(_field, _old_value, _new_value)
+  @needs_redraw = true
+end

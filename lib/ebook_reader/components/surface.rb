@@ -38,4 +38,3 @@ module EbookReader
     end
   end
 end
-

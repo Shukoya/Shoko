@@ -6,9 +6,9 @@ module EbookReader
       # A module to handle file-related actions in the main menu.
       module FileActions
         def open_selected_book
-          return unless @filtered_epubs[@browse_selected]
+          return unless @filtered_epubs[@state.browse_selected]
 
-          path = @filtered_epubs[@browse_selected]['path']
+          path = @filtered_epubs[@state.browse_selected]['path']
           if path && File.exist?(path)
             open_book(path)
           else

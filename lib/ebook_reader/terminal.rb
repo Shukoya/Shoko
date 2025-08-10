@@ -62,8 +62,8 @@ module EbookReader
         @buffer_manager.clear_buffer_cache
       end
 
-      def batch_write(&block)
-        @buffer_manager.batch_write(&block)
+      def batch_write(&)
+        @buffer_manager.batch_write(&)
       end
 
       def start_frame
@@ -86,7 +86,7 @@ module EbookReader
       end
 
       def cleanup
-        print ([
+        print([
           ANSI::Control::CLEAR,
           ANSI::Control::HOME,
           ANSI::Control::SHOW_CURSOR,

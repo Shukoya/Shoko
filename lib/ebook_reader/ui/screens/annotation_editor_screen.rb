@@ -1,12 +1,17 @@
 # frozen_string_literal: true
 
 require_relative '../../annotations/annotation_store'
+require_relative '../../constants/ui_constants'
+require_relative '../../components/surface'
+require_relative '../../components/rect'
 
 module EbookReader
   module UI
     module Screens
       # A screen for editing an annotation's note.
       class AnnotationEditorScreen
+        include EbookReader::Constants
+
         attr_accessor :note, :cursor_pos
 
         def initialize
@@ -48,21 +53,22 @@ module EbookReader
         private
 
         def draw_header(surface, bounds, width)
-          surface.write(bounds, 1, 2, Terminal::ANSI::BOLD + 'Editing Annotation' + Terminal::ANSI::RESET)
-          surface.write(bounds, 2, 4, Terminal::ANSI::DIM + (@annotation['text'][0, width - 8]).to_s + '...' + Terminal::ANSI::RESET)
-          surface.write(bounds, 3, 1, Terminal::ANSI::DIM + ('─' * (width - 1)) + Terminal::ANSI::RESET)
+          surface.write(bounds, 1, 2, "#{UIConstants::COLOR_TEXT_ACCENT}Editing Annotation#{Terminal::ANSI::RESET}")
+          surface.write(bounds, 2, 4,
+                        "#{UIConstants::COLOR_TEXT_DIM}#{@annotation['text'][0, width - 8]}...#{Terminal::ANSI::RESET}")
+          surface.write(bounds, 3, 1, UIConstants::BORDER_PRIMARY + ('─' * (width - 1)) + Terminal::ANSI::RESET)
         end
 
         def draw_note_editor(surface, bounds)
           surface.write(bounds, 5, 2, 'Note:')
           surface.write(bounds, 6, 4, @note)
-          surface.write(bounds, 6, 4 + @cursor_pos, Terminal::ANSI::BRIGHT_WHITE + '_' + Terminal::ANSI::RESET)
+          surface.write(bounds, 6, 4 + @cursor_pos, "#{UIConstants::SELECTION_HIGHLIGHT}_#{Terminal::ANSI::RESET}")
         end
 
         def draw_footer(surface, bounds, width)
           footer_text = 'Ctrl+S: Save | Esc: Cancel'
-          surface.write(bounds, 10, 2, Terminal::ANSI::DIM + footer_text + Terminal::ANSI::RESET)
-          surface.write(bounds, 9, 1, Terminal::ANSI::DIM + ('─' * (width - 1)) + Terminal::ANSI::RESET)
+          surface.write(bounds, 10, 2, UIConstants::COLOR_TEXT_DIM + footer_text + Terminal::ANSI::RESET)
+          surface.write(bounds, 9, 1, UIConstants::BORDER_PRIMARY + ('─' * (width - 1)) + Terminal::ANSI::RESET)
         end
 
         def handle_backspace
@@ -88,5 +94,3 @@ module EbookReader
     end
   end
 end
-require_relative '../../components/surface'
-require_relative '../../components/rect'

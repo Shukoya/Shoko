@@ -31,8 +31,7 @@ module EbookReader
       end
 
       def pop_mode
-        mode = @mode_stack.pop
-        mode
+        @mode_stack.pop
       end
 
       def remove_mode(mode)

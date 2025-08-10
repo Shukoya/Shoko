@@ -85,7 +85,7 @@ module EbookReader
           return
         end
 
-        recent_screen = @menu.instance_variable_get(:@recent_screen)
+        @menu.instance_variable_get(:@recent_screen)
         state = @menu.instance_variable_get(:@state)
         # Use MainMenu's helper to respect RecentScreen's method visibility
         recent_books = @menu.send(:load_recent_books)
@@ -97,9 +97,7 @@ module EbookReader
           state.browse_selected = new_selection
         elsif enter_key?(key)
           selected_book = recent_books[state.browse_selected]
-          if selected_book && selected_book['path']
-            @menu.send(:open_book, selected_book['path'])
-          end
+          @menu.send(:open_book, selected_book['path']) if selected_book && selected_book['path']
         end
       end
 

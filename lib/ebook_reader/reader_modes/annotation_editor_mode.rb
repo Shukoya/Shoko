@@ -35,7 +35,10 @@ module EbookReader
       def input_handlers
         @input_handlers ||= begin
           h = {
-            "\e" => ->(_) { reader.switch_mode(:read); reader.draw_screen },
+            "\e" => lambda { |_|
+              reader.switch_mode(:read)
+              reader.draw_screen
+            },
             "\x13" => ->(_) { save_annotation },
             "\x7F" => ->(_) { handle_backspace },
             "\b" => ->(_) { handle_backspace },

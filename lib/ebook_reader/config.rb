@@ -7,6 +7,7 @@ module EbookReader
   # Configuration manager
   class Config
     attr_accessor :view_mode, :theme, :show_page_numbers, :line_spacing, :highlight_quotes,
+                  :highlight_keywords,
                   :page_numbering_mode
 
     CONFIG_DIR = File.expand_path('~/.config/reader')
@@ -40,6 +41,7 @@ module EbookReader
         show_page_numbers: @show_page_numbers,
         line_spacing: @line_spacing,
         highlight_quotes: @highlight_quotes,
+        highlight_keywords: @highlight_keywords,
         page_numbering_mode: @page_numbering_mode,
       }
     end
@@ -51,7 +53,9 @@ module EbookReader
       @theme = :dark
       @show_page_numbers = true
       @line_spacing = :normal
-      @highlight_quotes = true
+      # Disable automatic text highlighting by default
+      @highlight_quotes = false
+      @highlight_keywords = false
       @page_numbering_mode = :absolute
     end
 

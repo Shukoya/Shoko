@@ -34,7 +34,7 @@ module EbookReader
       super
 
       # Overlays for mouse selection/annotations (reading and popup menu)
-      if [:read, :popup_menu].include?(@state.mode)
+      if %i[read popup_menu].include?(@state.mode)
         highlight_saved_annotations
         highlight_selection if @mouse_handler.selecting || @state.selection
       end
@@ -98,11 +98,12 @@ module EbookReader
     end
 
     def refresh_highlighting
-      height, width = Terminal.size
+      Terminal.size
       # Re-render content area only
       super
+      # Always highlight when we have a selection, including when popup menu is visible
       highlight_saved_annotations
-      highlight_selection
+      highlight_selection if @state.selection
       Terminal.end_frame
     end
 
@@ -154,6 +155,13 @@ module EbookReader
       @state.selection = nil
     end
 
+    # Clear any active text selection and hide popup
+    def clear_selection!
+      @popup_menu = nil
+      @mouse_handler&.reset
+      @state.selection = nil if @state
+    end
+
     def highlight_selection
       range = @mouse_handler.selection_range || @state.selection
       highlight_range(range, Terminal::ANSI::BG_BLUE) if range
@@ -189,11 +197,16 @@ module EbookReader
         next unless line_info
 
         line_text = line_info[:text].dup
+        next if line_text.empty?
+
         line_start_col = line_info[:col]
 
-        start_idx = (y == start_y ? start_x - line_start_col : 0).clamp(0, line_text.length - 1)
-        end_idx = (y == end_y ? end_x - line_start_col : line_text.length - 1).clamp(0,
-                                                                                     line_text.length - 1)
+        # Safely compute highlight bounds within this line
+        max_index = line_text.length - 1
+        start_idx_raw = (y == start_y ? start_x - line_start_col : 0)
+        end_idx_raw = (y == end_y ? end_x - line_start_col : max_index)
+        start_idx = [[start_idx_raw, 0].max, max_index].min
+        end_idx = [[end_idx_raw, 0].max, max_index].min
         next if end_idx < start_idx
 
         new_line = ''

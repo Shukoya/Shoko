@@ -14,14 +14,17 @@ module EbookReader
         when Symbol
           return :pass unless context.respond_to?(command)
           return context.public_send(command, key) if method_accepts_arg?(context, command)
+
           context.public_send(command)
         when Proc
           return command.call(context, key) if command.arity.abs >= 2
           return command.call(key) if command.arity.abs >= 1
+
           command.call
         when Array
           sym, *args = command
           return :pass unless sym.is_a?(Symbol) && context.respond_to?(sym)
+
           context.public_send(sym, *args)
         else
           :pass
@@ -37,4 +40,3 @@ module EbookReader
     end
   end
 end
-

@@ -1,15 +1,20 @@
 # frozen_string_literal: true
 
+require_relative '../../constants/ui_constants'
+
 module EbookReader
   module UI
     module Screens
       # Displays the main application menu and delegates rendering of
       # individual menu items to a renderer object.
       class MenuScreen
+        include EbookReader::Constants
+
         attr_accessor :selected
 
         MenuRenderContext = Struct.new(:items, :start_row, :height, :width, keyword_init: true)
-        MenuItemContext = Struct.new(:row, :pointer_col, :text_col, :item, :selected, keyword_init: true)
+        MenuItemContext = Struct.new(:row, :pointer_col, :text_col, :item, :selected,
+                                     keyword_init: true)
         private_constant :MenuRenderContext
         private_constant :MenuItemContext
 
@@ -25,31 +30,34 @@ module EbookReader
           title = 'Reader'
           logo_row = [2, 1].max
           col = [(width - title.length) / 2, 1].max
-          surface.write(bounds, logo_row, col, Terminal::ANSI::BRIGHT_CYAN + title + Terminal::ANSI::RESET)
+          surface.write(bounds, logo_row, col, UIConstants::COLOR_TEXT_ACCENT + title + Terminal::ANSI::RESET)
 
           menu_start = logo_row + 4
           menu_items = build_menu_items
           render_menu_items(MenuRenderContext.new(items: menu_items,
                                                   start_row: menu_start,
                                                   height: height,
-                                                  width: width,
-                                                 ))
+                                                  width: width))
 
           footer = 'Navigate with ↑↓ or jk • Select with Enter'
           surface.write(bounds, height - 1, [(width - footer.length) / 2, 1].max,
-                        Terminal::ANSI::DIM + Terminal::ANSI::WHITE + footer + Terminal::ANSI::RESET)
+                        UIConstants::COLOR_TEXT_DIM + footer + Terminal::ANSI::RESET)
         end
 
         private
 
         def build_menu_items
           [
-            { key: 'f', icon: '', text: 'Find Book', desc: 'Browse all EPUBs' },
-            { key: 'r', icon: '󰁯', text: 'Recent', desc: 'Recently opened books' },
-            { key: 'a', icon: '󰠮', text: 'Annotations', desc: 'View all annotations' },
-            { key: 'o', icon: '󰷏', text: 'Open File', desc: 'Enter path manually' },
-            { key: 's', icon: '', text: 'Settings', desc: 'Configure reader' },
-            { key: 'q', icon: '󰿅', text: 'Quit', desc: 'Exit application' },
+            { key: 'f', icon: UIConstants::ICON_BOOK, text: 'Find Book', desc: 'Browse all EPUBs' },
+            { key: 'r', icon: UIConstants::ICON_RECENT, text: 'Recent',
+              desc: 'Recently opened books' },
+            { key: 'a', icon: UIConstants::ICON_ANNOTATION, text: 'Annotations',
+              desc: 'View all annotations' },
+            { key: 'o', icon: UIConstants::ICON_OPEN, text: 'Open File',
+              desc: 'Enter path manually' },
+            { key: 's', icon: UIConstants::ICON_SETTINGS, text: 'Settings',
+              desc: 'Configure reader' },
+            { key: 'q', icon: UIConstants::ICON_QUIT, text: 'Quit', desc: 'Exit application' },
           ]
         end
 
@@ -96,16 +104,17 @@ module EbookReader
         end
 
         def draw_menu_item(context)
-          pointer = context.selected ? Terminal::ANSI::BRIGHT_GREEN + '▸ ' + Terminal::ANSI::RESET : '  '
+          pointer = context.selected ? UIConstants::SELECTION_POINTER_COLOR + UIConstants::SELECTION_POINTER + Terminal::ANSI::RESET : '  '
           surface = EbookReader::Components::Surface.new(Terminal)
-          bounds = EbookReader::Components::Rect.new(x: 1, y: 1, width: context.text_col + 60, height: context.row + 1)
+          bounds = EbookReader::Components::Rect.new(x: 1, y: 1, width: context.text_col + 60,
+                                                     height: context.row + 1)
           surface.write(bounds, context.row, context.pointer_col, pointer)
 
           item = context.item
           text = "#{item[:icon]}  #{item[:text]}"
           desc = item[:desc]
-          name_color = context.selected ? Terminal::ANSI::BRIGHT_WHITE : Terminal::ANSI::WHITE
-          desc_color = Terminal::ANSI::DIM + Terminal::ANSI::GRAY
+          name_color = context.selected ? UIConstants::SELECTION_HIGHLIGHT : UIConstants::COLOR_TEXT_PRIMARY
+          desc_color = UIConstants::COLOR_TEXT_DIM
           surface.write(bounds, context.row, context.text_col, name_color + text + Terminal::ANSI::RESET)
           surface.write(bounds, context.row, context.text_col + text.length + 2,
                         desc_color + desc.to_s + Terminal::ANSI::RESET)

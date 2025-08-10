@@ -21,18 +21,22 @@ module EbookReader
         @selected = 0
         @mode = :menu
         @browse_selected = 0
-        @search_query = ''
+        @search_query = +''
         @search_cursor = 0
-        @file_input = ''
+        @file_input = +''
+        @search_active = false
       end
 
-      attr_state :selected, :mode, :browse_selected, :search_query, :search_cursor, :file_input
+      attr_state :selected, :mode, :browse_selected, :search_query, :search_cursor, :file_input,
+                 :search_active
 
       def add_observer(observer, *fields)
         if fields.nil? || fields.empty?
           @observers_all << observer unless @observers_all.include?(observer)
         else
-          fields.each { |f| @observers_by_field[f] << observer unless @observers_by_field[f].include?(observer) }
+          fields.each do |f|
+            @observers_by_field[f] << observer unless @observers_by_field[f].include?(observer)
+          end
         end
       end
 
@@ -45,6 +49,7 @@ module EbookReader
         iv = :"@#{field}"
         old = instance_variable_get(iv)
         return value if old == value
+
         instance_variable_set(iv, value)
         notify(field, old, value)
         value
@@ -57,6 +62,7 @@ module EbookReader
 
       def safe_notify(observer, field, old, new)
         return unless observer.respond_to?(:state_changed)
+
         observer.state_changed(field, old, new)
       rescue StandardError
         nil
@@ -64,4 +70,3 @@ module EbookReader
     end
   end
 end
-

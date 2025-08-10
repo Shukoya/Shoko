@@ -1,44 +1,50 @@
 # frozen_string_literal: true
 
+require_relative '../terminal'
+
 module EbookReader
   module Constants
-    # UI Layout Constants
+    # Centralized UI color and style definitions
     module UIConstants
-      # Terminal defaults
-      DEFAULT_HEIGHT = 24
-      DEFAULT_WIDTH = 80
-      MIN_HEIGHT = 10
-      MIN_WIDTH = 40
+      # Dimensions
+      MIN_WIDTH = 60
+      MIN_HEIGHT = 20
 
-      # Layout spacing
-      HEADER_HEIGHT = 2
-      FOOTER_HEIGHT = 2
-      CONTENT_PADDING = 2
-      SCROLL_INDICATOR_WIDTH = 2
+      # Base Colors
+      COLOR_TEXT_PRIMARY = Terminal::ANSI::WHITE
+      COLOR_TEXT_SECONDARY = Terminal::ANSI::GRAY
+      COLOR_TEXT_DIM = Terminal::ANSI::DIM
+      COLOR_TEXT_ACCENT = Terminal::ANSI::BRIGHT_CYAN
+      COLOR_TEXT_SUCCESS = Terminal::ANSI::GREEN
+      COLOR_TEXT_WARNING = Terminal::ANSI::YELLOW
+      COLOR_TEXT_ERROR = Terminal::ANSI::RED
 
-      # Menu layout
-      MENU_ITEM_SPACING = 2
-      MENU_POINTER_OFFSET = 2
-      MENU_TEXT_OFFSET = 4
+      # Backgrounds
+      BG_PRIMARY = Terminal::ANSI::BG_DARK
+      BG_ACCENT = Terminal::ANSI::BG_BRIGHT_YELLOW
 
-      # Reader layout
-      SPLIT_VIEW_DIVIDER_WIDTH = 5
-      SINGLE_VIEW_MAX_WIDTH = 120
-      MIN_COLUMN_WIDTH = 20
+      # Borders & Dividers
+      BORDER_PRIMARY = Terminal::ANSI::GRAY
+      BORDER_ACCENT = Terminal::ANSI::BRIGHT_CYAN
 
-      # Time formatting
-      MINUTE = 60
-      HOUR = 3600
-      DAY = 86_400
-      WEEK = 604_800
+      # Selections & Highlights
+      SELECTION_POINTER = '▸ '
+      SELECTION_FG = Terminal::ANSI::BLACK
+      SELECTION_POINTER_COLOR = Terminal::ANSI::BRIGHT_GREEN
+      SELECTION_HIGHLIGHT = Terminal::ANSI::BRIGHT_WHITE
 
-      # Visual indicators
-      POINTER_SYMBOL = '▸'
-      DIVIDER_SYMBOL = '│'
-      SCROLL_SYMBOL = '▐'
-
-      # Key repeat delay (ms)
-      KEY_REPEAT_DELAY = 20
+      # Icons
+      ICON_BOOK = '󰂺'
+      ICON_RECENT = '󰁯'
+      ICON_ANNOTATION = '󰠮'
+      ICON_SETTINGS = ''
+      ICON_QUIT = '󰿅'
+      ICON_OPEN = '󰷏'
+      ICON_TOC = '📖'
+      ICON_BOOKMARK = '🔖'
+      ICON_HELP = '❓'
+      ICON_SEARCH = ''
+      ICON_REFRESH = ''
     end
   end
 end

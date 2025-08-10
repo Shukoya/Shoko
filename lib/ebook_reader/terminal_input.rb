@@ -21,19 +21,17 @@ module EbookReader
     def setup_console
       $stdout.sync = true
       @console = IO.console
-      @console.raw! if @console&.respond_to?(:raw!)
+      @console.raw! if @console.respond_to?(:raw!)
     end
 
     def cleanup_console
-      @console.cooked! if @console&.respond_to?(:cooked!)
+      @console.cooked! if @console.respond_to?(:cooked!)
       @console = nil
     end
 
-    def with_raw_console
+    def with_raw_console(&)
       console = validate_console
-      console.raw do
-        yield
-      end
+      console.raw(&)
     end
 
     def read_key
@@ -48,6 +46,7 @@ module EbookReader
       loop do
         key = read_key
         return key if key
+
         $stdin.wait_readable
       end
     end
@@ -71,6 +70,7 @@ module EbookReader
         while input[-1] != 'm' && input[-1] != 'M'
           extra = read_key
           break unless extra
+
           input += extra
         end
       end
@@ -81,7 +81,7 @@ module EbookReader
     def setup_signal_handlers(&cleanup_callback)
       %w[INT TERM].each do |signal|
         trap(signal) do
-          cleanup_callback.call if cleanup_callback
+          cleanup_callback&.call
           exit(0)
         end
       end
@@ -113,12 +113,14 @@ module EbookReader
     def validate_console
       console = IO.console
       raise EbookReader::TerminalUnavailableError unless console
+
       console
     end
 
     def read_key_with_escape_handling
       input = $stdin.read_nonblock(1)
       return input unless input == "\e"
+
       read_escape_sequence(input)
     end
 
@@ -132,4 +134,3 @@ module EbookReader
     end
   end
 end
-

@@ -23,7 +23,7 @@ module EbookReader
 
           @children.each_with_index do |child, i|
             pref = child.respond_to?(:preferred_height) ? child.preferred_height(remaining) : nil
-            if pref && pref.positive?
+            if pref&.positive?
               fixed_heights[i] = pref
               remaining -= pref
             else
@@ -50,4 +50,3 @@ module EbookReader
     end
   end
 end
-

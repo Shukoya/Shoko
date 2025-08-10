@@ -22,6 +22,7 @@ module EbookReader
         # Component-friendly render path using Surface within given bounds
         def render_with_surface(surface, root_bounds)
           return unless @visible
+
           @items.each_with_index do |item, i|
             draw_menu_item_with_surface(surface, root_bounds, item, i)
           end
