@@ -2,6 +2,8 @@
 
 require_relative 'base_mode'
 require_relative '../annotations/annotation_store'
+require_relative '../components/surface'
+require_relative '../components/rect'
 
 module EbookReader
   module ReaderModes
@@ -14,9 +16,14 @@ module EbookReader
       end
 
       def draw(height, width)
+        # Legacy compatibility wrapper
         surface = Components::Surface.new(Terminal)
         bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
-        surface.write(bounds, 1, 2, "Annotations for #{File.basename(reader.path)}")
+        render(surface, bounds)
+      end
+
+      def render(surface, bounds)
+        surface.write(bounds, 1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}Annotations for #{File.basename(reader.path)}#{Terminal::ANSI::RESET}")
 
         return if @annotations.empty?
 
@@ -24,8 +31,9 @@ module EbookReader
           text = annotation['text'].tr("\n", ' ').strip
           note = annotation['note'].tr("\n", ' ').strip
 
-          display_text = "#{i == @selected_annotation ? '> ' : '  '} \"#{text[0, 30]}...\""
-          display_note = "    Note: #{note[0, 40]}..."
+          prefix = i == @selected_annotation ? "#{Terminal::ANSI::BRIGHT_GREEN}▸ " : '  '
+          display_text = "#{prefix}\"#{text[0, 30]}...\"#{Terminal::ANSI::RESET}"
+          display_note = "    #{Terminal::ANSI::DIM}Note: #{note[0, 40]}...#{Terminal::ANSI::RESET}"
 
           surface.write(bounds, (i * 2) + 3, 4, display_text)
           surface.write(bounds, (i * 2) + 4, 4, display_note)

@@ -2,6 +2,7 @@
 
 require_relative 'base_component'
 require_relative 'surface'
+require_relative '../services/layout_service'
 
 module EbookReader
   module Components
@@ -26,7 +27,7 @@ module EbookReader
         doc = @controller.instance_variable_get(:@doc)
 
         # Reset rendered lines registry for selection/highlighting
-        @controller.instance_variable_set(:@rendered_lines, {})
+        @controller.instance_variable_get(:@state).rendered_lines = {}
 
         # If nothing relevant changed since last render, still draw (safe),
         # but we can short-circuit expensive recompute later using @needs_redraw
@@ -163,7 +164,7 @@ module EbookReader
         text = highlight_quotes(text) if config.highlight_quotes
 
         abs_row = bounds.y + row - 1
-        (@controller.instance_variable_get(:@rendered_lines) || {})[abs_row] = {
+        (@controller.instance_variable_get(:@state).rendered_lines || {})[abs_row] = {
           col: bounds.x + col - 1,
           text: text,
         }
@@ -172,25 +173,15 @@ module EbookReader
       end
 
       def layout_metrics(width, height, view_mode)
-        col_width = if view_mode == :split
-                      [(width - 3) / 2, 20].max
-                    else
-                      (width * 0.9).to_i.clamp(30, 120)
-                    end
-        content_height = [height - 2, 1].max
-        [col_width, content_height]
+        Services::LayoutService.calculate_metrics(width, height, view_mode)
       end
 
       def adjust_for_line_spacing(height, line_spacing)
-        return 1 if height <= 0
-
-        line_spacing == :relaxed ? [height / 2, 1].max : height
+        Services::LayoutService.adjust_for_line_spacing(height, line_spacing)
       end
 
       def calculate_center_start_row(content_height, lines_count, line_spacing)
-        actual_lines = line_spacing == :relaxed ? [(lines_count * 2) - 1, 0].max : lines_count
-        padding = [(content_height - actual_lines) / 2, 0].max
-        [3 + padding, 3].max
+        Services::LayoutService.calculate_center_start_row(content_height, lines_count, line_spacing)
       end
 
       # ===== Non-reading screens =====
@@ -266,7 +257,7 @@ module EbookReader
       end
 
       def render_bookmarks(surface, bounds, doc)
-        bookmarks = @controller.instance_variable_get(:@bookmarks) || []
+        bookmarks = @controller.instance_variable_get(:@state).bookmarks || []
         surface.write(bounds, 1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}🔖 Bookmarks#{Terminal::ANSI::RESET}")
         surface.write(bounds, 1, [bounds.width - 40, 40].max,
                       "#{Terminal::ANSI::DIM}[B/ESC] Back [d] Delete#{Terminal::ANSI::RESET}")

@@ -25,6 +25,7 @@ require_relative 'components/content_component'
 require_relative 'components/footer_component'
 require_relative 'components/popup_overlay_component'
 require_relative 'input/dispatcher'
+require_relative 'services/layout_service'
 
 module EbookReader
   # Main reader interface for displaying EPUB content.
@@ -150,7 +151,7 @@ module EbookReader
       end
 
       # Default: component-driven layout
-      @rendered_lines = {}
+      @state.rendered_lines = {}
       surface = Components::Surface.new(Terminal)
       root_bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
       @layout.render(surface, root_bounds)
@@ -178,7 +179,7 @@ module EbookReader
       when :read, :help, :toc, :bookmarks
         @current_mode = nil
       when :popup_menu
-        # Popup handled separately via @popup_menu
+        # Popup handled separately via @state.popup_menu
       else
         @current_mode = nil
       end
@@ -496,7 +497,7 @@ module EbookReader
       # Route all keys (including ESC) through popup handler so cancel works
       route_key = lambda do |ctx, key|
         # Call private handler via send to respect visibility
-        ctx.send(:handle_popup_menu_input, [key]) if ctx.instance_variable_get(:@popup_menu)
+        ctx.send(:handle_popup_menu_input, [key]) if ctx.instance_variable_get(:@state).popup_menu
         :handled
       end
       bindings["\e"] = route_key
@@ -557,7 +558,7 @@ module EbookReader
         { current: @state.current_page_index + 1, total: @page_manager.total_pages }
       else
         height, width = Terminal.size
-        _, content_height = get_layout_metrics(width, height)
+        _, content_height = Services::LayoutService.calculate_metrics(width, height, @config.view_mode)
         actual_height = adjust_for_line_spacing(content_height)
 
         return { current: 0, total: 0 } if actual_height <= 0
@@ -574,21 +575,8 @@ module EbookReader
       end
     end
 
-    # Mirrors metrics used by rendering code
-    def get_layout_metrics(width, height)
-      col_width = if @config.view_mode == :split
-                    [(width - 3) / 2, 20].max
-                  else
-                    (width * 0.9).to_i.clamp(30, 120)
-                  end
-      content_height = [height - 2, 1].max
-      [col_width, content_height]
-    end
-
     def adjust_for_line_spacing(height)
-      return 1 if height <= 0
-
-      @config.line_spacing == :relaxed ? [height / 2, 1].max : height
+      Services::LayoutService.adjust_for_line_spacing(height, @config.line_spacing)
     end
 
     def load_document
@@ -615,10 +603,10 @@ module EbookReader
     end
 
     def handle_popup_menu_input(keys)
-      return unless @popup_menu
+      return unless @state.popup_menu
 
       keys.each do |key|
-        result = @popup_menu.handle_key(key)
+        result = @state.popup_menu.handle_key(key)
         case result&.fetch(:type)
         when :selection_change
           # Redraw only the popup without clearing the background.
@@ -632,7 +620,7 @@ module EbookReader
           draw_screen # Full redraw after action
         when :cancel
           # Close the popup and return to reading mode
-          @popup_menu = nil
+          @state.popup_menu = nil
           @mouse_handler.reset
           @state.selection = nil
           switch_mode(:read)
@@ -730,7 +718,7 @@ module EbookReader
         return
       end
 
-      col_width, content_height = get_layout_metrics(width, height)
+      col_width, content_height = Services::LayoutService.calculate_metrics(width, height, @config.view_mode)
       actual_height = adjust_for_line_spacing(content_height)
       return if actual_height <= 0
 
@@ -752,15 +740,6 @@ module EbookReader
       @page_map_cache = { key: cache_key, map: @state.page_map, total: @state.total_pages }
     end
 
-    def get_layout_metrics(width, height)
-      col_width = if @config.view_mode == :split
-                    [(width - 3) / 2, MIN_COLUMN_WIDTH].max
-                  else
-                    (width * 0.9).to_i.clamp(30, 120)
-                  end
-      content_height = [height - 2, 1].max
-      [col_width, content_height]
-    end
 
     def load_progress
       progress = @state_service.load_progress
@@ -779,12 +758,12 @@ module EbookReader
     end
 
     def load_bookmarks
-      @bookmarks = BookmarkManager.get(@path)
+      @state.bookmarks = BookmarkManager.get(@path)
     end
 
     def extract_bookmark_text(chapter, line_offset)
       height, width = Terminal.size
-      col_width, = get_layout_metrics(width, height)
+      col_width, = Services::LayoutService.calculate_metrics(width, height, @config.view_mode)
       wrapped = wrap_lines(chapter.lines || [], col_width)
       text = wrapped[line_offset] || 'Bookmark'
       text.strip[0, 50]
@@ -853,7 +832,7 @@ module EbookReader
     end
 
     def jump_to_bookmark
-      bookmark = @bookmarks[@state.bookmark_selected]
+      bookmark = @state.bookmarks[@state.bookmark_selected]
       return unless bookmark
 
       @state.current_chapter = bookmark.chapter_index
@@ -863,13 +842,13 @@ module EbookReader
     end
 
     def delete_selected_bookmark
-      bookmark = @bookmarks[@state.bookmark_selected]
+      bookmark = @state.bookmarks[@state.bookmark_selected]
       return unless bookmark
 
       BookmarkManager.delete(@path, bookmark)
       load_bookmarks
-      if @bookmarks.any?
-        @state.bookmark_selected = [@state.bookmark_selected, @bookmarks.length - 1].min
+      if @state.bookmarks.any?
+        @state.bookmark_selected = [@state.bookmark_selected, @state.bookmarks.length - 1].min
       end
       set_message(Constants::Messages::BOOKMARK_DELETED)
     end
@@ -893,7 +872,7 @@ module EbookReader
 
     def end_of_chapter_metrics
       height, width = Terminal.size
-      col_width, content_height = get_layout_metrics(width, height)
+      col_width, content_height = Services::LayoutService.calculate_metrics(width, height, @config.view_mode)
       [col_width, adjust_for_line_spacing(content_height)]
     end
 

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative 'base_mode'
+require_relative '../components/surface'
+require_relative '../components/rect'
 
 module EbookReader
   module ReaderModes
@@ -18,11 +20,18 @@ module EbookReader
       end
 
       def draw(height, width)
-        draw_header(width)
-        draw_selected_text(width)
-        draw_divider(width)
-        draw_text_area(height, width)
-        draw_footer(height)
+        # Legacy compatibility wrapper
+        surface = Components::Surface.new(Terminal)
+        bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
+        render(surface, bounds)
+      end
+
+      def render(surface, bounds)
+        draw_header(surface, bounds)
+        draw_selected_text(surface, bounds)
+        draw_divider(surface, bounds)
+        draw_text_area(surface, bounds)
+        draw_footer(surface, bounds)
       end
 
       def handle_input(key)
@@ -51,51 +60,51 @@ module EbookReader
 
       private
 
-      def draw_header(_width)
+      def draw_header(surface, bounds)
         title = @is_editing ? 'Editing Annotation' : 'Creating Annotation'
-        terminal.write(1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}#{title}#{Terminal::ANSI::RESET}")
+        surface.write(bounds, 1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}#{title}#{Terminal::ANSI::RESET}")
       end
 
-      def draw_selected_text(_width)
+      def draw_selected_text(surface, bounds)
         text = "Selected: #{@selected_text.tr("\n", ' ')[0..60]}..."
-        terminal.write(2, 2, "#{Terminal::ANSI::DIM}#{text}#{Terminal::ANSI::RESET}")
+        surface.write(bounds, 2, 2, "#{Terminal::ANSI::DIM}#{text}#{Terminal::ANSI::RESET}")
       end
 
-      def draw_divider(width)
-        terminal.write(3, 0, Terminal::ANSI::DIM + ('─' * width) + Terminal::ANSI::RESET)
+      def draw_divider(surface, bounds)
+        surface.write(bounds, 3, 1, Terminal::ANSI::DIM + ('─' * bounds.width) + Terminal::ANSI::RESET)
       end
 
-      def draw_text_area(height, width)
+      def draw_text_area(surface, bounds)
         box_y = 5
-        box_height = height - 8
-        box_width = width - 4
+        box_height = bounds.height - 8
+        box_width = bounds.width - 4
 
-        draw_box(box_y, 2, box_height, box_width)
-        draw_text_content(box_y + 1, 4, box_height - 2, box_width - 4)
+        draw_box(surface, bounds, box_y, 2, box_height, box_width)
+        draw_text_content(surface, bounds, box_y + 1, 4, box_height - 2, box_width - 4)
       end
 
-      def draw_box(y, x, height, width)
+      def draw_box(surface, bounds, y, x, height, width)
         # Top border
-        terminal.write(y, x, "╭#{'─' * (width - 2)}╮")
-        terminal.write(y, x + 2, '[ Annotation Note ]')
+        surface.write(bounds, y, x, "╭#{'─' * (width - 2)}╮")
+        surface.write(bounds, y, x + 2, '[ Annotation Note ]')
 
         # Side borders
         (1...(height - 1)).each do |i|
-          terminal.write(y + i, x, '│')
-          terminal.write(y + i, x + width - 1, '│')
+          surface.write(bounds, y + i, x, '│')
+          surface.write(bounds, y + i, x + width - 1, '│')
         end
 
         # Bottom border
-        terminal.write(y + height - 1, x, "╰#{'─' * (width - 2)}╯")
+        surface.write(bounds, y + height - 1, x, "╰#{'─' * (width - 2)}╯")
       end
 
-      def draw_text_content(y, x, height, width)
+      def draw_text_content(surface, bounds, y, x, height, width)
         wrapped = word_wrap(@note, width)
 
         wrapped.each_with_index do |line, i|
           break if i >= height
 
-          terminal.write(y + i, x, Terminal::ANSI::WHITE + line + Terminal::ANSI::RESET)
+          surface.write(bounds, y + i, x, Terminal::ANSI::WHITE + line + Terminal::ANSI::RESET)
         end
 
         # Draw cursor
@@ -103,11 +112,11 @@ module EbookReader
         cursor_y = y + cursor_lines.length - 1
         cursor_x = x + (cursor_lines.last || '').length
 
-        terminal.write(cursor_y, cursor_x, "#{Terminal::ANSI::BRIGHT_WHITE}_#{Terminal::ANSI::RESET}")
+        surface.write(bounds, cursor_y, cursor_x, "#{Terminal::ANSI::BRIGHT_WHITE}_#{Terminal::ANSI::RESET}")
       end
 
-      def draw_footer(height)
-        terminal.write(height - 1, 2,
+      def draw_footer(surface, bounds)
+        surface.write(bounds, bounds.height - 1, 2,
                        "#{Terminal::ANSI::DIM}Ctrl+S Save • ESC Cancel#{Terminal::ANSI::RESET}")
       end
 

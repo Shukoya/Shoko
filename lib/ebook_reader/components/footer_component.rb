@@ -50,7 +50,7 @@ module EbookReader
                         Terminal::ANSI::YELLOW + mode_text + Terminal::ANSI::RESET)
 
           # Status right
-          bookmarks = @controller.instance_variable_get(:@bookmarks) || []
+          bookmarks = @controller.instance_variable_get(:@state).bookmarks || []
           right_prog = "L#{config.line_spacing.to_s[0]} B#{bookmarks.count}"
           surface.write(bounds, row1, [width - right_prog.length - 1, 1].max,
                         Terminal::ANSI::BLUE + right_prog + Terminal::ANSI::RESET)

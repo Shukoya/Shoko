@@ -14,10 +14,10 @@ module EbookReader
     def initialize(epub_path, config = Config.new)
       super
       @mouse_handler = Annotations::MouseHandler.new
-      @popup_menu = nil
+      @state.popup_menu = nil
       @selected_text = nil
       @state.selection = nil
-      @rendered_lines = {}
+      @state.rendered_lines = {}
       refresh_annotations
     end
 
@@ -30,7 +30,7 @@ module EbookReader
 
     def draw_screen
       # Render the base UI via components
-      @rendered_lines.clear
+      @state.rendered_lines.clear
       super
 
       # Overlays for mouse selection/annotations (reading and popup menu)
@@ -63,7 +63,7 @@ module EbookReader
       event = @mouse_handler.parse_mouse_event(input)
       return unless event
 
-      if @popup_menu&.visible && event[:released]
+      if @state.popup_menu&.visible && event[:released]
         handle_popup_click(event)
         return
       end
@@ -85,12 +85,12 @@ module EbookReader
     private
 
     def handle_popup_click(event)
-      item = @popup_menu.handle_click(event[:x], event[:y])
+      item = @state.popup_menu.handle_click(event[:x], event[:y])
 
       if item
         handle_popup_action(item)
       else
-        @popup_menu = nil
+        @state.popup_menu = nil
         @mouse_handler.reset
         @state.selection = nil
       end
@@ -130,7 +130,7 @@ module EbookReader
       menu_x = [end_pos[:x], Terminal.size[1] - menu_width].min
       menu_y = [end_pos[:y] + 1, Terminal.size[0] - 5].min
 
-      @popup_menu = UI::Components::PopupMenu.new(menu_x, menu_y, menu_items)
+      @state.popup_menu = UI::Components::PopupMenu.new(menu_x, menu_y, menu_items)
       switch_mode(:popup_menu)
       # Draw immediately so the menu appears in full without extra input
       draw_screen
@@ -150,14 +150,14 @@ module EbookReader
         switch_mode(:read)
       end
 
-      @popup_menu = nil
+      @state.popup_menu = nil
       @mouse_handler.reset
       @state.selection = nil
     end
 
     # Clear any active text selection and hide popup
     def clear_selection!
-      @popup_menu = nil
+      @state.popup_menu = nil
       @mouse_handler&.reset
       @state.selection = nil if @state
     end
@@ -168,16 +168,16 @@ module EbookReader
     end
 
     def highlight_saved_annotations
-      return unless @annotations
+      return unless @state.annotations
 
-      @annotations.select { |a| a['chapter_index'] == @state.current_chapter }
+      @state.annotations.select { |a| a['chapter_index'] == @state.current_chapter }
                   .each do |ann|
         highlight_range(ann['range'], Terminal::ANSI::BG_CYAN)
       end
     end
 
     def highlight_range(range, color)
-      return unless range && @rendered_lines
+      return unless range && @state.rendered_lines
 
       start_pos = range[:start] || range['start']
       end_pos = range[:end] || range['end']
@@ -193,7 +193,7 @@ module EbookReader
       bounds = Components::Rect.new(x: 1, y: 1, width: Terminal.size[1], height: Terminal.size[0])
       (start_y..end_y).each do |y|
         row = y + 1
-        line_info = @rendered_lines[row]
+        line_info = @state.rendered_lines[row]
         next unless line_info
 
         line_text = line_info[:text].dup
@@ -219,11 +219,11 @@ module EbookReader
     end
 
     def refresh_annotations
-      @annotations = Annotations::AnnotationStore.get(@path)
+      @state.annotations = Annotations::AnnotationStore.get(@path)
     end
 
     def extract_selected_text(range)
-      return '' unless range && @rendered_lines
+      return '' unless range && @state.rendered_lines
 
       start_pos = range[:start]
       end_pos = range[:end]
@@ -231,7 +231,7 @@ module EbookReader
 
       (start_pos[:y]..end_pos[:y]).each do |y|
         row = y + 1
-        line_info = @rendered_lines[row]
+        line_info = @state.rendered_lines[row]
         next unless line_info
 
         line_text = line_info[:text]

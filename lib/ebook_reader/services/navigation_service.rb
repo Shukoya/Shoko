@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'layout_service'
+
 module EbookReader
   module Services
     # A service that provides methods for navigating through the book. It includes
@@ -21,8 +23,8 @@ module EbookReader
 
       def calculate_page_metrics
         height, width = Terminal.size
-        col_width, content_height = @reader.send(:get_layout_metrics, width, height)
-        content_height = @reader.send(:adjust_for_line_spacing, content_height)
+        col_width, content_height = Services::LayoutService.calculate_metrics(width, height, @reader.config.view_mode)
+        content_height = Services::LayoutService.adjust_for_line_spacing(content_height, @reader.config.line_spacing)
         chapter = @reader.doc.get_chapter(@reader.current_chapter)
         return {} unless chapter
 

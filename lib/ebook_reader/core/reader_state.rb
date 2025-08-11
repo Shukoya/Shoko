@@ -90,6 +90,8 @@ module EbookReader
       # Dynamic pagination caches/state
       attr_state :dynamic_page_map, :dynamic_total_pages, :dynamic_chapter_starts,
                  :last_dynamic_width, :last_dynamic_height
+      # UI state (centralized from scattered instance variables)
+      attr_state :rendered_lines, :bookmarks, :annotations, :popup_menu
 
       # Reset all state to initial values
       def reset_to_defaults
@@ -127,6 +129,11 @@ module EbookReader
         @dynamic_chapter_starts = []
         @last_dynamic_width = 0
         @last_dynamic_height = 0
+        # UI state initialization
+        @rendered_lines = {}
+        @bookmarks = []
+        @annotations = []
+        @popup_menu = nil
       end
 
       # Get current page offset based on view mode

@@ -20,7 +20,7 @@ module EbookReader
       end
 
       def render(surface, bounds)
-        popup = @controller.instance_variable_get(:@popup_menu)
+        popup = @controller.instance_variable_get(:@state).popup_menu
         return unless popup.respond_to?(:render_with_surface)
 
         popup.render_with_surface(surface, bounds)

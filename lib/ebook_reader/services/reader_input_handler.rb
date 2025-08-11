@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'reader_input_handler/navigation_handlers'
+require_relative 'layout_service'
 
 module EbookReader
   module Services
@@ -76,8 +77,8 @@ module EbookReader
 
       def navigation_handlers_for_current_mode
         height, width = Terminal.size
-        col_width, content_height = @reader.send(:get_layout_metrics, width, height)
-        content_height = @reader.send(:adjust_for_line_spacing, content_height)
+        col_width, content_height = Services::LayoutService.calculate_metrics(width, height, @reader.config.view_mode)
+        content_height = Services::LayoutService.adjust_for_line_spacing(content_height, @reader.config.line_spacing)
 
         chapter = @reader.doc.get_chapter(@reader.current_chapter)
         return unless chapter
