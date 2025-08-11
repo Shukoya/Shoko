@@ -37,7 +37,7 @@ module EbookReader
 
         def handle_input(key)
           case key
-          when "\u0013" # Ctrl+S
+          when "\u0013", "\x13", 19.chr, "\u0017", 23.chr # Ctrl+S (19) or Ctrl+W (23)
             save
             return :saved
           when "\e" # Escape
@@ -66,7 +66,7 @@ module EbookReader
         end
 
         def draw_footer(surface, bounds, width)
-          footer_text = 'Ctrl+S: Save | Esc: Cancel'
+          footer_text = 'Ctrl+S/Ctrl+W: Save | Esc: Cancel'
           surface.write(bounds, 10, 2, UIConstants::COLOR_TEXT_DIM + footer_text + Terminal::ANSI::RESET)
           surface.write(bounds, 9, 1, UIConstants::BORDER_PRIMARY + ('─' * (width - 1)) + Terminal::ANSI::RESET)
         end

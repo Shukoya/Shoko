@@ -13,7 +13,11 @@ module EbookReader
 
       def initialize(selection_range, available_actions = nil)
         @selection_range = Services::CoordinateService.normalize_selection_range(selection_range)
-        return unless @selection_range
+        
+        unless @selection_range
+          @visible = false
+          return
+        end
 
         @available_actions = available_actions || default_actions
         @items = @available_actions.map { |action| action[:label] }
@@ -21,6 +25,12 @@ module EbookReader
         @visible = true
         @width = calculate_width
         @height = @items.length
+
+        # Ensure we have at least one item before proceeding
+        unless @items.any?
+          @visible = false
+          return
+        end
 
         # Calculate optimal position using coordinate service
         position = Services::CoordinateService.calculate_popup_position(
@@ -54,6 +64,9 @@ module EbookReader
           execute_selected_action
         elsif Input::KeyDefinitions::ACTIONS[:cancel].include?(key)
           { type: :cancel }
+        else
+          # Explicitly return nil for unhandled keys to allow fallthrough
+          nil
         end
       end
 
@@ -107,7 +120,11 @@ module EbookReader
       end
 
       def move_selection(direction)
+        return if @items.empty?
+        
+        old_index = @selected_index
         @selected_index = (@selected_index + direction) % @items.length
+        
       end
 
       def execute_selected_action

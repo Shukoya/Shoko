@@ -101,6 +101,50 @@ module EbookReader
         end
       end
 
+      # Navigation methods for annotations - MUST be public for input dispatcher
+      def navigate_annotations_down(screen)
+        book_count = screen.book_count
+        return if book_count.zero?
+
+        annotation_count = screen.annotation_count_for_selected_book
+
+        if screen.selected_annotation_index < annotation_count - 1
+          screen.selected_annotation_index += 1
+        elsif screen.selected_book_index < book_count - 1
+          screen.selected_book_index += 1
+          screen.selected_annotation_index = 0
+        end
+      end
+
+      def navigate_annotations_up(screen)
+        book_count = screen.book_count
+        return if book_count.zero?
+
+        if screen.selected_annotation_index.positive?
+          screen.selected_annotation_index -= 1
+        elsif screen.selected_book_index.positive?
+          screen.selected_book_index -= 1
+          screen.selected_annotation_index = screen.annotation_count_for_selected_book - 1
+        end
+      end
+
+      # Annotation management methods - MUST be public for input dispatcher
+      def delete_annotation(screen)
+        # For now, this is a placeholder.
+        # A confirmation dialog should be added here.
+        book_path = screen.instance_variable_get(:@books)[screen.selected_book_index]
+        return unless book_path
+
+        annotations = screen.instance_variable_get(:@annotations_by_book)[book_path]
+        annotation = annotations[screen.selected_annotation_index]
+
+        return unless annotation
+
+        EbookReader::Annotations::AnnotationStore.delete(book_path, annotation['id'])
+        # Refresh annotations using the proper method
+        screen.refresh_data
+      end
+
       private
 
       def handle_quit
@@ -264,58 +308,9 @@ module EbookReader
         }
       end
 
-      def delete_annotation(screen)
-        # For now, this is a placeholder.
-        # A confirmation dialog should be added here.
-        book_path = screen.instance_variable_get(:@books)[screen.selected_book_index]
-        return unless book_path
-
-        annotations = screen.instance_variable_get(:@annotations_by_book)[book_path]
-        annotation = annotations[screen.selected_annotation_index]
-
-        return unless annotation
-
-        EbookReader::Annotations::AnnotationStore.delete(book_path, annotation['id'])
-        # Refresh annotations
-        new_annotations = EbookReader::Annotations::AnnotationStore.send(:load_all)
-        screen.instance_variable_set(:@annotations_by_book, new_annotations)
-        screen.instance_variable_set(:@books, new_annotations.keys)
-        screen.selected_book_index = [screen.selected_book_index, screen.book_count - 1].max
-        return unless screen.selected_book_index >= 0
-
-        screen.selected_annotation_index = [screen.selected_annotation_index,
-                                            screen.annotation_count_for_selected_book - 1].max
-      end
-
       def edit_annotation(screen)
         # This is a placeholder for now.
         # It needs to launch the annotation editor.
-      end
-
-      def navigate_annotations_down(screen)
-        book_count = screen.book_count
-        return if book_count.zero?
-
-        annotation_count = screen.annotation_count_for_selected_book
-
-        if screen.selected_annotation_index < annotation_count - 1
-          screen.selected_annotation_index += 1
-        elsif screen.selected_book_index < book_count - 1
-          screen.selected_book_index += 1
-          screen.selected_annotation_index = 0
-        end
-      end
-
-      def navigate_annotations_up(screen)
-        book_count = screen.book_count
-        return if book_count.zero?
-
-        if screen.selected_annotation_index.positive?
-          screen.selected_annotation_index -= 1
-        elsif screen.selected_book_index.positive?
-          screen.selected_book_index -= 1
-          screen.selected_annotation_index = screen.annotation_count_for_selected_book - 1
-        end
       end
 
       def handle_setting_change(key)

@@ -164,7 +164,8 @@ module EbookReader
       # Activate appropriate input bindings stack
       stack = [:read]
       stack << mode if mode && mode != :read
-      @dispatcher.activate_stack(stack) if defined?(@dispatcher)
+      
+@dispatcher.activate_stack(stack) if defined?(@dispatcher)
     end
 
     def scroll_down
@@ -366,6 +367,47 @@ module EbookReader
       end
     end
 
+    # Enhanced popup navigation handlers for direct key routing - MUST be public
+    def handle_popup_navigation(key)
+      return :pass unless @state.popup_menu
+      
+      result = @state.popup_menu.handle_key(key)
+      
+      if result && result[:type] == :selection_change
+        draw_screen
+        :handled
+      else
+        :pass
+      end
+    end
+    
+    def handle_popup_action_key(key)
+      return :pass unless @state.popup_menu
+      
+      result = @state.popup_menu.handle_key(key)
+      if result && result[:type] == :action
+        handle_popup_action(result)
+        draw_screen
+        :handled
+      else
+        :pass
+      end
+    end
+    
+    def handle_popup_cancel(key)
+      return :pass unless @state.popup_menu
+      
+      result = @state.popup_menu.handle_key(key)
+      if result && result[:type] == :cancel
+        cleanup_popup_state
+        switch_mode(:read)
+        draw_screen
+        :handled
+      else
+        :pass
+      end
+    end
+
     private
 
     # Hook for subclasses (MouseableReader) to clear any active selection/popup
@@ -449,9 +491,16 @@ module EbookReader
 
     def register_popup_bindings_new
       bindings = {}
-      # Route all keys (including ESC) through popup handler so cancel works
-      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :handle_popup_key }
+      
+      # Explicitly bind navigation keys for popup menu with highest priority
+      Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :handle_popup_navigation }
+      Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :handle_popup_navigation }
+      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :handle_popup_action_key }
+      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :handle_popup_cancel }
+      
+      # Catch-all for other keys
       bindings[:__default__] = :handle_popup_key
+      
       @dispatcher.register_mode(:popup_menu, bindings)
     end
 
@@ -783,6 +832,7 @@ module EbookReader
         :pass
       end
     end
+
 
     def handle_popup_action(action_data)
       # Handle both old string-based actions and new action objects

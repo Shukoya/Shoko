@@ -146,6 +146,36 @@ module EbookReader
       @scanner.start_scan(force: true)
     end
 
+    # Methods expected by BindingGenerator - MUST be public
+    def handle_selection
+      handle_menu_selection
+    end
+    
+    def handle_cancel
+      case @state.mode
+      when :menu
+        cleanup_and_exit(0, '')
+      when :browse, :recent, :settings, :annotations, :annotation_editor, :open_file
+        switch_to_mode(:menu)
+      else
+        switch_to_mode(:menu)
+      end
+    end
+    
+    def exit_current_mode
+      handle_cancel
+    end
+    
+    def delete_selected_item
+      # This would be context-dependent, but for now just pass
+      case @state.mode
+      when :browse
+        handle_delete if respond_to?(:handle_delete)
+      else
+        # No-op for other modes
+      end
+    end
+
     private
 
     def setup_state
@@ -463,7 +493,11 @@ module EbookReader
       bindings[:__default__] = lambda { |ctx, key|
         screen = ctx.instance_variable_get(:@annotation_editor_screen)
         result = screen.handle_input(key)
-        ctx.switch_to_mode(:annotations) if %i[saved cancelled].include?(result)
+        if %i[saved cancelled].include?(result)
+          # Refresh annotations data to show any changes
+          ctx.instance_variable_get(:@annotations_screen).refresh_data
+          ctx.switch_to_mode(:annotations)
+        end
         :handled
       }
 

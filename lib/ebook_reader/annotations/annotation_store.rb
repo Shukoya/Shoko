@@ -17,7 +17,7 @@ module EbookReader
           book_annotations = annotations[epub_path] || []
 
           new_annotation = {
-            'id' => Time.now.to_f,
+            'id' => Time.now.to_f.to_s,
             'text' => text,
             'note' => note,
             'range' => range,

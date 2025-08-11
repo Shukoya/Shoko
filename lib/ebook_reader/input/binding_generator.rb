@@ -117,6 +117,15 @@ module EbookReader
 
         when :handle_popup_key
           ->(ctx, key) { ctx.handle_popup_key(key) }
+        
+        when :handle_popup_navigation
+          ->(ctx, key) { ctx.handle_popup_navigation(key) }
+        
+        when :handle_popup_action_key
+          ->(ctx, key) { ctx.handle_popup_action_key(key) }
+          
+        when :handle_popup_cancel
+          ->(ctx, key) { ctx.handle_popup_cancel(key) }
 
         else
           ->(_ctx, _) { :pass }

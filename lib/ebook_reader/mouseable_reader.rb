@@ -138,10 +138,12 @@ module EbookReader
 
       # Use enhanced popup menu with coordinate service
       @state.popup_menu = Components::EnhancedPopupMenu.new(@state.selection)
-      return unless @state.popup_menu.visible # Only proceed if menu was created successfully
+      return unless @state.popup_menu&.visible # Only proceed if menu was created successfully
 
+      # Ensure popup menu has proper focus and state
       switch_mode(:popup_menu)
-      # Draw immediately so the menu appears in full without extra input
+      
+      # Force a complete redraw to ensure popup appears correctly
       draw_screen
     end
 

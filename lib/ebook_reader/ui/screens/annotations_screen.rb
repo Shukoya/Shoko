@@ -101,6 +101,21 @@ module EbookReader
         def book_count
           @books.length
         end
+        
+        # Refresh data from annotation store (needed after edits/deletes)
+        def refresh_data
+          @annotations_by_book = Annotations::AnnotationStore.send(:load_all)
+          @books = @annotations_by_book.keys
+          # Ensure selection indices are still valid after refresh
+          @selected_book_index = [@selected_book_index, @books.length - 1].max
+          @selected_book_index = [0, @selected_book_index].max
+          
+          if @selected_book_index >= 0 && @books[@selected_book_index]
+            annotation_count = annotation_count_for_selected_book
+            @selected_annotation_index = [@selected_annotation_index, annotation_count - 1].max
+            @selected_annotation_index = [0, @selected_annotation_index].max
+          end
+        end
 
         def annotation_count_for_selected_book
           return 0 if @books.empty? || !@annotations_by_book[@books[@selected_book_index]]
