@@ -1,0 +1,136 @@
+# Input binding configuration for EBook Reader
+# This file defines all keyboard shortcuts and their associated actions
+# in a declarative format to eliminate repetitive lambda definitions
+
+reader:
+  navigation:
+    next_page: ['l', ' ', "\e[C", "\eOC"]
+    prev_page: ['h', "\e[D", "\eOD"]
+    scroll_down: ['j', "\e[B", "\eOB"]
+    scroll_up: ['k', "\e[A", "\eOA"]
+    next_chapter: ['n', 'N']
+    prev_chapter: ['p']
+    go_to_start: ['g']
+    go_to_end: ['G']
+  
+  view_controls:
+    toggle_view: ['v', 'V']
+    toggle_page_mode: ['P']
+    increase_spacing: ['+']
+    decrease_spacing: ['-']
+  
+  features:
+    show_toc: ['t', 'T']
+    add_bookmark: ['b']
+    show_bookmarks: ['B']
+    show_help: ['?']
+    show_annotations: ["\u0001"]
+  
+  system:
+    quit_to_menu: ['q']
+    quit_application: ['Q']
+
+menu:
+  navigation:
+    up: ['k', "\e[A", "\eOA"]
+    down: ['j', "\e[B", "\eOB"]
+  
+  actions:
+    confirm: ["\r", "\n"]
+    cancel: ["\e", "\x1B"]
+  
+  shortcuts:
+    browse: ['f']
+    recent: ['r']
+    open_file: ['o']
+    settings: ['s']
+    annotations: ['a']
+    quit: ['q']
+
+search:
+  navigation:
+    left: ['h', "\e[D", "\eOD"]
+    right: ['l', "\e[C", "\eOC"]
+  
+  actions:
+    confirm: ["\r", "\n"]
+    cancel: ["\e", "\x1B"]
+    delete: ["\e[3~"]
+    backspace: ['\b', "\x7F", "\x08"]
+
+toc:
+  navigation:
+    up: ['k', "\e[A", "\eOA"]
+    down: ['j', "\e[B", "\eOB"]
+  
+  actions:
+    select: ["\r", "\n"]
+    exit: ['t', 'T', "\e", "\x1B"]
+
+bookmarks:
+  navigation:
+    up: ['k', "\e[A", "\eOA"]
+    down: ['j', "\e[B", "\eOB"]
+  
+  actions:
+    select: ["\r", "\n"]
+    delete: ['d']
+    exit: ['B', "\e", "\x1B"]
+
+help:
+  actions:
+    exit: ['__any__']  # Any key exits help
+
+popup_menu:
+  navigation:
+    up: ['k', "\e[A", "\eOA"]
+    down: ['j', "\e[B", "\eOB"]
+  
+  actions:
+    confirm: ["\r", "\n"]
+    cancel: ["\e", "\x1B"]
+
+recent:
+  navigation:
+    up: ['k', "\e[A", "\eOA"]
+    down: ['j', "\e[B", "\eOB"]
+  
+  actions:
+    confirm: ["\r", "\n"]
+    quit: ['q']
+
+browse:
+  navigation:
+    up: ['k', "\e[A", "\eOA"]
+    down: ['j', "\e[B", "\eOB"]
+  
+  actions:
+    confirm: ["\r", "\n"]
+    quit: ['q']
+    search: ['/']
+    refresh: ['R']
+
+annotations:
+  navigation:
+    up: ['k', "\e[A", "\eOA"]
+    down: ['j', "\e[B", "\eOB"]
+  
+  actions:
+    confirm: ["\r", "\n"]
+    quit: ['q']
+    delete: ['d']
+
+settings:
+  actions:
+    cancel: ["\e", "\x1B", 'q']
+
+open_file:
+  actions:
+    cancel: ["\e", "\x1B"]
+    confirm: ["\r", "\n"]
+    backspace: ['\b', "\x7F", "\x08"]
+
+annotation_editor:
+  actions:
+    save: ["\x13"]  # Ctrl+S
+    cancel: ["\e", "\x1B"]

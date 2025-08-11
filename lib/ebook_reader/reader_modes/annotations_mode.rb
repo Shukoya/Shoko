@@ -23,7 +23,8 @@ module EbookReader
       end
 
       def render(surface, bounds)
-        surface.write(bounds, 1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}Annotations for #{File.basename(reader.path)}#{Terminal::ANSI::RESET}")
+        surface.write(bounds, 1, 2,
+                      "#{Terminal::ANSI::BRIGHT_CYAN}Annotations for #{File.basename(reader.path)}#{Terminal::ANSI::RESET}")
 
         return if @annotations.empty?
 

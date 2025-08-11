@@ -52,14 +52,36 @@ require_relative 'ebook_reader/bookmark_manager'
 # Document handling
 require_relative 'ebook_reader/epub_document'
 
+# Input system - load early for dependency resolution
+require_relative 'ebook_reader/input/key_definitions'
+require_relative 'ebook_reader/input/command_factory'
+require_relative 'ebook_reader/input/config_loader'
+require_relative 'ebook_reader/input/binding_generator'
+
 # Core reader components
 require_relative 'ebook_reader/core/reader_state'
 require_relative 'ebook_reader/services/navigation_service'
 require_relative 'ebook_reader/services/bookmark_service'
 require_relative 'ebook_reader/services/state_service'
 require_relative 'ebook_reader/services/page_manager'
-require_relative 'ebook_reader/services/reader_input_handler'
 require_relative 'ebook_reader/services/main_menu_input_handler'
+require_relative 'ebook_reader/services/coordinate_service'
+require_relative 'ebook_reader/services/clipboard_service'
+require_relative 'ebook_reader/services/service_registry'
+
+# Reading components
+require_relative 'ebook_reader/components/reading/base_view_renderer'
+require_relative 'ebook_reader/components/reading/split_view_renderer'
+require_relative 'ebook_reader/components/reading/single_view_renderer'
+require_relative 'ebook_reader/components/reading/help_renderer'
+require_relative 'ebook_reader/components/reading/toc_renderer'
+require_relative 'ebook_reader/components/reading/bookmarks_renderer'
+require_relative 'ebook_reader/components/reading/view_renderer_factory'
+
+# Screen components
+require_relative 'ebook_reader/components/screens/base_screen_component'
+require_relative 'ebook_reader/components/screens/recent_screen_component'
+require_relative 'ebook_reader/components/screens/menu_screen_component'
 
 # UI components
 require_relative 'ebook_reader/main_menu'

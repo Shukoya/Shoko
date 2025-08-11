@@ -23,8 +23,10 @@ module EbookReader
 
       def calculate_page_metrics
         height, width = Terminal.size
-        col_width, content_height = Services::LayoutService.calculate_metrics(width, height, @reader.config.view_mode)
-        content_height = Services::LayoutService.adjust_for_line_spacing(content_height, @reader.config.line_spacing)
+        col_width, content_height = Services::LayoutService.calculate_metrics(width, height,
+                                                                              @reader.config.view_mode)
+        content_height = Services::LayoutService.adjust_for_line_spacing(content_height,
+                                                                         @reader.config.line_spacing)
         chapter = @reader.doc.get_chapter(@reader.current_chapter)
         return {} unless chapter
 

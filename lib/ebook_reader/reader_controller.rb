@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'forwardable'
 require_relative 'reader_modes/reading_mode'
 require_relative 'reader_modes/help_mode'
 require_relative 'reader_modes/toc_mode'
@@ -46,76 +47,53 @@ module EbookReader
   #   config.view_mode = :single
   #   reader = Reader.new("/path/to/book.epub", config)
   #   reader.run
+  #
+  # @attr_reader doc [EPUBDocument] The loaded EPUB document.
+  # @attr_reader config [Config] The reader configuration.
+  # @attr_reader page_manager [Services::PageManager] Manages page calculations.
+  # @attr_reader path [String] The path to the EPUB file.
+  # @attr_reader state [Core::ReaderState] The current state of the reader.
   class ReaderController
+    extend Forwardable
+
     include Constants::UIConstants
     include Helpers::ReaderHelpers
     include Concerns::InputHandler
     include DynamicPageCalculator
+    include Input::KeyDefinitions::Helpers
 
     # All rendering is now component-based
 
     # All reader state should live in @state (Core::ReaderState)
-    attr_reader :doc, :config, :page_manager, :path
+    attr_reader :doc, :config, :page_manager, :path, :state
+
+    # Delegate state accessors to @state for compatibility
+    def_delegators :@state, :current_chapter, :current_chapter=,
+                   :left_page, :left_page=, :right_page, :right_page=,
+                   :single_page, :single_page=, :current_page_index, :current_page_index=
 
     def initialize(epub_path, config = Config.new)
       @path = epub_path
       @config = config
       @state = Core::ReaderState.new
       @presenter = Presenters::ReaderPresenter.new(self, @config)
+      @selected_text = nil
       load_document
       @page_manager = Services::PageManager.new(@doc, @config) if @doc
-      @navigation_service = Services::NavigationService.new(self)
-      @bookmark_service = Services::BookmarkService.new(self)
-      @state_service = Services::StateService.new(self)
+
+      # Initialize service registry for dependency injection
+      Services::ServiceRegistry.initialize_services(self)
+      @navigation_service = Services::ServiceRegistry.navigation
+      @bookmark_service = Services::ServiceRegistry.bookmark
+      @state_service = Services::ServiceRegistry.state
+
       load_data
-      @input_handler = Services::ReaderInputHandler.new(self)
       @terminal_cache = { width: nil, height: nil, checked_at: nil }
       @render_cache = Rendering::RenderCache.new
       @chapter_cache = Services::ChapterCache.new
       @last_rendered_state = {}
       build_component_layout
       setup_input_dispatcher
-    end
-
-    # State accessors (delegate to @state) for compatibility
-    def current_chapter
-      @state.current_chapter
-    end
-
-    def current_chapter=(value)
-      @state.current_chapter = value
-    end
-
-    def left_page
-      @state.left_page
-    end
-
-    def left_page=(value)
-      @state.left_page = value
-    end
-
-    def right_page
-      @state.right_page
-    end
-
-    def right_page=(value)
-      @state.right_page = value
-    end
-
-    def single_page
-      @state.single_page
-    end
-
-    def single_page=(value)
-      @state.single_page = value
-    end
-
-    def current_page_index
-      @state.current_page_index
-    end
-
-    def current_page_index=(value)
-      @state.current_page_index = value
     end
 
     def run
@@ -361,6 +339,33 @@ module EbookReader
       @state.last_width = 0
     end
 
+    def calculate_current_pages
+      return { current: 0, total: 0 } unless @config.show_page_numbers
+
+      if @config.page_numbering_mode == :dynamic
+        return { current: 0, total: 0 } unless @page_manager
+
+        { current: @state.current_page_index + 1, total: @page_manager.total_pages }
+      else
+        height, width = Terminal.size
+        _, content_height = Services::LayoutService.calculate_metrics(width, height,
+                                                                      @config.view_mode)
+        actual_height = adjust_for_line_spacing(content_height)
+
+        return { current: 0, total: 0 } if actual_height <= 0
+
+        update_page_map(width, height) if size_changed?(width, height) || @state.page_map.empty?
+        return { current: 0, total: 0 } unless @state.total_pages.positive?
+
+        pages_before = @state.page_map[0...@state.current_chapter].sum
+        line_offset = @config.view_mode == :split ? @state.left_page : @state.single_page
+        page_in_chapter = (line_offset.to_f / actual_height).floor + 1
+        current_global_page = pages_before + page_in_chapter
+
+        { current: current_global_page, total: @state.total_pages }
+      end
+    end
+
     private
 
     # Hook for subclasses (MouseableReader) to clear any active selection/popup
@@ -378,134 +383,79 @@ module EbookReader
 
     def setup_input_dispatcher
       @dispatcher = Input::Dispatcher.new(self)
-      register_reading_bindings
-      register_help_bindings
-      register_toc_bindings
-      register_bookmarks_bindings
-      register_annotation_editor_bindings
-      register_annotations_list_bindings
-      register_popup_bindings
+      setup_consolidated_reader_bindings
       @dispatcher.activate_stack([:read])
     end
 
-    def register_reading_bindings
+    def setup_consolidated_reader_bindings
+      register_reading_bindings_new
+      register_help_bindings_new
+      register_toc_bindings_new
+      register_bookmarks_bindings_new
+      register_annotation_editor_bindings_new
+      register_annotations_list_bindings_new
+      register_popup_bindings_new
+    end
+
+    def register_reading_bindings_new
       bindings = {}
-      ['j', "\e[B", "\eOB"].each { |k| bindings[k] = :scroll_down }
-      ['k', "\e[A", "\eOA"].each { |k| bindings[k] = :scroll_up }
-      ['l', ' ', "\e[C", "\eOC"].each { |k| bindings[k] = :next_page }
-      ['h', "\e[D", "\eOD"].each { |k| bindings[k] = :prev_page }
-      bindings['n'] = :next_chapter
-      bindings['p'] = :prev_chapter
-      bindings['g'] = :go_to_start
-      bindings['G'] = :go_to_end
-      bindings['v'] = :toggle_view_mode
-      bindings['P'] = :toggle_page_numbering_mode
-      bindings['+'] = :increase_line_spacing
-      bindings['-'] = :decrease_line_spacing
-      bindings['t'] = :open_toc
-      bindings['b'] = :add_bookmark
-      bindings['B'] = :open_bookmarks
-      bindings['?'] = lambda { |ctx, _|
-        ctx.switch_mode(:help)
-        :handled
-      }
-      bindings['q'] = :quit_to_menu
-      bindings['Q'] = :quit_application
+
+      # Navigation using consolidated definitions
+      bindings.merge!(Input::CommandFactory.reader_navigation_commands)
+      bindings.merge!(Input::CommandFactory.reader_control_commands)
+
       @dispatcher.register_mode(:read, bindings)
     end
 
-    def register_help_bindings
-      bindings = { __default__: lambda { |ctx, _|
-        ctx.switch_mode(:read)
-        :handled
-      } }
+    def register_help_bindings_new
+      bindings = { __default__: :exit_help }
       @dispatcher.register_mode(:help, bindings)
     end
 
-    def register_toc_bindings
+    def register_toc_bindings_new
       bindings = {}
-      bindings['t'] = lambda { |ctx, _|
-        ctx.switch_mode(:read)
-        :handled
-      }
-      bindings["\e"] = lambda { |ctx, _|
-        ctx.switch_mode(:read)
-        :handled
-      }
-      ['j', "\e[B", "\eOB"].each do |k|
-        bindings[k] = lambda { |ctx, _|
-          s = ctx.instance_variable_get(:@state)
-          s.toc_selected = s.toc_selected + 1
-          :handled
-        }
-      end
-      ['k', "\e[A", "\eOA"].each do |k|
-        bindings[k] = lambda { |ctx, _|
-          s = ctx.instance_variable_get(:@state)
-          s.toc_selected = [s.toc_selected - 1, 0].max
-          :handled
-        }
-      end
-      ["\r", "\n"].each do |k|
-        bindings[k] = lambda { |ctx, _|
-          ctx.jump_to_chapter(ctx.instance_variable_get(:@state).toc_selected)
-          :handled
-        }
-      end
+
+      # Exit TOC
+      bindings['t'] = :exit_toc
+      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :exit_toc }
+
+      # Navigation
+      Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :toc_down }
+      Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :toc_up }
+
+      # Selection
+      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :toc_select }
+
       @dispatcher.register_mode(:toc, bindings)
     end
 
-    def register_bookmarks_bindings
+    def register_bookmarks_bindings_new
       bindings = {}
-      bindings['B'] = lambda { |ctx, _|
-        ctx.switch_mode(:read)
-        :handled
-      }
-      bindings["\e"] = lambda { |ctx, _|
-        ctx.switch_mode(:read)
-        :handled
-      }
-      ['j', "\e[B", "\eOB"].each do |k|
-        bindings[k] = lambda { |ctx, _|
-          s = ctx.instance_variable_get(:@state)
-          s.bookmark_selected = [s.bookmark_selected + 1, (ctx.instance_variable_get(:@bookmarks) || []).length - 1].max
-          :handled
-        }
-      end
-      ['k', "\e[A", "\eOA"].each do |k|
-        bindings[k] = lambda { |ctx, _|
-          s = ctx.instance_variable_get(:@state)
-          s.bookmark_selected = [s.bookmark_selected - 1, 0].max
-          :handled
-        }
-      end
-      ["\r", "\n"].each do |k|
-        bindings[k] = lambda { |ctx, _|
-          ctx.jump_to_bookmark
-          :handled
-        }
-      end
-      bindings['d'] = lambda { |ctx, _|
-        ctx.delete_selected_bookmark
-        :handled
-      }
+
+      # Exit bookmarks
+      bindings['B'] = :exit_bookmarks
+      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :exit_bookmarks }
+
+      # Navigation
+      Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :bookmark_down }
+      Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :bookmark_up }
+
+      # Actions
+      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :bookmark_select }
+      bindings['d'] = :delete_selected_bookmark
+
       @dispatcher.register_mode(:bookmarks, bindings)
     end
 
-    def register_popup_bindings
+    def register_popup_bindings_new
       bindings = {}
       # Route all keys (including ESC) through popup handler so cancel works
-      route_key = lambda do |ctx, key|
-        # Call private handler via send to respect visibility
-        ctx.send(:handle_popup_menu_input, [key]) if ctx.instance_variable_get(:@state).popup_menu
-        :handled
-      end
-      bindings["\e"] = route_key
-      bindings[:__default__] = route_key
+      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :handle_popup_key }
+      bindings[:__default__] = :handle_popup_key
       @dispatcher.register_mode(:popup_menu, bindings)
     end
 
-    def register_annotation_editor_bindings
+    def register_annotation_editor_bindings_new
       bindings = {}
       bindings[:__default__] = lambda { |ctx, key|
         mode = ctx.instance_variable_get(:@current_mode)
@@ -519,7 +469,7 @@ module EbookReader
       @dispatcher.register_mode(:annotation_editor, bindings)
     end
 
-    def register_annotations_list_bindings
+    def register_annotations_list_bindings_new
       bindings = {}
       bindings[:__default__] = lambda { |ctx, key|
         mode = ctx.instance_variable_get(:@current_mode)
@@ -547,32 +497,6 @@ module EbookReader
 
     def size_changed?(width, height)
       @state.terminal_size_changed?(width, height)
-    end
-
-    def calculate_current_pages
-      return { current: 0, total: 0 } unless @config.show_page_numbers
-
-      if @config.page_numbering_mode == :dynamic
-        return { current: 0, total: 0 } unless @page_manager
-
-        { current: @state.current_page_index + 1, total: @page_manager.total_pages }
-      else
-        height, width = Terminal.size
-        _, content_height = Services::LayoutService.calculate_metrics(width, height, @config.view_mode)
-        actual_height = adjust_for_line_spacing(content_height)
-
-        return { current: 0, total: 0 } if actual_height <= 0
-
-        update_page_map(width, height) if size_changed?(width, height) || @state.page_map.empty?
-        return { current: 0, total: 0 } unless @state.total_pages.positive?
-
-        pages_before = @state.page_map[0...@state.current_chapter].sum
-        line_offset = @config.view_mode == :split ? @state.left_page : @state.single_page
-        page_in_chapter = (line_offset.to_f / actual_height).floor + 1
-        current_global_page = pages_before + page_in_chapter
-
-        { current: current_global_page, total: @state.total_pages }
-      end
     end
 
     def adjust_for_line_spacing(height)
@@ -607,22 +531,18 @@ module EbookReader
 
       keys.each do |key|
         result = @state.popup_menu.handle_key(key)
-        case result&.fetch(:type)
+        next unless result
+
+        case result[:type]
         when :selection_change
-          # Redraw only the popup without clearing the background.
-          height, width = Terminal.size
-          surface = Components::Surface.new(Terminal)
-          bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
-          @overlay ||= Components::PopupOverlayComponent.new(self)
-          Terminal.batch_write { @overlay.render(surface, bounds) }
-        when :confirm
-          handle_popup_action(result[:item])
+          # Redraw only the popup area
+          draw_screen
+        when :action
+          handle_popup_action(result)
           draw_screen # Full redraw after action
         when :cancel
           # Close the popup and return to reading mode
-          @state.popup_menu = nil
-          @mouse_handler.reset
-          @state.selection = nil
+          cleanup_popup_state
           switch_mode(:read)
           draw_screen
         end
@@ -718,7 +638,8 @@ module EbookReader
         return
       end
 
-      col_width, content_height = Services::LayoutService.calculate_metrics(width, height, @config.view_mode)
+      col_width, content_height = Services::LayoutService.calculate_metrics(width, height,
+                                                                            @config.view_mode)
       actual_height = adjust_for_line_spacing(content_height)
       return if actual_height <= 0
 
@@ -739,7 +660,6 @@ module EbookReader
       # Store the newly calculated map and its key in the cache
       @page_map_cache = { key: cache_key, map: @state.page_map, total: @state.total_pages }
     end
-
 
     def load_progress
       progress = @state_service.load_progress
@@ -814,8 +734,101 @@ module EbookReader
       switch_mode(:annotations)
     end
 
+    def show_help
+      switch_mode(:help)
+    end
+
+    def exit_help
+      switch_mode(:read)
+    end
+
+    def exit_toc
+      switch_mode(:read)
+    end
+
+    def exit_bookmarks
+      switch_mode(:read)
+    end
+
+    def toc_down
+      @state.toc_selected = @state.toc_selected + 1
+    end
+
+    def toc_up
+      @state.toc_selected = [@state.toc_selected - 1, 0].max
+    end
+
+    def toc_select
+      jump_to_chapter(@state.toc_selected)
+    end
+
+    def bookmark_down
+      bookmarks_count = (@state.bookmarks || []).length - 1
+      @state.bookmark_selected = [@state.bookmark_selected + 1, bookmarks_count].max
+    end
+
+    def bookmark_up
+      @state.bookmark_selected = [@state.bookmark_selected - 1, 0].max
+    end
+
+    def bookmark_select
+      jump_to_bookmark
+    end
+
+    def handle_popup_key(key)
+      if @state.popup_menu
+        handle_popup_menu_input([key])
+        :handled
+      else
+        :pass
+      end
+    end
+
+    def handle_popup_action(action_data)
+      # Handle both old string-based actions and new action objects
+      action_type = action_data.is_a?(Hash) ? action_data[:action] : action_data
+
+      case action_type
+      when :create_annotation, 'Create Annotation'
+        handle_create_annotation_action(action_data)
+      when :copy_to_clipboard, 'Copy to Clipboard'
+        handle_copy_to_clipboard_action(action_data)
+      end
+
+      cleanup_popup_state
+    end
+
+    def handle_create_annotation_action(action_data)
+      selection_range = action_data.is_a?(Hash) ? action_data[:data][:selection_range] : @state.selection
+      switch_mode(:read)
+      switch_mode(:annotation_editor,
+                  text: @selected_text,
+                  range: selection_range,
+                  chapter_index: @state.current_chapter)
+    end
+
+    def handle_copy_to_clipboard_action(_action_data)
+      if Services::ClipboardService.available?
+        success = Services::ClipboardService.copy_with_feedback(@selected_text, lambda { |msg|
+          set_message(msg)
+        })
+        set_message('Failed to copy to clipboard') unless success
+      else
+        set_message('Copy to clipboard not available')
+      end
+      switch_mode(:read)
+    end
+
+    def cleanup_popup_state
+      @state.popup_menu = nil
+      @mouse_handler&.reset
+      @state.selection = nil
+    end
+
+    public
+
     # Legacy delegators removed; input handling is centralized via
-    # Services::ReaderInputHandler#process_input and renderer-driven drawing.
+    # Input::Dispatcher and renderer-driven drawing.
 
     def jump_to_chapter(chapter_index)
       clear_selection!
@@ -872,7 +885,8 @@ module EbookReader
 
     def end_of_chapter_metrics
       height, width = Terminal.size
-      col_width, content_height = Services::LayoutService.calculate_metrics(width, height, @config.view_mode)
+      col_width, content_height = Services::LayoutService.calculate_metrics(width, height,
+                                                                            @config.view_mode)
       [col_width, adjust_for_line_spacing(content_height)]
     end
 

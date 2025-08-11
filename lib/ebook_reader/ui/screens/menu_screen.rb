@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../constants/ui_constants'
+require_relative '../../components/screens/menu_screen_component'
 
 module EbookReader
   module UI
@@ -20,104 +21,15 @@ module EbookReader
 
         def initialize(_renderer, selected)
           @selected = selected
+          @component = EbookReader::Components::Screens::MenuScreenComponent.new
         end
 
         def draw(height, width)
           surface = EbookReader::Components::Surface.new(Terminal)
           bounds = EbookReader::Components::Rect.new(x: 1, y: 1, width: width, height: height)
 
-          # Simple header/logo area
-          title = 'Reader'
-          logo_row = [2, 1].max
-          col = [(width - title.length) / 2, 1].max
-          surface.write(bounds, logo_row, col, UIConstants::COLOR_TEXT_ACCENT + title + Terminal::ANSI::RESET)
-
-          menu_start = logo_row + 4
-          menu_items = build_menu_items
-          render_menu_items(MenuRenderContext.new(items: menu_items,
-                                                  start_row: menu_start,
-                                                  height: height,
-                                                  width: width))
-
-          footer = 'Navigate with ↑↓ or jk • Select with Enter'
-          surface.write(bounds, height - 1, [(width - footer.length) / 2, 1].max,
-                        UIConstants::COLOR_TEXT_DIM + footer + Terminal::ANSI::RESET)
-        end
-
-        private
-
-        def build_menu_items
-          [
-            { key: 'f', icon: UIConstants::ICON_BOOK, text: 'Find Book', desc: 'Browse all EPUBs' },
-            { key: 'r', icon: UIConstants::ICON_RECENT, text: 'Recent',
-              desc: 'Recently opened books' },
-            { key: 'a', icon: UIConstants::ICON_ANNOTATION, text: 'Annotations',
-              desc: 'View all annotations' },
-            { key: 'o', icon: UIConstants::ICON_OPEN, text: 'Open File',
-              desc: 'Enter path manually' },
-            { key: 's', icon: UIConstants::ICON_SETTINGS, text: 'Settings',
-              desc: 'Configure reader' },
-            { key: 'q', icon: UIConstants::ICON_QUIT, text: 'Quit', desc: 'Exit application' },
-          ]
-        end
-
-        def render_menu_items(context)
-          return if menu_bounds_exceeded?(context)
-
-          context.items.each_with_index do |item, i|
-            render_item_if_visible(item, i, context)
-          end
-        end
-
-        def menu_bounds_exceeded?(context)
-          context.start_row >= context.height - 2
-        end
-
-        def render_item_if_visible(item, index, context)
-          item_context = build_item_context(item, index, context)
-          return if item_context.row >= context.height - 2
-
-          draw_menu_item(item_context)
-        end
-
-        def calculate_item_row(start_row, index)
-          start_row + (index * 2)
-        end
-
-        def build_item_context(item, index, context)
-          row = calculate_item_row(context.start_row, index)
-          MenuItemContext.new(
-            row: row,
-            pointer_col: calculate_pointer_col(context.width),
-            text_col: calculate_text_col(context.width),
-            item: item,
-            selected: index == @selected
-          )
-        end
-
-        def calculate_pointer_col(width)
-          [(width / 2) - 20, 2].max
-        end
-
-        def calculate_text_col(width)
-          [(width / 2) - 18, 4].max
-        end
-
-        def draw_menu_item(context)
-          pointer = context.selected ? UIConstants::SELECTION_POINTER_COLOR + UIConstants::SELECTION_POINTER + Terminal::ANSI::RESET : '  '
-          surface = EbookReader::Components::Surface.new(Terminal)
-          bounds = EbookReader::Components::Rect.new(x: 1, y: 1, width: context.text_col + 60,
-                                                     height: context.row + 1)
-          surface.write(bounds, context.row, context.pointer_col, pointer)
-
-          item = context.item
-          text = "#{item[:icon]}  #{item[:text]}"
-          desc = item[:desc]
-          name_color = context.selected ? UIConstants::SELECTION_HIGHLIGHT : UIConstants::COLOR_TEXT_PRIMARY
-          desc_color = UIConstants::COLOR_TEXT_DIM
-          surface.write(bounds, context.row, context.text_col, name_color + text + Terminal::ANSI::RESET)
-          surface.write(bounds, context.row, context.text_col + text.length + 2,
-                        desc_color + desc.to_s + Terminal::ANSI::RESET)
+          context = { selected: @selected }
+          @component.render(surface, bounds, context)
         end
       end
     end

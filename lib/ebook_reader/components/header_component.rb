@@ -8,20 +8,20 @@ module EbookReader
     class HeaderComponent < BaseComponent
       def initialize(controller)
         @controller = controller
-        state = @controller.instance_variable_get(:@state)
+        state = @controller.state
         state.add_observer(self, :mode)
         @needs_redraw = true
       end
 
       def preferred_height(_available_height)
-        1
+        1 # Fixed height header
       end
 
       def render(surface, bounds)
         width = bounds.width
-        doc = @controller.instance_variable_get(:@doc)
+        doc = @controller.doc
         config = @controller.config
-        state = @controller.instance_variable_get(:@state)
+        state = @controller.state
 
         if config.view_mode == :single && state.mode == :read
           title_text = doc&.title.to_s

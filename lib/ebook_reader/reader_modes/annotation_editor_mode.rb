@@ -117,7 +117,7 @@ module EbookReader
 
       def draw_footer(surface, bounds)
         surface.write(bounds, bounds.height - 1, 2,
-                       "#{Terminal::ANSI::DIM}Ctrl+S Save • ESC Cancel#{Terminal::ANSI::RESET}")
+                      "#{Terminal::ANSI::DIM}Ctrl+S Save • ESC Cancel#{Terminal::ANSI::RESET}")
       end
 
       def save_annotation

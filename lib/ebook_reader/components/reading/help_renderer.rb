@@ -1,0 +1,56 @@
+# frozen_string_literal: true
+
+require_relative 'base_view_renderer'
+
+module EbookReader
+  module Components
+    module Reading
+      # Renderer for help screen display
+      class HelpRenderer < BaseViewRenderer
+        HELP_LINES = [
+          '',
+          'Navigation Keys:',
+          '  j / ↓     Scroll down',
+          '  k / ↑     Scroll up',
+          '  l / →     Next page',
+          '  h / ←     Previous page',
+          '  SPACE     Next page',
+          '  n         Next chapter',
+          '  p         Previous chapter',
+          '  g         Go to beginning of chapter',
+          '  G         Go to end of chapter',
+          '',
+          'View Options:',
+          '  v         Toggle split/single view',
+          '  P         Toggle page numbering mode (Absolute/Dynamic)',
+          '  + / -     Adjust line spacing',
+          '',
+          'Features:',
+          '  t         Show Table of Contents',
+          '  b         Add a bookmark',
+          '  B         Show bookmarks',
+          '',
+          'Other Keys:',
+          '  ?         Show/hide this help',
+          '  q         Quit to menu',
+          '  Q         Quit application',
+          '',
+          '',
+          'Press any key to return to reading...',
+        ].freeze
+
+        def render(surface, bounds, _controller)
+          start_row = [(bounds.height - HELP_LINES.size) / 2, 1].max
+
+          HELP_LINES.each_with_index do |line, idx|
+            row = start_row + idx
+            break if row >= bounds.height - 2
+
+            col = [(bounds.width - line.length) / 2, 1].max
+            surface.write(bounds, row, col, Terminal::ANSI::WHITE + line + Terminal::ANSI::RESET)
+          end
+        end
+      end
+    end
+  end
+end

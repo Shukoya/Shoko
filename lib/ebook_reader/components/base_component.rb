@@ -4,6 +4,12 @@ module EbookReader
   module Components
     # Base interface for all UI components
     class BaseComponent
+      attr_reader :services
+
+      def initialize(services = nil)
+        @services = services || Services::ServiceRegistry
+      end
+
       # Render this component into the given surface within bounds
       # @param surface [Surface] terminal surface wrapper
       # @param bounds [Rect] local bounds for this component
@@ -17,9 +23,14 @@ module EbookReader
         :pass_through
       end
 
-      # Optional preferred height in rows; return nil for flexible
+      # Component height calculation contract
+      # @param available_height [Integer] Total height available from parent
+      # @return [Integer, :flexible, :fill] Height requirement:
+      #   - Integer: Fixed height in rows
+      #   - :flexible: Use as much space as needed, up to available
+      #   - :fill: Take all remaining space after fixed components
       def preferred_height(_available_height)
-        nil
+        :flexible
       end
     end
   end

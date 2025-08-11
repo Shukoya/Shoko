@@ -24,6 +24,9 @@ module EbookReader
     include Actions::FileActions
     include Actions::SearchActions
     include Actions::SettingsActions
+    include Input::KeyDefinitions::Helpers
+
+    attr_reader :state, :config, :annotations_screen, :input_handler
 
     def initialize
       setup_state
@@ -46,6 +49,101 @@ module EbookReader
       cleanup_and_exit(1, "Error: #{e.message}", e)
     ensure
       @scanner.cleanup
+    end
+
+    def handle_menu_selection
+      case @state.selected
+      when 0 then switch_to_browse
+      when 1 then switch_to_mode(:recent)
+      when 2 then switch_to_mode(:annotations)
+      when 3 then open_file_dialog
+      when 4 then switch_to_mode(:settings)
+      when 5 then cleanup_and_exit(0, '')
+      end
+    end
+
+    def handle_navigation(direction)
+      current = @state.selected
+      max_val = 5 # 6 menu items (0-5)
+
+      @state.selected = case direction
+                        when :up then [current - 1, 0].max
+                        when :down then [current + 1, max_val].min
+                        else current
+                        end
+    end
+
+    def switch_to_browse
+      @state.mode = :browse
+      @state.search_active = false
+      @browse_screen.search_active = false
+      @dispatcher.activate(@state.mode)
+    end
+
+    def switch_to_search
+      @state.mode = :search
+      @state.search_active = true
+      @browse_screen.search_active = true
+      @dispatcher.activate(@state.mode)
+    end
+
+    def switch_to_mode(mode)
+      @state.mode = mode
+      @state.browse_selected = 0
+      @dispatcher.activate(@state.mode)
+    end
+
+    def open_file_dialog
+      @state.file_input = ''
+      @open_file_screen.input = ''
+      @state.mode = :open_file
+      @dispatcher.activate(@state.mode)
+    end
+
+    def cleanup_and_exit(code, message, error = nil)
+      Terminal.cleanup
+      puts message
+      puts error.backtrace if error && EPUBFinder::DEBUG_MODE
+      exit code
+    end
+
+    def handle_browse_navigation(key)
+      @browse_screen.navigate(key)
+      @state.browse_selected = @browse_screen.selected
+    end
+
+    def handle_recent_input(key)
+      @input_handler.handle_recent_input(key)
+    end
+
+    def handle_backspace_input
+      if @state.search_active
+        if @state.search_query.length.positive?
+          @state.search_query = @state.search_query[0...-1]
+          filter_browse_screen
+        end
+      elsif @state.file_input.length.positive?
+        @state.file_input = @state.file_input[0...-1]
+      end
+      @open_file_screen.input = @state.file_input
+    end
+
+    def handle_character_input(key)
+      char = key.to_s
+      return unless char.length == 1 && char.ord >= 32
+
+      @state.file_input = (@state.file_input + char)
+      @open_file_screen.input = @state.file_input
+    end
+
+    def switch_to_edit_annotation(annotation, book_path)
+      editor = instance_variable_get(:@annotation_editor_screen)
+      editor.set_annotation(annotation, book_path)
+      switch_to_mode(:annotation_editor)
+    end
+
+    def refresh_scan
+      @scanner.start_scan(force: true)
     end
 
     private
@@ -109,28 +207,8 @@ module EbookReader
       @browse_screen.filtered_epubs = @scanner.epubs
     end
 
-    def refresh_scan
-      @scanner.start_scan(force: true)
-    end
-
-    def handle_browse_navigation(key)
-      @browse_screen.navigate(key)
-      @state.browse_selected = @browse_screen.selected
-    end
-
     def navigate_browse(key)
       handle_browse_navigation(key)
-    end
-
-    def handle_recent_input(key)
-      @input_handler.handle_recent_input(key)
-    end
-
-    def cleanup_and_exit(code, message, error = nil)
-      Terminal.cleanup
-      puts message
-      puts error.backtrace if error && EPUBFinder::DEBUG_MODE
-      exit code
     end
 
     def draw_screen
@@ -139,6 +217,11 @@ module EbookReader
 
     def setup_input_dispatcher
       @dispatcher = Input::Dispatcher.new(self)
+      setup_consolidated_input_bindings
+      @dispatcher.activate(@state.mode)
+    end
+
+    def setup_consolidated_input_bindings
       register_menu_bindings
       register_browse_bindings
       register_search_bindings
@@ -147,252 +230,244 @@ module EbookReader
       register_open_file_bindings
       register_annotations_bindings
       register_annotation_editor_bindings
-      @dispatcher.activate(@state.mode)
     end
 
     def register_menu_bindings
-      b = {}
-      ['j', "\e[B", "\eOB"].each do |k|
-        b[k] = lambda { |ctx, _|
-          s = ctx.instance_variable_get(:@state)
-          s.selected = (s.selected + 1) % 6
+      custom_methods = {
+        up: lambda { |ctx, _|
+          ctx.handle_navigation(:up)
           :handled
-        }
-      end
-      ['k', "\e[A", "\eOA"].each do |k|
-        b[k] = lambda { |ctx, _|
-          s = ctx.instance_variable_get(:@state)
-          s.selected = (s.selected - 1) % 6
+        },
+        down: lambda { |ctx, _|
+          ctx.handle_navigation(:down)
           :handled
-        }
-      end
-      ["\r", "\n"].each do |k|
-        b[k] = lambda { |ctx, _|
-          ctx.send(:handle_menu_selection)
+        },
+        confirm: lambda { |ctx, _|
+          ctx.handle_menu_selection
           :handled
-        }
-      end
-      b['q'] = lambda { |ctx, _|
-        ctx.send(:cleanup_and_exit, 0, '')
-        :handled
+        },
+        browse: lambda { |ctx, _|
+          ctx.switch_to_browse
+          :handled
+        },
+        recent: lambda { |ctx, _|
+          ctx.switch_to_mode(:recent)
+          :handled
+        },
+        open_file: lambda { |ctx, _|
+          ctx.open_file_dialog
+          :handled
+        },
+        settings: lambda { |ctx, _|
+          ctx.switch_to_mode(:settings)
+          :handled
+        },
+        annotations: lambda { |ctx, _|
+          ctx.switch_to_mode(:annotations)
+          :handled
+        },
+        quit: lambda { |ctx, _|
+          ctx.cleanup_and_exit(0, '')
+          :handled
+        },
+        cancel: lambda { |ctx, _|
+          ctx.cleanup_and_exit(0, '')
+          :handled
+        },
       }
-      b['f'] = lambda { |ctx, _|
-        ctx.send(:switch_to_browse)
-        :handled
-      }
-      b['r'] = lambda { |ctx, _|
-        ctx.send(:switch_to_mode, :recent)
-        :handled
-      }
-      b['o'] = lambda { |ctx, _|
-        ctx.send(:open_file_dialog)
-        :handled
-      }
-      b['s'] = lambda { |ctx, _|
-        ctx.send(:switch_to_mode, :settings)
-        :handled
-      }
-      @dispatcher.register_mode(:menu, b)
+
+      bindings = Input::BindingGenerator.generate_for_mode(:menu, custom_methods)
+      @dispatcher.register_mode(:menu, bindings)
     end
 
     def register_browse_bindings
-      b = {}
-      ['j', "\e[B", "\eOB", 'k', "\e[A", "\eOA"].each do |k|
-        b[k] = lambda { |ctx, key|
-          ctx.send(:handle_browse_navigation, key)
+      custom_methods = {
+        up: lambda { |ctx, k|
+          ctx.handle_browse_navigation(k)
           :handled
-        }
-      end
-      ["\r", "\n"].each { |k| b[k] = :open_selected_book }
-      b['S'] = lambda { |ctx, _|
-        ctx.send(:switch_to_search)
-        :handled
-      }
-      b['r'] = lambda { |ctx, _|
-        ctx.send(:refresh_scan)
-        :handled
-      }
-      ["\e", 'q'].each do |k|
-        b[k] = lambda { |ctx, _|
-          ctx.send(:switch_to_mode, :menu)
+        },
+        down: lambda { |ctx, k|
+          ctx.handle_browse_navigation(k)
           :handled
-        }
-      end
-      @dispatcher.register_mode(:browse, b)
+        },
+        confirm: :open_selected_book,
+        cancel: lambda { |ctx, _|
+          ctx.switch_to_mode(:menu)
+          :handled
+        },
+        quit: lambda { |ctx, _|
+          ctx.switch_to_mode(:menu)
+          :handled
+        },
+        search: lambda { |ctx, _|
+          ctx.switch_to_search
+          :handled
+        },
+        refresh: lambda { |ctx, _|
+          ctx.refresh_scan
+          :handled
+        },
+      }
+
+      bindings = Input::BindingGenerator.generate_for_mode(:browse, custom_methods)
+      @dispatcher.register_mode(:browse, bindings)
     end
 
     def register_search_bindings
-      b = {}
-      ["\r", "\n"].each do |k|
-        b[k] = lambda { |ctx, _|
-          ctx.send(:switch_to_browse)
+      custom_methods = {
+        confirm: lambda { |ctx, _|
+          ctx.switch_to_browse
           :handled
-        }
-      end
-      ["\e", 'q'].each do |k|
-        b[k] = lambda { |ctx, _|
-          ctx.send(:switch_to_browse)
+        },
+        cancel: lambda { |ctx, _|
+          ctx.switch_to_browse
           :handled
-        }
-      end
-      b["\e[D"] = lambda { |ctx, _|
-        ctx.send(:move_search_cursor, -1)
-        :handled
-      }
-      b["\eOD"] = lambda { |ctx, _|
-        ctx.send(:move_search_cursor, -1)
-        :handled
-      }
-      b["\e[C"] = lambda { |ctx, _|
-        ctx.send(:move_search_cursor, 1)
-        :handled
-      }
-      b["\eOC"] = lambda { |ctx, _|
-        ctx.send(:move_search_cursor, 1)
-        :handled
-      }
-      b["\e[3~"] = lambda { |ctx, _|
-        ctx.send(:handle_delete)
-        :handled
-      }
-      ['\b', "\x7F"].each do |k|
-        b[k] = lambda { |ctx, _|
-          ctx.send(:handle_backspace_input)
+        },
+        left: lambda { |ctx, _|
+          ctx.move_search_cursor(-1)
           :handled
-        }
-      end
-      b[:__default__] = lambda { |ctx, key|
-        ch = key.to_s
-        if ch.length == 1 && ch.ord >= 32
-          ctx.send(:add_to_search, key)
+        },
+        right: lambda { |ctx, _|
+          ctx.move_search_cursor(1)
           :handled
+        },
+        delete: lambda { |ctx, _|
+          ctx.handle_delete
+          :handled
+        },
+        backspace: lambda { |ctx, _|
+          ctx.handle_backspace_input
+          :handled
+        },
+      }
+
+      bindings = Input::BindingGenerator.generate_for_mode(:search, custom_methods)
+      # Add text input handler
+      bindings[:__default__] = lambda { |ctx, key|
+        char = key.to_s
+        if char.length == 1 && char.ord >= 32
+          (ctx.add_to_search(key)
+           :handled)
         else
           :pass
         end
       }
-      @dispatcher.register_mode(:search, b)
+
+      @dispatcher.register_mode(:search, bindings)
     end
 
     def register_recent_bindings
-      b = {}
-      ["\e", 'q'].each do |k|
-        b[k] = lambda { |ctx, _|
-          ctx.send(:switch_to_mode, :menu)
+      custom_methods = {
+        cancel: lambda { |ctx, _|
+          ctx.switch_to_mode(:menu)
           :handled
-        }
-      end
-      ['j', 'k', "\e[A", "\e[B", "\eOA", "\eOB"].each do |k|
-        b[k] = lambda { |ctx, key|
-          ctx.send(:handle_recent_input, key)
+        },
+        up: lambda { |ctx, k|
+          ctx.handle_recent_input(k)
           :handled
-        }
-      end
-      ["\r", "\n"].each do |k|
-        b[k] = lambda { |ctx, key|
-          ctx.send(:handle_recent_input, key)
+        },
+        down: lambda { |ctx, k|
+          ctx.handle_recent_input(k)
           :handled
-        }
-      end
-      @dispatcher.register_mode(:recent, b)
+        },
+        confirm: lambda { |ctx, k|
+          ctx.handle_recent_input(k)
+          :handled
+        },
+      }
+
+      bindings = Input::BindingGenerator.generate_for_mode(:recent, custom_methods)
+      @dispatcher.register_mode(:recent, bindings)
     end
 
     def register_settings_bindings
-      b = {}
-      b["\e"] = lambda { |ctx, _|
-        ctx.send(:switch_to_mode, :menu)
-        ctx.instance_variable_get(:@config).save
-        :handled
+      custom_methods = {
+        cancel: lambda { |ctx, _|
+          ctx.switch_to_mode(:menu)
+          ctx.config.save
+          :handled
+        },
       }
+
+      bindings = Input::BindingGenerator.generate_for_mode(:settings, custom_methods)
+      # Add number key handlers
       %w[1 2 3 4 5 6].each do |k|
-        b[k] = lambda { |ctx, key|
-          ctx.send(:handle_settings_input, key)
+        bindings[k] = lambda { |ctx, key|
+          ctx.handle_settings_input(key)
           :handled
         }
       end
-      @dispatcher.register_mode(:settings, b)
+
+      @dispatcher.register_mode(:settings, bindings)
     end
 
     def register_open_file_bindings
-      b = {}
-      b["\e"] = lambda { |ctx, _|
-        ctx.send(:handle_escape)
+      custom_methods = {
+        cancel: lambda { |ctx, _|
+          ctx.handle_escape
+          :handled
+        },
+        confirm: lambda { |ctx, _|
+          ctx.handle_enter
+          :handled
+        },
+        backspace: lambda { |ctx, _|
+          ctx.handle_backspace_input
+          :handled
+        },
+      }
+
+      bindings = Input::BindingGenerator.generate_for_mode(:open_file, custom_methods)
+      bindings[:__default__] = lambda { |ctx, key|
+        ctx.handle_character_input(key)
         :handled
       }
-      ["\r", "\n"].each do |k|
-        b[k] = lambda { |ctx, _|
-          ctx.send(:handle_enter)
-          :handled
-        }
-      end
-      ['\b', "\x7F", "\x08"].each do |k|
-        b[k] = lambda { |ctx, _|
-          ctx.send(:handle_backspace_input)
-          :handled
-        }
-      end
-      b[:__default__] = lambda { |ctx, key|
-        ctx.send(:handle_character_input, key)
-        :handled
-      }
-      @dispatcher.register_mode(:open_file, b)
+
+      @dispatcher.register_mode(:open_file, bindings)
     end
 
     def register_annotations_bindings
-      b = {}
-      screen_getter = ->(ctx) { ctx.instance_variable_get(:@annotations_screen) }
-      # Exit
-      ["\e", 'q'].each do |k|
-        b[k] = lambda { |ctx, _|
-          ctx.send(:switch_to_mode, :menu)
+      custom_methods = {
+        cancel: lambda { |ctx, _|
+          ctx.switch_to_mode(:menu)
           :handled
-        }
-      end
-      # Navigation
-      ['j', "\e[B", "\eOB"].each do |k|
-        b[k] = lambda { |ctx, _|
-          screen = screen_getter.call(ctx)
-          ctx.instance_variable_get(:@input_handler).send(:navigate_annotations_down, screen)
+        },
+        up: lambda { |ctx, _|
+          ctx.input_handler.navigate_annotations_up(ctx.annotations_screen)
           :handled
-        }
-      end
-      ['k', "\e[A", "\eOA"].each do |k|
-        b[k] = lambda { |ctx, _|
-          screen = screen_getter.call(ctx)
-          ctx.instance_variable_get(:@input_handler).send(:navigate_annotations_up, screen)
+        },
+        down: lambda { |ctx, _|
+          ctx.input_handler.navigate_annotations_down(ctx.annotations_screen)
           :handled
-        }
-      end
-      # Delete annotation
-      b['d'] = lambda { |ctx, _|
-        screen = screen_getter.call(ctx)
-        ctx.instance_variable_get(:@input_handler).send(:delete_annotation, screen)
-        :handled
-      }
-      # Enter to edit selected annotation
-      ["\r", "\n"].each do |k|
-        b[k] = lambda { |ctx, _|
-          screen = screen_getter.call(ctx)
+        },
+        confirm: lambda { |ctx, _|
+          screen = ctx.annotations_screen
           annotation = screen.current_annotation
           book_path = screen.current_book_path
-          ctx.send(:switch_to_edit_annotation, annotation, book_path) if annotation && book_path
+          ctx.switch_to_edit_annotation(annotation, book_path) if annotation && book_path
           :handled
-        }
-      end
-      @dispatcher.register_mode(:annotations, b)
+        },
+      }
+
+      bindings = Input::BindingGenerator.generate_for_mode(:annotations, custom_methods)
+      bindings['d'] = lambda { |ctx, _|
+        ctx.input_handler.delete_annotation(ctx.annotations_screen)
+        :handled
+      }
+
+      @dispatcher.register_mode(:annotations, bindings)
     end
 
     def register_annotation_editor_bindings
-      b = {}
-      b[:__default__] = lambda { |ctx, key|
+      bindings = Input::BindingGenerator.generate_for_mode(:annotation_editor, {})
+      bindings[:__default__] = lambda { |ctx, key|
         screen = ctx.instance_variable_get(:@annotation_editor_screen)
         result = screen.handle_input(key)
-        case result
-        when :saved, :cancelled
-          ctx.send(:switch_to_mode, :annotations)
-        end
+        ctx.switch_to_mode(:annotations) if %i[saved cancelled].include?(result)
         :handled
       }
-      @dispatcher.register_mode(:annotation_editor, b)
+
+      @dispatcher.register_mode(:annotation_editor, bindings)
     end
 
     def handle_input(key)
@@ -401,63 +476,6 @@ module EbookReader
 
     def handle_menu_input(key)
       @input_handler.handle_menu_input(key)
-    end
-
-    def switch_to_browse
-      @state.mode = :browse
-      @state.search_active = false
-      @browse_screen.search_active = false
-      @dispatcher.activate(@state.mode)
-    end
-
-    def switch_to_search
-      @state.mode = :search
-      @state.search_active = true
-      @browse_screen.search_active = true
-      @dispatcher.activate(@state.mode)
-    end
-
-    def switch_to_mode(mode)
-      @state.mode = mode
-      @state.browse_selected = 0
-      @dispatcher.activate(@state.mode)
-    end
-
-    def switch_to_edit_annotation(annotation, book_path)
-      editor = instance_variable_get(:@annotation_editor_screen)
-      editor.set_annotation(annotation, book_path)
-      switch_to_mode(:annotation_editor)
-    end
-
-    def handle_menu_selection
-      case @state.selected
-      when 0 then switch_to_browse
-      when 1 then switch_to_mode(:recent)
-      when 2 then switch_to_mode(:annotations)
-      when 3 then open_file_dialog
-      when 4 then switch_to_mode(:settings)
-      when 5 then cleanup_and_exit(0, '')
-      end
-    end
-
-    def handle_backspace_input
-      if @state.search_active
-        if @state.search_query.length.positive?
-          @state.search_query = @state.search_query[0...-1]
-          filter_browse_screen
-        end
-      elsif @state.file_input.length.positive?
-        @state.file_input = @state.file_input[0...-1]
-      end
-      @open_file_screen.input = @state.file_input
-    end
-
-    def handle_character_input(key)
-      char = key.to_s
-      return unless char.length == 1 && char.ord >= 32
-
-      @state.file_input = (@state.file_input + char)
-      @open_file_screen.input = @state.file_input
     end
 
     def open_book(path)
@@ -487,13 +505,6 @@ module EbookReader
       @scanner.scan_status = :error
     end
 
-    def open_file_dialog
-      @state.file_input = ''
-      @open_file_screen.input = ''
-      @state.mode = :open_file
-      @dispatcher.activate(@state.mode)
-    end
-
     def sanitize_input_path(input)
       return '' unless input
 
@@ -518,7 +529,7 @@ module EbookReader
     end
 
     def load_recent_books
-      books = @recent_screen.send(:load_recent_books)
+      books = @recent_screen.load_recent_books
       @state.browse_selected = @recent_screen.selected
       books
     end

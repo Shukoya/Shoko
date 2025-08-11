@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative '../../stores/models/bookmark'
+require_relative '../../models/bookmark'
 
 module EbookReader
   module Components

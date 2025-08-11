@@ -8,23 +8,23 @@ module EbookReader
     class FooterComponent < BaseComponent
       def initialize(controller)
         @controller = controller
-        state = @controller.instance_variable_get(:@state)
+        state = @controller.state
         state.add_observer(self, :mode, :current_chapter)
         @needs_redraw = true
       end
 
       def preferred_height(_available_height)
-        2
+        2 # Fixed height footer
       end
 
       def render(surface, bounds)
         config = @controller.config
-        state = @controller.instance_variable_get(:@state)
-        doc = @controller.instance_variable_get(:@doc)
+        state = @controller.state
+        doc = @controller.doc
         width = bounds.width
         height = bounds.height
 
-        pages = @controller.send(:calculate_current_pages)
+        pages = @controller.calculate_current_pages
 
         if config.view_mode == :single && state.mode == :read
           # single-line page indicator, centered on last line
@@ -50,7 +50,7 @@ module EbookReader
                         Terminal::ANSI::YELLOW + mode_text + Terminal::ANSI::RESET)
 
           # Status right
-          bookmarks = @controller.instance_variable_get(:@state).bookmarks || []
+          bookmarks = @controller.state.bookmarks || []
           right_prog = "L#{config.line_spacing.to_s[0]} B#{bookmarks.count}"
           surface.write(bounds, row1, [width - right_prog.length - 1, 1].max,
                         Terminal::ANSI::BLUE + right_prog + Terminal::ANSI::RESET)

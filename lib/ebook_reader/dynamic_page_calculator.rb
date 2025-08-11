@@ -14,8 +14,10 @@ module EbookReader
       return { current: 0, total: 0 } unless @doc && @config.show_page_numbers
 
       height, width = Terminal.size
-      col_width, content_height = Services::LayoutService.calculate_metrics(width, height, @config.view_mode)
-      actual_height = Services::LayoutService.adjust_for_line_spacing(content_height, @config.line_spacing)
+      col_width, content_height = Services::LayoutService.calculate_metrics(width, height,
+                                                                            @config.view_mode)
+      actual_height = Services::LayoutService.adjust_for_line_spacing(content_height,
+                                                                      @config.line_spacing)
 
       return { current: 0, total: 0 } if actual_height <= 0
 

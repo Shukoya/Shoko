@@ -9,18 +9,17 @@ module EbookReader
     class PopupOverlayComponent < BaseComponent
       def initialize(controller)
         @controller = controller
-        state = @controller.instance_variable_get(:@state)
+        state = @controller.state
         state.add_observer(self, :selection)
         @needs_redraw = true
       end
 
       def preferred_height(_available_height)
-        # Overlays don't consume layout height
-        0
+        0 # Overlays don't consume layout height
       end
 
       def render(surface, bounds)
-        popup = @controller.instance_variable_get(:@state).popup_menu
+        popup = @controller.state.popup_menu
         return unless popup.respond_to?(:render_with_surface)
 
         popup.render_with_surface(surface, bounds)

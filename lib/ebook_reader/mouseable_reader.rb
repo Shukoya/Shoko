@@ -4,9 +4,13 @@ require_relative 'reader_controller'
 require_relative 'annotations/mouse_handler'
 require_relative 'annotations/annotation_store'
 require_relative 'ui/components/popup_menu'
+require_relative 'components/enhanced_popup_menu'
+require_relative 'components/tooltip_overlay_component'
 require_relative 'reader_modes/annotation_editor_mode'
 require_relative 'reader_modes/annotations_mode'
 require_relative 'terminal_mouse_patch'
+require_relative 'services/coordinate_service'
+require_relative 'services/clipboard_service'
 
 module EbookReader
   # A Reader that supports mouse interactions for annotations.
@@ -18,6 +22,7 @@ module EbookReader
       @selected_text = nil
       @state.selection = nil
       @state.rendered_lines = {}
+      @tooltip_overlay = Components::TooltipOverlayComponent.new(self)
       refresh_annotations
     end
 
@@ -33,10 +38,12 @@ module EbookReader
       @state.rendered_lines.clear
       super
 
-      # Overlays for mouse selection/annotations (reading and popup menu)
+      # Use consolidated tooltip overlay component for all highlighting
       if %i[read popup_menu].include?(@state.mode)
-        highlight_saved_annotations
-        highlight_selection if @mouse_handler.selecting || @state.selection
+        height, width = Terminal.size
+        bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
+        surface = Components::Surface.new(Terminal)
+        @tooltip_overlay.render(surface, bounds)
       end
 
       Terminal.end_frame
@@ -85,7 +92,10 @@ module EbookReader
     private
 
     def handle_popup_click(event)
-      item = @state.popup_menu.handle_click(event[:x], event[:y])
+      # Use coordinate service for consistent mouse-to-terminal conversion
+      terminal_coords = Services::CoordinateService.mouse_to_terminal(event[:x], event[:y])
+
+      item = @state.popup_menu.handle_click(terminal_coords[:x], terminal_coords[:y])
 
       if item
         handle_popup_action(item)
@@ -101,9 +111,11 @@ module EbookReader
       Terminal.size
       # Re-render content area only
       super
-      # Always highlight when we have a selection, including when popup menu is visible
-      highlight_saved_annotations
-      highlight_selection if @state.selection
+      # Use consolidated tooltip overlay for all highlighting
+      height, width = Terminal.size
+      bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
+      surface = Components::Surface.new(Terminal)
+      @tooltip_overlay.render(surface, bounds)
       Terminal.end_frame
     end
 
@@ -124,35 +136,13 @@ module EbookReader
     def show_popup_menu
       return unless @state.selection
 
-      end_pos = @state.selection[:end]
-      menu_items = ['Create Annotation', 'Copy to Clipboard']
-      menu_width = menu_items.map(&:length).max + 4
-      menu_x = [end_pos[:x], Terminal.size[1] - menu_width].min
-      menu_y = [end_pos[:y] + 1, Terminal.size[0] - 5].min
+      # Use enhanced popup menu with coordinate service
+      @state.popup_menu = Components::EnhancedPopupMenu.new(@state.selection)
+      return unless @state.popup_menu.visible # Only proceed if menu was created successfully
 
-      @state.popup_menu = UI::Components::PopupMenu.new(menu_x, menu_y, menu_items)
       switch_mode(:popup_menu)
       # Draw immediately so the menu appears in full without extra input
       draw_screen
-    end
-
-    def handle_popup_action(action)
-      case action
-      when 'Create Annotation'
-        switch_mode(:read)
-        switch_mode(:annotation_editor,
-                    text: @selected_text,
-                    range: @state.selection,
-                    chapter_index: @state.current_chapter)
-      when 'Copy to Clipboard'
-        copy_to_clipboard(@selected_text)
-        set_message('Copied to clipboard!')
-        switch_mode(:read)
-      end
-
-      @state.popup_menu = nil
-      @mouse_handler.reset
-      @state.selection = nil
     end
 
     # Clear any active text selection and hide popup
@@ -162,61 +152,8 @@ module EbookReader
       @state.selection = nil if @state
     end
 
-    def highlight_selection
-      range = @mouse_handler.selection_range || @state.selection
-      highlight_range(range, Terminal::ANSI::BG_BLUE) if range
-    end
-
-    def highlight_saved_annotations
-      return unless @state.annotations
-
-      @state.annotations.select { |a| a['chapter_index'] == @state.current_chapter }
-                  .each do |ann|
-        highlight_range(ann['range'], Terminal::ANSI::BG_CYAN)
-      end
-    end
-
-    def highlight_range(range, color)
-      return unless range && @state.rendered_lines
-
-      start_pos = range[:start] || range['start']
-      end_pos = range[:end] || range['end']
-      return unless start_pos && end_pos
-
-      start_y = start_pos[:y] || start_pos['y']
-      end_y   = end_pos[:y] || end_pos['y']
-      start_x = start_pos[:x] || start_pos['x']
-      end_x   = end_pos[:x] || end_pos['x']
-      return unless start_y && end_y && start_x && end_x
-
-      surface = Components::Surface.new(Terminal)
-      bounds = Components::Rect.new(x: 1, y: 1, width: Terminal.size[1], height: Terminal.size[0])
-      (start_y..end_y).each do |y|
-        row = y + 1
-        line_info = @state.rendered_lines[row]
-        next unless line_info
-
-        line_text = line_info[:text].dup
-        next if line_text.empty?
-
-        line_start_col = line_info[:col]
-
-        # Safely compute highlight bounds within this line
-        max_index = line_text.length - 1
-        start_idx_raw = (y == start_y ? start_x - line_start_col : 0)
-        end_idx_raw = (y == end_y ? end_x - line_start_col : max_index)
-        start_idx = [[start_idx_raw, 0].max, max_index].min
-        end_idx = [[end_idx_raw, 0].max, max_index].min
-        next if end_idx < start_idx
-
-        new_line = ''
-        new_line += line_text[0...start_idx] if start_idx.positive?
-        new_line += "#{color}#{Terminal::ANSI::WHITE}#{line_text[start_idx..end_idx]}#{Terminal::ANSI::RESET}"
-        new_line += line_text[(end_idx + 1)..] if end_idx < line_text.length - 1
-
-        surface.write(bounds, row, line_start_col, new_line)
-      end
-    end
+    # Old highlighting methods removed - now handled by TooltipOverlayComponent
+    # This eliminates the direct terminal writes that bypassed the component system
 
     def refresh_annotations
       @state.annotations = Annotations::AnnotationStore.get(@path)
@@ -225,13 +162,20 @@ module EbookReader
     def extract_selected_text(range)
       return '' unless range && @state.rendered_lines
 
-      start_pos = range[:start]
-      end_pos = range[:end]
+      # Use coordinate service for consistent normalization
+      normalized_range = Services::CoordinateService.normalize_selection_range(range)
+      return '' unless normalized_range
+
+      start_pos = normalized_range[:start]
+      end_pos = normalized_range[:end]
       text = []
 
       (start_pos[:y]..end_pos[:y]).each do |y|
-        row = y + 1
-        line_info = @state.rendered_lines[row]
+        # Use coordinate service for terminal coordinate conversion
+        terminal_coords = Services::CoordinateService.mouse_to_terminal(0, y)
+        terminal_row = terminal_coords[:y]
+
+        line_info = @state.rendered_lines[terminal_row]
         next unless line_info
 
         line_text = line_info[:text]
@@ -250,19 +194,12 @@ module EbookReader
     end
 
     def copy_to_clipboard(text)
-      cmd = case RUBY_PLATFORM
-            when /darwin/ then 'pbcopy'
-            when /linux/
-              if system('which wl-copy > /dev/null 2>&1')
-                'wl-copy'
-              elsif system('which xclip > /dev/null 2>&1')
-                'xclip -selection clipboard'
-              end
-            end
-
-      IO.popen(cmd, 'w') { |io| io.write(text) } if cmd
-    rescue StandardError
-      nil
+      Services::ClipboardService.copy_with_feedback(text) do |message|
+        set_message(message)
+      end
+    rescue Services::ClipboardService::ClipboardError => e
+      set_message("Copy failed: #{e.message}")
+      false
     end
   end
 end
