@@ -10,8 +10,20 @@ module EbookReader
         end
 
         def toggle_view_mode
-          @config.view_mode = @config.view_mode == :split ? :single : :split
-          @config.save
+          return unless @config
+          
+          current_mode = @config.view_mode
+          new_mode = current_mode == :split ? :single : :split
+          
+          # Validate new mode before setting
+          if %i[single split].include?(new_mode)
+            @config.view_mode = new_mode
+            @config.save
+          else
+            # Fallback to safe default
+            @config.view_mode = :single
+            @config.save
+          end
         end
 
         def toggle_page_numbers

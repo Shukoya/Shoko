@@ -69,7 +69,7 @@ module EbookReader
       end
 
       def view_mode_description
-        @config.view_mode == :split ? 'Split View (Two Pages)' : 'Single Page (Centered)'
+        @config.view_mode == :split ? 'Duo Page (Side-by-Side)' : 'Single Page (Centered)'
       end
     end
   end

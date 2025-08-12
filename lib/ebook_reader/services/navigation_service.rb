@@ -36,14 +36,81 @@ module EbookReader
 
       def compute_max_page(chapter, col_width, content_height)
         wrapped = @reader.wrap_lines(chapter.lines || [], col_width)
-        [wrapped.size - content_height, 0].max
+        
+        if @reader.config.view_mode == :split
+          # In split mode, we show 2 * content_height lines per "page turn"
+          # So the max starting position for left page is total_lines - (2 * content_height)
+          [wrapped.size - (2 * content_height), 0].max
+        else
+          # In single mode, max starting position is total_lines - content_height  
+          [wrapped.size - content_height, 0].max
+        end
       end
 
       def navigate_to_next_page(metrics)
         if @reader.config.view_mode == :split
-          @reader.send(:handle_split_next_page, metrics[:max_page], metrics[:content_height])
+          navigate_to_next_page_split(metrics)
         else
-          @reader.send(:handle_single_next_page, metrics[:max_page], metrics[:content_height])
+          navigate_to_next_page_single(metrics)
+        end
+      end
+
+      def navigate_to_next_page_split(metrics)
+        if @reader.left_page < metrics[:max_page]
+          @reader.left_page = [@reader.left_page + (2 * metrics[:content_height]), metrics[:max_page]].min
+          @reader.right_page = @reader.left_page + metrics[:content_height]
+        elsif @reader.current_chapter < @reader.doc.chapter_count - 1
+          next_chapter
+        end
+      end
+
+      def navigate_to_next_page_single(metrics)
+        if @reader.single_page < metrics[:max_page]
+          @reader.single_page = [@reader.single_page + metrics[:content_height], metrics[:max_page]].min
+        elsif @reader.current_chapter < @reader.doc.chapter_count - 1
+          next_chapter
+        end
+      end
+
+      def prev_page_absolute
+        metrics = calculate_page_metrics
+        return unless metrics[:chapter]
+
+        if @reader.config.view_mode == :split
+          navigate_to_prev_page_split(metrics)
+        else
+          navigate_to_prev_page_single(metrics)
+        end
+      end
+
+      def navigate_to_prev_page_split(metrics)
+        if @reader.left_page > 0
+          @reader.left_page = [@reader.left_page - (2 * metrics[:content_height]), 0].max
+          @reader.right_page = @reader.left_page + metrics[:content_height]
+        elsif @reader.current_chapter > 0
+          prev_chapter
+          @reader.position_at_chapter_end
+        end
+      end
+
+      def navigate_to_prev_page_single(metrics)
+        if @reader.single_page > 0
+          @reader.single_page = [@reader.single_page - metrics[:content_height], 0].max
+        elsif @reader.current_chapter > 0
+          prev_chapter
+          @reader.position_at_chapter_end
+        end
+      end
+
+      def initialize_pages
+        metrics = calculate_page_metrics
+        return unless metrics[:content_height] > 0
+
+        if @reader.config.view_mode == :split
+          @reader.left_page = 0
+          @reader.right_page = metrics[:content_height]
+        else
+          @reader.single_page = 0
         end
       end
 
@@ -91,8 +158,8 @@ module EbookReader
 
       def next_chapter_absolute
         @reader.current_chapter += 1
-        @reader.send(:reset_pages)
-        @reader.send(:save_progress)
+        @reader.reset_pages
+        @reader.save_progress
       end
 
       def can_go_to_next_chapter?
@@ -125,7 +192,7 @@ module EbookReader
 
       def prev_chapter_absolute
         @reader.current_chapter -= 1
-        @reader.send(:reset_pages)
+        @reader.reset_pages
       end
 
       def can_go_to_prev_chapter?

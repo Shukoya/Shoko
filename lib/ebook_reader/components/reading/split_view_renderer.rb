@@ -18,6 +18,11 @@ module EbookReader
           display_height = adjust_for_line_spacing(content_height, config.line_spacing)
           wrapped = controller.wrap_lines(chapter.lines || [], col_width)
 
+          # Ensure pages are properly initialized - delegate to controller
+          if state.left_page.nil? || state.right_page.nil?
+            controller.send(:initialize_split_pages_if_needed, display_height)
+          end
+
           render_chapter_header(surface, bounds, state, chapter)
           render_left_column(surface, bounds, wrapped, state, config, col_width, display_height,
                              controller)
@@ -27,6 +32,7 @@ module EbookReader
         end
 
         private
+
 
         def render_chapter_header(surface, bounds, state, chapter)
           chapter_info = "[#{state.current_chapter + 1}] #{chapter.title || 'Unknown'}"

@@ -9,7 +9,7 @@ module EbookReader
       def initialize(controller)
         @controller = controller
         state = @controller.state
-        state.add_observer(self, :mode, :current_chapter)
+        state.add_observer(self, :mode, :current_chapter, :left_page, :right_page, :single_page)
         @needs_redraw = true
       end
 
@@ -24,15 +24,30 @@ module EbookReader
         width = bounds.width
         height = bounds.height
 
-        pages = @controller.calculate_current_pages
-
         if config.view_mode == :single && state.mode == :read
-          # single-line page indicator, centered on last line
+          # Single mode: centered page indicator on last line
+          pages = @controller.calculate_current_pages
           if @controller.config.show_page_numbers && pages[:total].positive?
             page_text = "#{pages[:current]} / #{pages[:total]}"
             centered_col = [(width - page_text.length) / 2, 1].max
             surface.write(bounds, height, centered_col,
                           Terminal::ANSI::DIM + Terminal::ANSI::GRAY + page_text + Terminal::ANSI::RESET)
+          end
+        elsif config.view_mode == :split && state.mode == :read
+          # Duo mode: show consecutive page numbers on both sides
+          split_pages = @controller.calculate_split_pages
+          if @controller.config.show_page_numbers && split_pages[:left][:total].positive?
+            # Left page number
+            left_text = "#{split_pages[:left][:current]} / #{split_pages[:left][:total]}"
+            left_col = [(width / 4) - (left_text.length / 2), 1].max
+            surface.write(bounds, height, left_col,
+                          Terminal::ANSI::DIM + Terminal::ANSI::GRAY + left_text + Terminal::ANSI::RESET)
+            
+            # Right page number
+            right_text = "#{split_pages[:right][:current]} / #{split_pages[:right][:total]}"
+            right_col = [(3 * width / 4) - (right_text.length / 2), 1].max
+            surface.write(bounds, height, right_col,
+                          Terminal::ANSI::DIM + Terminal::ANSI::GRAY + right_text + Terminal::ANSI::RESET)
           end
         else
           # Split/other modes — show two-line footer

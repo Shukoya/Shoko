@@ -177,19 +177,40 @@ module EbookReader
         terminal_coords = Services::CoordinateService.mouse_to_terminal(0, y)
         terminal_row = terminal_coords[:y]
 
-        line_info = @state.rendered_lines[terminal_row]
-        next unless line_info
+        # Find all line segments for this row
+        selected_text_parts = []
+        
+        @state.rendered_lines.each do |line_key, line_info|
+          next unless line_info[:row] == terminal_row
+          
+          line_text = line_info[:text]
+          line_start_col = line_info[:col]
+          line_end_col = line_start_col + line_info[:width] - 1
 
-        line_text = line_info[:text]
-        line_start_col = line_info[:col]
+          # Check if selection intersects with this column
+          row_start_x = y == start_pos[:y] ? start_pos[:x] : 0
+          row_end_x = y == end_pos[:y] ? end_pos[:x] : Float::INFINITY
 
-        start_char_index = (y == start_pos[:y] ? start_pos[:x] - line_start_col : 0).clamp(0,
-                                                                                           line_text.length - 1)
-        end_char_index = (y == end_pos[:y] ? end_pos[:x] - line_start_col : line_text.length - 1).clamp(
-          0, line_text.length - 1
-        )
+          # Skip if selection doesn't overlap with this column
+          next if row_end_x < line_start_col || row_start_x > line_end_col
 
-        text << line_text[start_char_index..end_char_index] if end_char_index >= start_char_index
+          # Calculate character indices within this column
+          start_char_index = [row_start_x - line_start_col, 0].max
+          end_char_index = [row_end_x - line_start_col, line_text.length - 1].min
+
+          if end_char_index >= start_char_index && start_char_index < line_text.length
+            selected_text_parts << {
+              col: line_start_col,
+              text: line_text[start_char_index..end_char_index]
+            }
+          end
+        end
+        
+        # Sort by column position and join
+        unless selected_text_parts.empty?
+          sorted_parts = selected_text_parts.sort_by { |part| part[:col] }
+          text << sorted_parts.map { |part| part[:text] }.join(' ')
+        end
       end
 
       text.join("\n")

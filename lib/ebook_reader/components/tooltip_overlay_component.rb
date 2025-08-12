@@ -73,21 +73,40 @@ module EbookReader
       def render_highlighted_line(surface, bounds, rendered_lines, y, start_pos, end_pos, color)
         # Convert 0-based selection coordinates to 1-based terminal row
         terminal_row = y + 1
-        line_info = rendered_lines[terminal_row]
-        return unless line_info
 
-        line_text = line_info[:text].dup
+        # Find all line segments for this row using the new key format
+        rendered_lines.each do |line_key, line_info|
+          next unless line_info[:row] == terminal_row
+          
+          line_start_col = line_info[:col]
+          line_end_col = line_start_col + line_info[:width] - 1
+
+          # Check if this column intersects with the selection
+          row_start_x = y == start_pos[:y] ? start_pos[:x] : 0
+          row_end_x = y == end_pos[:y] ? end_pos[:x] : Float::INFINITY
+
+          # Skip if selection doesn't overlap with this column
+          next if row_end_x < line_start_col || row_start_x > line_end_col
+
+          # Render highlight for this line segment
+          render_line_segment_highlight(surface, bounds, line_info, y, start_pos, end_pos, color)
+        end
+      end
+
+      def render_line_segment_highlight(surface, bounds, line_info, y, start_pos, end_pos, color)
+        line_text = line_info[:text]
         return if line_text.empty?
 
         line_start_col = line_info[:col]
+        terminal_row = line_info[:row]
 
-        # Calculate highlight boundaries within this line
+        # Calculate highlight boundaries within this line segment
         highlight_bounds = calculate_line_highlight_bounds(
           line_text, line_start_col, y, start_pos, end_pos
         )
         return unless highlight_bounds
 
-        # Build highlighted line text
+        # Build highlighted line text (overlay approach - don't modify original)
         highlighted_text = build_highlighted_text(
           line_text, highlight_bounds, color
         )

@@ -175,6 +175,10 @@ module EbookReader
         # No-op for other modes
       end
     end
+    
+    def handle_settings_input(key)
+      @input_handler.handle_setting_change(key)
+    end
 
     private
 

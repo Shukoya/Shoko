@@ -237,22 +237,7 @@ module EbookReader
 
     def prev_page_absolute
       clear_selection!
-      return if @state.current_chapter.zero? && @state.single_page.zero? && @state.left_page.zero?
-
-      if @config.view_mode == :split
-        if @state.left_page.positive?
-          @state.right_page = @state.left_page
-          @state.left_page = [@state.left_page - (Terminal.size[0] - 2), 0].max
-        elsif @state.current_chapter.positive?
-          @state.current_chapter -= 1
-          position_at_chapter_end
-        end
-      elsif @state.single_page.positive?
-        @state.single_page = [@state.single_page - (Terminal.size[0] - 2), 0].max
-      elsif @state.current_chapter.positive?
-        @state.current_chapter -= 1
-        position_at_chapter_end
-      end
+      @navigation_service.prev_page_absolute
     end
 
     def update_chapter_from_page_index
@@ -308,7 +293,7 @@ module EbookReader
       @state.dynamic_total_pages = 0
       @state.last_dynamic_width = 0
       @state.last_dynamic_height = 0
-      reset_pages
+      @navigation_service.initialize_pages
     end
 
     def increase_line_spacing
@@ -364,6 +349,48 @@ module EbookReader
         current_global_page = pages_before + page_in_chapter
 
         { current: current_global_page, total: @state.total_pages }
+      end
+    end
+
+    def calculate_split_pages
+      return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } } unless @config.show_page_numbers
+
+      if @config.page_numbering_mode == :dynamic
+        return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } } unless @page_manager
+
+        left_page = @state.current_page_index + 1
+        right_page = [left_page + 1, @page_manager.total_pages].min
+        total = @page_manager.total_pages
+        
+        { left: { current: left_page, total: total }, right: { current: right_page, total: total } }
+      else
+        height, width = Terminal.size
+        _, content_height = Services::LayoutService.calculate_metrics(width, height, :split)
+        actual_height = adjust_for_line_spacing(content_height)
+
+        return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } } if actual_height <= 0
+
+        update_page_map(width, height) if size_changed?(width, height) || @state.page_map.empty?
+        return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } } unless @state.total_pages.positive?
+
+        pages_before = @state.page_map[0...@state.current_chapter].sum
+        
+        # Calculate left page
+        left_line_offset = @state.left_page || 0
+        left_page_in_chapter = (left_line_offset.to_f / actual_height).floor + 1
+        left_current = pages_before + left_page_in_chapter
+        
+        # Calculate right page
+        right_line_offset = @state.right_page || actual_height
+        right_page_in_chapter = (right_line_offset.to_f / actual_height).floor + 1
+        right_current = pages_before + right_page_in_chapter
+        
+        total = @state.total_pages
+        
+        { 
+          left: { current: left_current, total: total }, 
+          right: { current: [right_current, total].min, total: total } 
+        }
       end
     end
 
@@ -634,45 +661,7 @@ module EbookReader
         old_state[:message] != @state.message
     end
 
-    def handle_split_next_page(max_page, content_height)
-      if @state.right_page < max_page
-        @state.left_page = @state.right_page
-        @state.right_page = [@state.right_page + content_height, max_page].min
-      else
-        @state.left_page = @state.right_page
-      end
-    end
-
-    def handle_single_next_page(max_page, content_height)
-      if @state.single_page < max_page
-        @state.single_page = [@state.single_page + content_height, max_page].min
-      elsif @state.current_chapter < @doc.chapter_count - 1
-        next_chapter
-      end
-    end
-
-    def handle_split_prev_page(content_height)
-      if @state.left_page.positive?
-        @state.right_page = @state.left_page
-        @state.left_page = [@state.left_page - content_height, 0].max
-      elsif @state.current_chapter.positive?
-        prev_chapter_with_end_position
-      end
-    end
-
-    def handle_single_prev_page(content_height)
-      if @state.single_page.positive?
-        @state.single_page = [@state.single_page - content_height, 0].max
-      elsif @state.current_chapter.positive?
-        @state.current_chapter -= 1
-        position_at_chapter_end
-      end
-    end
-
-    def prev_chapter_with_end_position
-      @state.current_chapter -= 1
-      position_at_chapter_end
-    end
+    
 
     def update_page_map(width, height)
       return if @doc.nil?
@@ -720,6 +709,8 @@ module EbookReader
 
     def page_offsets=(offset)
       @state.page_offset = offset
+      @state.single_page = offset
+      @navigation_service.initialize_pages
     end
 
     def save_progress
@@ -875,6 +866,27 @@ module EbookReader
       @state.selection = nil
     end
 
+    def reset_pages
+      clear_selection!
+      @navigation_service.initialize_pages
+    end
+
+    def position_at_chapter_end
+      chapter = @doc.get_chapter(@state.current_chapter)
+      return unless chapter&.lines
+
+      col_width, content_height = end_of_chapter_metrics
+      return unless content_height.positive?
+
+      wrapped = wrap_lines(chapter.lines, col_width)
+      max_page = [wrapped.size - content_height, 0].max
+      set_page_end(max_page, content_height)
+    end
+
+    def save_progress
+      @state_service.save_progress
+    end
+
     public
 
     # Legacy delegators removed; input handling is centralized via
@@ -883,7 +895,7 @@ module EbookReader
     def jump_to_chapter(chapter_index)
       clear_selection!
       @state.current_chapter = chapter_index
-      reset_pages
+      @navigation_service.initialize_pages
       save_progress
       @state.mode = :read
     end
@@ -918,7 +930,7 @@ module EbookReader
 
     def reset_pages
       clear_selection!
-      self.page_offsets = 0
+      @navigation_service.initialize_pages
     end
 
     def position_at_chapter_end

@@ -44,9 +44,17 @@ module EbookReader
           text = highlight_quotes(text) if config.highlight_quotes
 
           abs_row = bounds.y + row - 1
-          (controller.state.rendered_lines || {})[abs_row] = {
-            col: bounds.x + col - 1,
+          abs_col = bounds.x + col - 1
+          
+          # Store line data in format compatible with mouse selection
+          # Use a key that includes column position to avoid overwrites
+          controller.state.rendered_lines ||= {}
+          line_key = "#{abs_row}_#{abs_col}"
+          controller.state.rendered_lines[line_key] = {
+            row: abs_row,
+            col: abs_col,
             text: text,
+            width: width
           }
 
           surface.write(bounds, row, col, Terminal::ANSI::WHITE + text + Terminal::ANSI::RESET)
