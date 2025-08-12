@@ -69,8 +69,8 @@ module EbookReader
 
     # Delegate state accessors to @state for compatibility
     def_delegators :@state, :current_chapter, :current_chapter=,
-                   :left_page, :left_page=, :right_page, :right_page=,
-                   :single_page, :single_page=, :current_page_index, :current_page_index=
+                   :single_page, :single_page=, :current_page_index, :current_page_index=,
+                   :left_page, :left_page=, :right_page, :right_page=
 
     def initialize(epub_path, config = Config.new)
       @path = epub_path
@@ -199,6 +199,7 @@ module EbookReader
       else
         next_page_absolute
       end
+      force_redraw
     end
 
     def prev_page
@@ -208,6 +209,7 @@ module EbookReader
       else
         prev_page_absolute
       end
+      force_redraw
     end
 
     def next_page_dynamic
@@ -232,12 +234,54 @@ module EbookReader
 
     def next_page_absolute
       clear_selection!
-      @navigation_service.next_page_absolute
+      metrics = calculate_page_metrics
+      return unless metrics[:chapter]
+
+      if @config.view_mode == :split
+        if @state.left_page >= metrics[:max_page]
+          return next_chapter if @state.current_chapter < @doc.chapter_count - 1
+        else
+          @state.left_page += (2 * metrics[:content_height])
+          @state.left_page = [@state.left_page, metrics[:max_page]].min
+          @state.right_page = @state.left_page + metrics[:content_height]
+        end
+      else
+        if @state.single_page >= metrics[:max_page]
+          return next_chapter if @state.current_chapter < @doc.chapter_count - 1
+        else
+          @state.single_page += metrics[:content_height]
+          @state.single_page = [@state.single_page, metrics[:max_page]].min
+        end
+      end
     end
 
     def prev_page_absolute
       clear_selection!
-      @navigation_service.prev_page_absolute
+      metrics = calculate_page_metrics
+      return unless metrics[:chapter]
+
+      if @config.view_mode == :split
+        if @state.left_page <= 0
+          if @state.current_chapter > 0
+            prev_chapter
+            position_at_chapter_end
+          end
+        else
+          @state.left_page -= (2 * metrics[:content_height])
+          @state.left_page = [@state.left_page, 0].max
+          @state.right_page = @state.left_page + metrics[:content_height]
+        end
+      else
+        if @state.single_page <= 0
+          if @state.current_chapter > 0
+            prev_chapter
+            position_at_chapter_end
+          end
+        else
+          @state.single_page -= metrics[:content_height]
+          @state.single_page = [@state.single_page, 0].max
+        end
+      end
     end
 
     def update_chapter_from_page_index
@@ -294,6 +338,11 @@ module EbookReader
       @state.last_dynamic_width = 0
       @state.last_dynamic_height = 0
       @navigation_service.initialize_pages
+      
+      # Force renderer recreation for view mode change
+      content_component = @layout.instance_variable_get(:@children).find { |c| c.is_a?(Components::ContentComponent) }
+      content_component&.instance_variable_set(:@view_renderer, nil)
+      content_component&.instance_variable_set(:@needs_redraw, true)
     end
 
     def increase_line_spacing
@@ -435,7 +484,33 @@ module EbookReader
       end
     end
 
+    def force_redraw
+      content_component = @layout.instance_variable_get(:@children).find { |c| c.is_a?(Components::ContentComponent) }
+      content_component&.instance_variable_set(:@needs_redraw, true)
+    end
+
     private
+
+    def calculate_page_metrics
+      height, width = Terminal.size
+      col_width, content_height = Services::LayoutService.calculate_metrics(width, height, @config.view_mode)
+      content_height = adjust_for_line_spacing(content_height)
+      chapter = @doc.get_chapter(@state.current_chapter)
+      return {} unless chapter
+
+      max_page = compute_max_page(chapter, col_width, content_height)
+      { chapter: chapter, content_height: content_height, max_page: max_page }
+    end
+
+    def compute_max_page(chapter, col_width, content_height)
+      wrapped = wrap_lines(chapter.lines || [], col_width)
+      
+      if @config.view_mode == :split
+        [wrapped.size - (2 * content_height), 0].max
+      else
+        [wrapped.size - content_height, 0].max
+      end
+    end
 
     # Hook for subclasses (MouseableReader) to clear any active selection/popup
     def clear_selection!
@@ -596,9 +671,8 @@ module EbookReader
         keys = read_input_keys
         next if keys.empty?
 
-        old_state = capture_state
         keys.each { |k| @dispatcher.handle_key(k) }
-        draw_screen if state_changed?(old_state)
+        draw_screen
       end
     end
 

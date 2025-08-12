@@ -57,7 +57,10 @@ module EbookReader
 
       def navigate_to_next_page_split(metrics)
         if @reader.left_page < metrics[:max_page]
-          @reader.left_page = [@reader.left_page + (2 * metrics[:content_height]), metrics[:max_page]].min
+          @reader.left_page += (2 * metrics[:content_height])
+          if @reader.left_page > metrics[:max_page]
+            @reader.left_page = metrics[:max_page]
+          end
           @reader.right_page = @reader.left_page + metrics[:content_height]
         elsif @reader.current_chapter < @reader.doc.chapter_count - 1
           next_chapter
@@ -85,7 +88,10 @@ module EbookReader
 
       def navigate_to_prev_page_split(metrics)
         if @reader.left_page > 0
-          @reader.left_page = [@reader.left_page - (2 * metrics[:content_height]), 0].max
+          @reader.left_page -= (2 * metrics[:content_height])
+          if @reader.left_page < 0
+            @reader.left_page = 0
+          end
           @reader.right_page = @reader.left_page + metrics[:content_height]
         elsif @reader.current_chapter > 0
           prev_chapter
@@ -199,7 +205,7 @@ module EbookReader
         @reader.current_chapter.positive?
       end
 
-      public :go_to_end, :next_chapter, :prev_chapter
+      public :go_to_end, :next_chapter, :prev_chapter, :initialize_pages
     end
   end
 end

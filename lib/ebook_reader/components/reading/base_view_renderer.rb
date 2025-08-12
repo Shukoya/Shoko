@@ -47,12 +47,13 @@ module EbookReader
           abs_col = bounds.x + col - 1
           
           # Store line data in format compatible with mouse selection
-          # Use a key that includes column position to avoid overwrites
+          # Use a key that includes both row and column range to distinguish columns
           controller.state.rendered_lines ||= {}
-          line_key = "#{abs_row}_#{abs_col}"
+          line_key = "#{abs_row}_#{abs_col}_#{abs_col + width - 1}"
           controller.state.rendered_lines[line_key] = {
             row: abs_row,
             col: abs_col,
+            col_end: abs_col + width - 1,
             text: text,
             width: width
           }

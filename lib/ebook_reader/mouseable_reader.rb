@@ -170,6 +170,11 @@ module EbookReader
 
       start_pos = normalized_range[:start]
       end_pos = normalized_range[:end]
+      
+      # Determine which column the selection started in
+      target_column_bounds = determine_column_bounds(start_pos)
+      return '' unless target_column_bounds
+      
       text = []
 
       (start_pos[:y]..end_pos[:y]).each do |y|
@@ -177,24 +182,28 @@ module EbookReader
         terminal_coords = Services::CoordinateService.mouse_to_terminal(0, y)
         terminal_row = terminal_coords[:y]
 
-        # Find all line segments for this row
+        # Find line segments for this row that belong to the target column
         selected_text_parts = []
         
         @state.rendered_lines.each do |line_key, line_info|
           next unless line_info[:row] == terminal_row
           
-          line_text = line_info[:text]
           line_start_col = line_info[:col]
-          line_end_col = line_start_col + line_info[:width] - 1
+          line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
+          
+          # Only include text from the same column as the initial click
+          next unless column_overlaps?(line_start_col, line_end_col, target_column_bounds)
+          
+          line_text = line_info[:text]
 
-          # Check if selection intersects with this column
-          row_start_x = y == start_pos[:y] ? start_pos[:x] : 0
-          row_end_x = y == end_pos[:y] ? end_pos[:x] : Float::INFINITY
+          # Check if selection intersects with this line segment
+          row_start_x = y == start_pos[:y] ? start_pos[:x] : target_column_bounds[:start]
+          row_end_x = y == end_pos[:y] ? end_pos[:x] : target_column_bounds[:end]
 
-          # Skip if selection doesn't overlap with this column
+          # Skip if selection doesn't overlap with this line segment
           next if row_end_x < line_start_col || row_start_x > line_end_col
 
-          # Calculate character indices within this column
+          # Calculate character indices within this line segment
           start_char_index = [row_start_x - line_start_col, 0].max
           end_char_index = [row_end_x - line_start_col, line_text.length - 1].min
 
@@ -223,6 +232,32 @@ module EbookReader
     rescue Services::ClipboardService::ClipboardError => e
       set_message("Copy failed: #{e.message}")
       false
+    end
+    
+    private
+    
+    def determine_column_bounds(click_pos)
+      # Find which column the click position belongs to
+      terminal_coords = Services::CoordinateService.mouse_to_terminal(0, click_pos[:y])
+      terminal_row = terminal_coords[:y]
+      
+      @state.rendered_lines.each do |line_key, line_info|
+        next unless line_info[:row] == terminal_row
+        
+        line_start_col = line_info[:col]
+        line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
+        
+        if click_pos[:x] >= line_start_col && click_pos[:x] <= line_end_col
+          return { start: line_start_col, end: line_end_col }
+        end
+      end
+      
+      nil
+    end
+    
+    def column_overlaps?(line_start, line_end, target_bounds)
+      # Check if line segment overlaps with target column bounds
+      !(line_end < target_bounds[:start] || line_start > target_bounds[:end])
     end
   end
 end

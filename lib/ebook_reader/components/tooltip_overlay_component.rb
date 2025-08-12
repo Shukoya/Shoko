@@ -64,28 +64,40 @@ module EbookReader
         rendered_lines = @controller.state.rendered_lines || {}
         start_pos = normalized_range[:start]
         end_pos = normalized_range[:end]
+        
+        # Determine which column the selection started in (for column-aware highlighting)
+        target_column_bounds = determine_highlight_column_bounds(start_pos, rendered_lines)
 
         (start_pos[:y]..end_pos[:y]).each do |y|
-          render_highlighted_line(surface, bounds, rendered_lines, y, start_pos, end_pos, color)
+          render_highlighted_line(surface, bounds, rendered_lines, y, start_pos, end_pos, color, target_column_bounds)
         end
       end
 
-      def render_highlighted_line(surface, bounds, rendered_lines, y, start_pos, end_pos, color)
+      def render_highlighted_line(surface, bounds, rendered_lines, y, start_pos, end_pos, color, target_column_bounds = nil)
         # Convert 0-based selection coordinates to 1-based terminal row
         terminal_row = y + 1
 
-        # Find all line segments for this row using the new key format
+        # Find line segments for this row that belong to the target column
         rendered_lines.each do |line_key, line_info|
           next unless line_info[:row] == terminal_row
           
           line_start_col = line_info[:col]
-          line_end_col = line_start_col + line_info[:width] - 1
+          line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
 
-          # Check if this column intersects with the selection
-          row_start_x = y == start_pos[:y] ? start_pos[:x] : 0
-          row_end_x = y == end_pos[:y] ? end_pos[:x] : Float::INFINITY
+          # If we have column bounds, only highlight within the target column
+          if target_column_bounds
+            next unless column_overlaps_highlight?(line_start_col, line_end_col, target_column_bounds)
+            
+            # Constrain selection to target column bounds
+            row_start_x = y == start_pos[:y] ? start_pos[:x] : target_column_bounds[:start]
+            row_end_x = y == end_pos[:y] ? end_pos[:x] : target_column_bounds[:end]
+          else
+            # Original behavior for single-column mode or saved annotations
+            row_start_x = y == start_pos[:y] ? start_pos[:x] : 0
+            row_end_x = y == end_pos[:y] ? end_pos[:x] : Float::INFINITY
+          end
 
-          # Skip if selection doesn't overlap with this column
+          # Skip if selection doesn't overlap with this line segment
           next if row_end_x < line_start_col || row_start_x > line_end_col
 
           # Render highlight for this line segment
@@ -146,6 +158,29 @@ module EbookReader
         result += line_text[(bounds[:end] + 1)..] if bounds[:end] < line_text.length - 1
 
         result
+      end
+      
+      def determine_highlight_column_bounds(click_pos, rendered_lines)
+        # Find which column the click position belongs to
+        terminal_row = click_pos[:y] + 1
+        
+        rendered_lines.each do |line_key, line_info|
+          next unless line_info[:row] == terminal_row
+          
+          line_start_col = line_info[:col]
+          line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
+          
+          if click_pos[:x] >= line_start_col && click_pos[:x] <= line_end_col
+            return { start: line_start_col, end: line_end_col }
+          end
+        end
+        
+        nil
+      end
+      
+      def column_overlaps_highlight?(line_start, line_end, target_bounds)
+        # Check if line segment overlaps with target column bounds
+        !(line_end < target_bounds[:start] || line_start > target_bounds[:end])
       end
     end
   end

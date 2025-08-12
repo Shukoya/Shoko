@@ -26,9 +26,10 @@ module EbookReader
       end
 
       # Observer callback triggered by ReaderState
-      def state_changed(_field, _old_value, _new_value)
+      def state_changed(field, _old_value, _new_value)
         @needs_redraw = true
-        @view_renderer = nil # Reset renderer when state changes
+        # Only reset renderer for mode changes, not page changes
+        @view_renderer = nil if field == :mode
       end
 
       # Fill remaining space after fixed components
