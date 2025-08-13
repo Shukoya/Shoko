@@ -1,15 +1,22 @@
 # frozen_string_literal: true
 
+require_relative '../base_component'
+
 module EbookReader
   module Components
     module Reading
-      class SplitRenderer
-        def initialize(component)
-          @component = component
+      class SplitRenderer < BaseComponent
+        def initialize(content_component)
+          super()
+          @content_component = content_component
         end
 
-        def render(surface, bounds)
-          @component.send(:render_split, surface, bounds)
+        def do_render(surface, bounds)
+          @content_component.send(:render_split, surface, bounds)
+        end
+
+        def preferred_height(available_height)
+          available_height
         end
       end
     end

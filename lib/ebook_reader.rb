@@ -35,6 +35,7 @@ require_relative 'ebook_reader/models/bookmark_data'
 require_relative 'ebook_reader/models/drawing_context'
 require_relative 'ebook_reader/models/scanner_context'
 require_relative 'ebook_reader/models/page_rendering_context'
+require_relative 'ebook_reader/models/rendering_context'
 require_relative 'ebook_reader/builders/page_setup_builder'
 
 # Core components
@@ -78,7 +79,6 @@ require_relative 'ebook_reader/domain/commands/bookmark_commands'
 
 # UI layer - new architecture  
 require_relative 'ebook_reader/ui/view_models/reader_view_model'
-require_relative 'ebook_reader/ui/components/pure_header_component'
 require_relative 'ebook_reader/ui/components/pure_content_component'
 
 # Application layer - new architecture
@@ -86,14 +86,11 @@ require_relative 'ebook_reader/application/reader_application'
 
 # Core reader components (legacy - will be phased out)
 require_relative 'ebook_reader/core/global_state'
-require_relative 'ebook_reader/services/navigation_service'
-require_relative 'ebook_reader/services/bookmark_service'
 require_relative 'ebook_reader/services/state_service'
 require_relative 'ebook_reader/services/page_manager'
 require_relative 'ebook_reader/services/main_menu_input_handler'
 require_relative 'ebook_reader/services/coordinate_service'
 require_relative 'ebook_reader/services/clipboard_service'
-require_relative 'ebook_reader/services/service_registry'
 
 # Reading components
 require_relative 'ebook_reader/components/reading/base_view_renderer'

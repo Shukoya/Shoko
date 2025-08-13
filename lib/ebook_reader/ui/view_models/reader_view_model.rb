@@ -7,8 +7,9 @@ module EbookReader
       # Eliminates component coupling to controllers and services.
       class ReaderViewModel
         attr_reader :current_chapter, :total_chapters, :current_page, :total_pages,
-                    :chapter_title, :view_mode, :sidebar_visible, :mode, :message,
-                    :bookmarks, :toc_entries, :content_lines, :page_info
+                    :chapter_title, :document_title, :view_mode, :sidebar_visible, :mode, :message,
+                    :bookmarks, :toc_entries, :content_lines, :page_info, :show_page_numbers, 
+                    :page_numbering_mode, :line_spacing, :language
 
         def initialize(
           current_chapter: 0,
@@ -16,6 +17,7 @@ module EbookReader
           current_page: 0,
           total_pages: 0,
           chapter_title: '',
+          document_title: '',
           view_mode: :split,
           sidebar_visible: false,
           mode: :read,
@@ -23,13 +25,18 @@ module EbookReader
           bookmarks: [],
           toc_entries: [],
           content_lines: [],
-          page_info: {}
+          page_info: {},
+          show_page_numbers: true,
+          page_numbering_mode: :absolute,
+          line_spacing: :normal,
+          language: 'en'
         )
           @current_chapter = current_chapter
           @total_chapters = total_chapters
           @current_page = current_page
           @total_pages = total_pages
           @chapter_title = chapter_title
+          @document_title = document_title
           @view_mode = view_mode
           @sidebar_visible = sidebar_visible
           @mode = mode
@@ -38,6 +45,10 @@ module EbookReader
           @toc_entries = toc_entries
           @content_lines = content_lines
           @page_info = page_info
+          @show_page_numbers = show_page_numbers
+          @page_numbering_mode = page_numbering_mode
+          @line_spacing = line_spacing
+          @language = language
           freeze
         end
 
@@ -85,6 +96,7 @@ module EbookReader
             current_page: current_page,
             total_pages: total_pages,
             chapter_title: chapter_title,
+            document_title: document_title,
             view_mode: view_mode,
             sidebar_visible: sidebar_visible,
             mode: mode,
@@ -92,7 +104,11 @@ module EbookReader
             bookmarks: bookmarks,
             toc_entries: toc_entries,
             content_lines: content_lines,
-            page_info: page_info
+            page_info: page_info,
+            show_page_numbers: show_page_numbers,
+            page_numbering_mode: page_numbering_mode,
+            line_spacing: line_spacing,
+            language: language
           }
           
           self.class.new(**current_attributes.merge(changes))

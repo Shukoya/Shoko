@@ -7,7 +7,7 @@ module EbookReader
     module Reading
       # Renderer for bookmarks display
       class BookmarksRenderer < BaseViewRenderer
-        def render(surface, bounds, controller)
+        def view_render(surface, bounds, controller)
           bookmarks = controller.state.bookmarks || []
           doc = controller.doc
 

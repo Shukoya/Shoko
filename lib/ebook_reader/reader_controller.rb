@@ -9,8 +9,6 @@ require_relative 'constants/ui_constants'
 require_relative 'errors'
 require_relative 'constants/messages'
 require_relative 'helpers/reader_helpers'
-require_relative 'services/navigation_service'
-require_relative 'services/bookmark_service'
 require_relative 'services/state_service'
 require_relative 'dynamic_page_calculator'
 require_relative 'presenters/reader_presenter'
@@ -78,11 +76,8 @@ module EbookReader
       load_document
       @page_manager = Services::PageManager.new(@doc, self.config) if @doc
 
-      # Initialize service registry for dependency injection
-      Services::ServiceRegistry.initialize_services(self)
-      @navigation_service = Services::ServiceRegistry.navigation
-      @bookmark_service = Services::ServiceRegistry.bookmark
-      @state_service = Services::ServiceRegistry.state
+      # Initialize state service directly
+      @state_service = Services::StateService.new(self)
 
       load_data
       @terminal_cache = { width: nil, height: nil, checked_at: nil }
@@ -91,6 +86,9 @@ module EbookReader
       @last_rendered_state = {}
       build_component_layout
       setup_input_dispatcher
+      
+      # Initialize page calculations for navigation
+      initialize_page_calculations
       
       # Observe sidebar visibility changes to rebuild layout
       @state.add_observer(self, [:reader, :sidebar_visible])
@@ -177,35 +175,85 @@ module EbookReader
 
     def scroll_down
       clear_selection!
-      @navigation_service.scroll_down
+      # Scroll down is implemented as page navigation for consistency
+      next_page
     end
 
     def scroll_up
       clear_selection!
-      @navigation_service.scroll_up
+      # Scroll up is implemented as page navigation for consistency
+      prev_page
     end
 
     def next_page
       clear_selection!
-      @navigation_service.next_page
+      
+      # Use page manager if available and in dynamic mode
+      if @page_manager && config.page_numbering_mode == :dynamic
+        max_pages = @page_manager.total_pages
+        
+        if config.view_mode == :split
+          @state.current_page_index = [@state.current_page_index + 2, max_pages - 1].min
+        else
+          @state.current_page_index = [@state.current_page_index + 1, max_pages - 1].min
+        end
+      else
+        # Fall back to absolute mode navigation
+        if config.view_mode == :split
+          @state.current_page_index = [@state.current_page_index + 2, @state.total_pages - 1].min
+        else
+          @state.current_page_index = [@state.current_page_index + 1, @state.total_pages - 1].min
+        end
+        
+        # Check if we need to advance to next chapter
+        if @state.current_page_index >= @state.total_pages - 1
+          next_chapter if @state.current_chapter < (@doc&.chapters&.length || 1) - 1
+        end
+      end
+      
       force_redraw
     end
 
     def prev_page
       clear_selection!
-      @navigation_service.prev_page
+      
+      # Use page manager if available and in dynamic mode
+      if @page_manager && config.page_numbering_mode == :dynamic
+        if config.view_mode == :split
+          @state.current_page_index = [@state.current_page_index - 2, 0].max
+        else
+          @state.current_page_index = [@state.current_page_index - 1, 0].max
+        end
+      else
+        # Fall back to absolute mode navigation
+        if config.view_mode == :split
+          @state.current_page_index = [@state.current_page_index - 2, 0].max
+        else
+          @state.current_page_index = [@state.current_page_index - 1, 0].max
+        end
+        
+        # Check if we need to go to previous chapter
+        if @state.current_page_index <= 0
+          prev_chapter if @state.current_chapter > 0
+        end
+      end
+      
       force_redraw
     end
 
 
     def go_to_start
       clear_selection!
-      @navigation_service.go_to_start
+      @state.current_chapter = 0
+      @state.current_page_index = 0
+      force_redraw
     end
 
     def go_to_end
       clear_selection!
-      @navigation_service.go_to_end
+      @state.current_chapter = (@doc&.chapters&.length || 1) - 1
+      @state.current_page_index = @state.total_pages - 1
+      force_redraw
     end
 
     def quit_to_menu
@@ -221,17 +269,38 @@ module EbookReader
 
     def next_chapter
       clear_selection!
-      @navigation_service.next_chapter
+      max_chapter = (@doc&.chapters&.length || 1) - 1
+      if @state.current_chapter < max_chapter
+        @state.current_chapter += 1
+        @state.current_page_index = 0
+        force_redraw
+      end
     end
 
     def prev_chapter
       clear_selection!
-      @navigation_service.prev_chapter
+      if @state.current_chapter > 0
+        @state.current_chapter -= 1
+        @state.current_page_index = 0
+        force_redraw
+      end
     end
 
     def add_bookmark
       clear_selection!
-      @bookmark_service.add_bookmark
+      # Basic bookmark functionality - store current position
+      bookmark_data = {
+        chapter: @state.current_chapter,
+        page: @state.current_page_index,
+        timestamp: Time.now
+      }
+      
+      # Add to bookmarks list in state
+      current_bookmarks = @state.bookmarks || []
+      current_bookmarks << bookmark_data
+      @state.bookmarks = current_bookmarks
+      
+      set_message("Bookmark added at Chapter #{@state.current_chapter + 1}, Page #{@state.current_page}")
     end
 
     def toggle_view_mode
@@ -244,7 +313,6 @@ module EbookReader
       @state.dynamic_total_pages = 0
       @state.last_dynamic_width = 0
       @state.last_dynamic_height = 0
-      @navigation_service.initialize_pages
       
       # Force renderer recreation for view mode change
       content_component = @layout.instance_variable_get(:@children).find { |c| c.is_a?(Components::ContentComponent) }
@@ -398,6 +466,21 @@ module EbookReader
       content_component&.instance_variable_set(:@needs_redraw, true)
     end
 
+    def initialize_page_calculations
+      return unless @doc
+      
+      # Get terminal size for initial page calculations
+      width, height = Terminal.size
+      
+      if config.page_numbering_mode == :dynamic && @page_manager
+        # Build page map for dynamic mode
+        @page_manager.build_page_map(width, height)
+      else
+        # Update page map for absolute mode
+        update_page_map(width, height)
+      end
+    end
+
     private
 
 
@@ -407,9 +490,9 @@ module EbookReader
     end
 
     def build_component_layout
-      @header_component = Components::HeaderComponent.new(self)
+      @header_component = Components::HeaderComponent.new(method(:create_view_model))
       @content_component = Components::ContentComponent.new(self)
-      @footer_component = Components::FooterComponent.new(self)
+      @footer_component = Components::FooterComponent.new(method(:create_view_model))
       @sidebar_component = Components::SidebarPanelComponent.new(self)
       
       # Create main content area (may be wrapped in horizontal layout)
@@ -431,6 +514,47 @@ module EbookReader
         # Use just the main content layout
         @layout = @main_content_layout
       end
+    end
+
+    def create_view_model
+      UI::ViewModels::ReaderViewModel.new(
+        current_chapter: @state.current_chapter,
+        total_chapters: @doc&.chapters&.length || 0,
+        current_page: @state.current_page,
+        total_pages: @state.total_pages,
+        chapter_title: @doc&.get_chapter(@state.current_chapter)&.title || '',
+        document_title: @doc&.title || '',
+        view_mode: @state.get([:config, :view_mode]) || :split,
+        sidebar_visible: @state.sidebar_visible,
+        mode: @state.mode,
+        message: @state.message,
+        bookmarks: @state.bookmarks || [],
+        show_page_numbers: @state.get([:config, :show_page_numbers]) || true,
+        page_numbering_mode: @state.get([:config, :page_numbering_mode]) || :absolute,
+        line_spacing: @state.get([:config, :line_spacing]) || :normal,
+        language: @doc&.language || 'en',
+        page_info: calculate_page_info_for_view_model
+      )
+    end
+
+    def calculate_page_info_for_view_model
+      if @state.get([:config, :view_mode]) == :split
+        split_pages = calculate_split_pages
+        {
+          type: :split,
+          left: split_pages[:left],
+          right: split_pages[:right]
+        }
+      else
+        single_pages = calculate_current_pages
+        {
+          type: :single,
+          current: single_pages[:current],
+          total: single_pages[:total]
+        }
+      end
+    rescue StandardError
+      { type: :single, current: 0, total: 0 }
     end
 
     def setup_input_dispatcher
@@ -672,7 +796,6 @@ module EbookReader
     def page_offsets=(offset)
       @state.page_offset = offset
       @state.single_page = offset
-      @navigation_service.initialize_pages
     end
 
     def save_progress
@@ -823,11 +946,11 @@ module EbookReader
 
     def reset_pages
       clear_selection!
-      @navigation_service.reset_pages
     end
 
     def position_at_chapter_end
-      @navigation_service.position_at_chapter_end
+      # Position at the end of current chapter
+      @state.current_page_index = @state.total_pages - 1
     end
 
     def save_progress
@@ -842,7 +965,6 @@ module EbookReader
     def jump_to_chapter(chapter_index)
       clear_selection!
       @state.current_chapter = chapter_index
-      @navigation_service.initialize_pages
       save_progress
       @state.mode = :read
     end
@@ -877,11 +999,11 @@ module EbookReader
 
     def reset_pages
       clear_selection!
-      @navigation_service.reset_pages
     end
 
     def position_at_chapter_end
-      @navigation_service.position_at_chapter_end
+      # Position at the end of current chapter
+      @state.current_page_index = @state.total_pages - 1
     end
 
   end

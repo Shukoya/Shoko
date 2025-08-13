@@ -18,6 +18,12 @@ module EbookReader
           @state = state
         end
 
+        # Setter method for selection index (used by input handlers)
+        def selected=(index)
+          @state.browse_selected = index
+          invalidate
+        end
+
         def do_render(surface, bounds)
           items = load_recent_books
           selected = @state.browse_selected || 0

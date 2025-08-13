@@ -79,7 +79,7 @@ module EbookReader
       end
 
       def setup_view_system
-        @header_component = UI::Components::PureHeaderComponent.new
+        @header_component = Components::HeaderComponent.new(method(:create_view_model))
         @content_component = UI::Components::PureContentComponent.new
         @footer_component = UI::Components::PureFooterComponent.new
         
@@ -283,6 +283,10 @@ module EbookReader
 
       def create_initial_view_model
         UI::ViewModels::ReaderViewModel.new
+      end
+
+      def create_view_model
+        @view_model || create_initial_view_model
       end
     end
   end

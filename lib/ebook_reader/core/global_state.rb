@@ -205,6 +205,14 @@ module EbookReader
         update([:reader, :current_page_index], value)
       end
 
+      def current_page
+        current_page_index + 1
+      end
+
+      def current_page=(value)
+        self.current_page_index = value - 1
+      end
+
       def mode
         get([:reader, :mode])
       end

@@ -7,7 +7,7 @@ module EbookReader
       attr_reader :services
 
       def initialize(services = nil)
-        @services = services || Services::ServiceRegistry
+        @services = services
         @initialized = false
         @needs_update = true
       end

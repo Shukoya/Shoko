@@ -8,11 +8,19 @@ module EbookReader
       # Renderer for split-view (two-column) reading mode
       # Supports both dynamic and absolute page numbering modes
       class SplitViewRenderer < BaseViewRenderer
-        def render(surface, bounds, controller)
+        def view_render(surface, bounds, controller)
           if controller.config.page_numbering_mode == :dynamic
             render_dynamic_mode(surface, bounds, controller)
           else
             render_absolute_mode(surface, bounds, controller)
+          end
+        end
+
+        def render_with_context(surface, bounds, context)
+          if context.page_numbering_mode == :dynamic
+            render_dynamic_mode_with_context(surface, bounds, context)
+          else
+            render_absolute_mode_with_context(surface, bounds, context)
           end
         end
 
@@ -97,14 +105,68 @@ module EbookReader
           render_column_lines(surface, bounds, lines, col_width + 5, col_width, config, controller)
         end
 
-        def render_column_lines(surface, bounds, lines, start_col, col_width, config, controller)
+        def render_column_lines(surface, bounds, lines, start_col, col_width, config, controller = nil, context = nil)
           lines.each_with_index do |line, idx|
             row = 3 + (config.line_spacing == :relaxed ? idx * 2 : idx)
             break if row >= bounds.height - 1
 
             draw_line(surface, bounds, line: line, row: row, col: start_col, width: col_width,
-                                       controller: controller)
+                                       controller: controller, context: context)
           end
+        end
+
+        # Context-based rendering methods
+        def render_dynamic_mode_with_context(surface, bounds, context)
+          page_manager = context.page_manager
+          return unless page_manager
+
+          page_data = page_manager.get_page(context.current_page_index)
+          return unless page_data
+
+          # Get the next page for right column
+          right_page_data = page_manager.get_page(context.current_page_index + 1)
+
+          col_width, _content_height = layout_metrics(bounds.width, bounds.height, :split)
+          
+          # Render components
+          chapter = context.current_chapter
+          render_chapter_header_with_context(surface, bounds, context, chapter) if chapter
+          render_dynamic_left_column_with_context(surface, bounds, page_data[:lines], col_width, context)
+          render_divider(surface, bounds, col_width)
+          
+          if right_page_data
+            render_dynamic_right_column_with_context(surface, bounds, right_page_data[:lines], col_width, context)
+          end
+        end
+
+        def render_absolute_mode_with_context(surface, bounds, context)
+          chapter = context.current_chapter
+          return unless chapter
+
+          col_width, content_height = layout_metrics(bounds.width, bounds.height, :split)
+          display_height = adjust_for_line_spacing(content_height, context.config.line_spacing)
+          
+          # For absolute mode, we need access to wrap_lines method - fall back to legacy for now
+          # This is a limitation of the current architecture
+          # In a complete refactor, wrap_lines would be moved to a service
+          
+          # Since we can't access wrap_lines from context, we'll need to handle this differently
+          # For now, we'll delegate back to the legacy method
+          raise NotImplementedError, 'Absolute mode with context not yet fully implemented - use legacy view_render'
+        end
+
+        def render_chapter_header_with_context(surface, bounds, context, chapter)
+          chapter_info = "[#{context.state.current_chapter + 1}] #{chapter.title || 'Unknown'}"
+          surface.write(bounds, 1, 1,
+                        Terminal::ANSI::BLUE + chapter_info[0, bounds.width - 2].to_s + Terminal::ANSI::RESET)
+        end
+
+        def render_dynamic_left_column_with_context(surface, bounds, lines, col_width, context)
+          render_column_lines(surface, bounds, lines, 1, col_width, context.config, nil, context)
+        end
+
+        def render_dynamic_right_column_with_context(surface, bounds, lines, col_width, context)
+          render_column_lines(surface, bounds, lines, col_width + 5, col_width, context.config, nil, context)
         end
 
       end

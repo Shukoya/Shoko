@@ -39,7 +39,7 @@ module EbookReader
           'Press any key to return to reading...',
         ].freeze
 
-        def render(surface, bounds, _controller)
+        def view_render(surface, bounds, _controller)
           start_row = [(bounds.height - HELP_LINES.size) / 2, 1].max
 
           HELP_LINES.each_with_index do |line, idx|

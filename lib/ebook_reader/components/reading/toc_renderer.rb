@@ -7,7 +7,7 @@ module EbookReader
     module Reading
       # Renderer for table of contents display
       class TocRenderer < BaseViewRenderer
-        def render(surface, bounds, controller)
+        def view_render(surface, bounds, controller)
           doc = controller.doc
           state = controller.state
           selected_index = state.toc_selected || 0

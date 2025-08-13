@@ -135,12 +135,14 @@ module EbookReader
       end
 
       def self.create_test_container
+        require 'rspec/mocks'
+        
         container = DependencyContainer.new
         
         # Mock services for testing
-        container.register(:event_bus, double('EventBus', subscribe: nil, emit_event: nil))
-        container.register(:state_store, double('StateStore', get: nil, set: nil, current_state: {}))
-        container.register(:logger, double('Logger', info: nil, error: nil, debug: nil))
+        container.register(:event_bus, RSpec::Mocks::Double.new('EventBus', subscribe: nil, emit_event: nil))
+        container.register(:state_store, RSpec::Mocks::Double.new('StateStore', get: nil, set: nil, current_state: {}))
+        container.register(:logger, RSpec::Mocks::Double.new('Logger', info: nil, error: nil, debug: nil))
         
         container
       end
