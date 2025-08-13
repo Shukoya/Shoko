@@ -1,45 +1,40 @@
 # frozen_string_literal: true
 
-require_relative 'ui/screens/browse_screen'
-require_relative 'ui/screens/menu_screen'
-require_relative 'ui/screens/settings_screen'
-require_relative 'ui/screens/recent_screen'
-require_relative 'ui/screens/open_file_screen'
-require_relative 'ui/screens/annotations_screen'
-require_relative 'ui/screens/annotation_editor_screen'
 require_relative 'services/library_scanner'
-require_relative 'concerns/input_handler'
-require_relative 'main_menu/screen_manager'
 require_relative 'mouseable_reader'
 require_relative 'main_menu/actions/file_actions'
 require_relative 'main_menu/actions/search_actions'
 require_relative 'main_menu/actions/settings_actions'
-require_relative 'core/main_menu_state'
 require_relative 'input/dispatcher'
+require_relative 'components/main_menu_component'
+require_relative 'components/surface'
+require_relative 'components/rect'
 
 module EbookReader
   # Main menu (LazyVim style)
   class MainMenu
-    include Concerns::InputHandler
     include Actions::FileActions
     include Actions::SearchActions
     include Actions::SettingsActions
     include Input::KeyDefinitions::Helpers
 
-    attr_reader :state, :config, :annotations_screen, :input_handler
+    attr_reader :state, :input_handler, :filtered_epubs, :main_menu_component
+
+    def config
+      @state
+    end
 
     def initialize
       setup_state
       setup_services
-      setup_ui
-      @screen_manager = ScreenManager.new(self)
+      setup_components
     end
 
     def run
       Terminal.setup
       @scanner.load_cached
       @filtered_epubs = @scanner.epubs || []
-      @browse_screen.filtered_epubs = @filtered_epubs
+      @main_menu_component.browse_screen.filtered_epubs = @filtered_epubs
       @scanner.start_scan if @scanner.epubs.empty?
 
       main_loop
@@ -74,30 +69,30 @@ module EbookReader
     end
 
     def switch_to_browse
-      @state.mode = :browse
+      @state.menu_mode = :browse
       @state.search_active = false
-      @browse_screen.search_active = false
-      @dispatcher.activate(@state.mode)
+      # Search active state is now managed in GlobalState
+      @dispatcher.activate(@state.menu_mode)
     end
 
     def switch_to_search
-      @state.mode = :search
+      @state.menu_mode = :search
       @state.search_active = true
-      @browse_screen.search_active = true
-      @dispatcher.activate(@state.mode)
+      # Search active state is now managed in GlobalState
+      @dispatcher.activate(@state.menu_mode)
     end
 
     def switch_to_mode(mode)
-      @state.mode = mode
+      @state.menu_mode = mode
       @state.browse_selected = 0
-      @dispatcher.activate(@state.mode)
+      @dispatcher.activate(@state.menu_mode)
     end
 
     def open_file_dialog
       @state.file_input = ''
       @open_file_screen.input = ''
-      @state.mode = :open_file
-      @dispatcher.activate(@state.mode)
+      @state.menu_mode = :open_file
+      @dispatcher.activate(@state.menu_mode)
     end
 
     def cleanup_and_exit(code, message, error = nil)
@@ -108,8 +103,12 @@ module EbookReader
     end
 
     def handle_browse_navigation(key)
-      @browse_screen.navigate(key)
-      @state.browse_selected = @browse_screen.selected
+      direction = case key
+                  when "\e[A", 'k' then :up
+                  when "\e[B", 'j' then :down
+                  else nil
+                  end
+      @main_menu_component.browse_screen.navigate(direction) if direction
     end
 
     def handle_recent_input(key)
@@ -120,12 +119,12 @@ module EbookReader
       if @state.search_active
         if @state.search_query.length.positive?
           @state.search_query = @state.search_query[0...-1]
-          filter_browse_screen
+          # Filtering is now handled automatically by the component through state observation
         end
       elsif @state.file_input.length.positive?
         @state.file_input = @state.file_input[0...-1]
       end
-      @open_file_screen.input = @state.file_input
+      @main_menu_component.open_file_screen.input = @state.file_input
     end
 
     def handle_character_input(key)
@@ -133,13 +132,13 @@ module EbookReader
       return unless char.length == 1 && char.ord >= 32
 
       @state.file_input = (@state.file_input + char)
-      @open_file_screen.input = @state.file_input
+      @main_menu_component.open_file_screen.input = @state.file_input
     end
 
     def switch_to_edit_annotation(annotation, book_path)
-      editor = instance_variable_get(:@annotation_editor_screen)
-      editor.set_annotation(annotation, book_path)
-      switch_to_mode(:annotation_editor)
+      # This functionality would need to be implemented in a component
+      # For now, switch to annotations mode
+      switch_to_mode(:annotations)
     end
 
     def refresh_scan
@@ -152,7 +151,7 @@ module EbookReader
     end
     
     def handle_cancel
-      case @state.mode
+      case @state.menu_mode
       when :menu
         cleanup_and_exit(0, '')
       when :browse, :recent, :settings, :annotations, :annotation_editor, :open_file
@@ -168,7 +167,7 @@ module EbookReader
     
     def delete_selected_item
       # This would be context-dependent, but for now just pass
-      case @state.mode
+      case @state.menu_mode
       when :browse
         handle_delete if respond_to?(:handle_delete)
       else
@@ -183,26 +182,54 @@ module EbookReader
     private
 
     def setup_state
-      @state = Core::MainMenuState.new
+      @state = Core::GlobalState.new
       @filtered_epubs = []
     end
 
     def setup_services
-      @config = Config.new
       @scanner = Services::LibraryScanner.new
       @input_handler = Services::MainMenuInputHandler.new(self)
       setup_input_dispatcher
     end
 
-    def setup_ui
-      @renderer = nil
-      @browse_screen = UI::Screens::BrowseScreen.new(@scanner)
-      @menu_screen = UI::Screens::MenuScreen.new(nil, @state.selected)
-      @settings_screen = UI::Screens::SettingsScreen.new(@config, @scanner)
-      @recent_screen = UI::Screens::RecentScreen.new(self)
-      @open_file_screen = UI::Screens::OpenFileScreen.new(nil)
-      @annotations_screen = UI::Screens::AnnotationsScreen.new
-      @annotation_editor_screen = UI::Screens::AnnotationEditorScreen.new
+    def setup_components
+      @main_menu_component = Components::MainMenuComponent.new(self)
+    end
+
+    public
+
+    # Legacy compatibility methods
+    def browse_screen
+      @main_menu_component.browse_screen
+    end
+
+    def recent_screen
+      @main_menu_component.recent_screen
+    end
+
+    def settings_screen
+      @main_menu_component.settings_screen
+    end
+
+    def open_file_screen
+      @main_menu_component.open_file_screen
+    end
+
+    def annotations_screen
+      @main_menu_component.annotations_screen
+    end
+
+    def annotation_editor_screen
+      # This would need to be migrated to a component as well
+      nil
+    end
+
+    def menu_screen
+      @main_menu_component.current_screen
+    end
+
+    def selected_book
+      @main_menu_component.browse_screen.selected_book
     end
 
     def main_loop
@@ -238,7 +265,7 @@ module EbookReader
 
       @scanner.epubs = epubs
       @filtered_epubs = @scanner.epubs
-      @browse_screen.filtered_epubs = @scanner.epubs
+      @main_menu_component.browse_screen.filtered_epubs = @scanner.epubs
     end
 
     def navigate_browse(key)
@@ -246,267 +273,34 @@ module EbookReader
     end
 
     def draw_screen
-      @screen_manager.draw_screen
+      height, width = Terminal.size
+      Terminal.start_frame
+      
+      surface = Components::Surface.new(Terminal)
+      bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
+      @main_menu_component.render(surface, bounds)
+      
+      Terminal.end_frame
     end
 
     def setup_input_dispatcher
       @dispatcher = Input::Dispatcher.new(self)
       setup_consolidated_input_bindings
-      @dispatcher.activate(@state.mode)
+      @dispatcher.activate(@state.menu_mode)
     end
 
     def setup_consolidated_input_bindings
-      register_menu_bindings
-      register_browse_bindings
-      register_search_bindings
-      register_recent_bindings
-      register_settings_bindings
-      register_open_file_bindings
-      register_annotations_bindings
-      register_annotation_editor_bindings
+      # Use CommandFactory for standardized command creation
+      @dispatcher.register_mode(:menu, Commands::CommandFactory.create_bindings_for_mode(:menu))
+      @dispatcher.register_mode(:browse, Commands::CommandFactory.create_bindings_for_mode(:browse))
+      @dispatcher.register_mode(:search, Commands::CommandFactory.create_bindings_for_mode(:search))
+      @dispatcher.register_mode(:recent, Commands::CommandFactory.create_bindings_for_mode(:recent))
+      @dispatcher.register_mode(:settings, Commands::CommandFactory.create_bindings_for_mode(:settings))
+      @dispatcher.register_mode(:open_file, Commands::CommandFactory.create_bindings_for_mode(:open_file))
+      @dispatcher.register_mode(:annotations, Commands::CommandFactory.create_bindings_for_mode(:annotations))
+      @dispatcher.register_mode(:annotation_editor, Commands::CommandFactory.create_bindings_for_mode(:annotation_editor))
     end
 
-    def register_menu_bindings
-      custom_methods = {
-        up: lambda { |ctx, _|
-          ctx.handle_navigation(:up)
-          :handled
-        },
-        down: lambda { |ctx, _|
-          ctx.handle_navigation(:down)
-          :handled
-        },
-        confirm: lambda { |ctx, _|
-          ctx.handle_menu_selection
-          :handled
-        },
-        browse: lambda { |ctx, _|
-          ctx.switch_to_browse
-          :handled
-        },
-        recent: lambda { |ctx, _|
-          ctx.switch_to_mode(:recent)
-          :handled
-        },
-        open_file: lambda { |ctx, _|
-          ctx.open_file_dialog
-          :handled
-        },
-        settings: lambda { |ctx, _|
-          ctx.switch_to_mode(:settings)
-          :handled
-        },
-        annotations: lambda { |ctx, _|
-          ctx.switch_to_mode(:annotations)
-          :handled
-        },
-        quit: lambda { |ctx, _|
-          ctx.cleanup_and_exit(0, '')
-          :handled
-        },
-        cancel: lambda { |ctx, _|
-          ctx.cleanup_and_exit(0, '')
-          :handled
-        },
-      }
-
-      bindings = Input::BindingGenerator.generate_for_mode(:menu, custom_methods)
-      @dispatcher.register_mode(:menu, bindings)
-    end
-
-    def register_browse_bindings
-      custom_methods = {
-        up: lambda { |ctx, k|
-          ctx.handle_browse_navigation(k)
-          :handled
-        },
-        down: lambda { |ctx, k|
-          ctx.handle_browse_navigation(k)
-          :handled
-        },
-        confirm: :open_selected_book,
-        cancel: lambda { |ctx, _|
-          ctx.switch_to_mode(:menu)
-          :handled
-        },
-        quit: lambda { |ctx, _|
-          ctx.switch_to_mode(:menu)
-          :handled
-        },
-        search: lambda { |ctx, _|
-          ctx.switch_to_search
-          :handled
-        },
-        refresh: lambda { |ctx, _|
-          ctx.refresh_scan
-          :handled
-        },
-      }
-
-      bindings = Input::BindingGenerator.generate_for_mode(:browse, custom_methods)
-      @dispatcher.register_mode(:browse, bindings)
-    end
-
-    def register_search_bindings
-      custom_methods = {
-        confirm: lambda { |ctx, _|
-          ctx.switch_to_browse
-          :handled
-        },
-        cancel: lambda { |ctx, _|
-          ctx.switch_to_browse
-          :handled
-        },
-        left: lambda { |ctx, _|
-          ctx.move_search_cursor(-1)
-          :handled
-        },
-        right: lambda { |ctx, _|
-          ctx.move_search_cursor(1)
-          :handled
-        },
-        delete: lambda { |ctx, _|
-          ctx.handle_delete
-          :handled
-        },
-        backspace: lambda { |ctx, _|
-          ctx.handle_backspace_input
-          :handled
-        },
-      }
-
-      bindings = Input::BindingGenerator.generate_for_mode(:search, custom_methods)
-      # Add text input handler
-      bindings[:__default__] = lambda { |ctx, key|
-        char = key.to_s
-        if char.length == 1 && char.ord >= 32
-          (ctx.add_to_search(key)
-           :handled)
-        else
-          :pass
-        end
-      }
-
-      @dispatcher.register_mode(:search, bindings)
-    end
-
-    def register_recent_bindings
-      custom_methods = {
-        cancel: lambda { |ctx, _|
-          ctx.switch_to_mode(:menu)
-          :handled
-        },
-        up: lambda { |ctx, k|
-          ctx.handle_recent_input(k)
-          :handled
-        },
-        down: lambda { |ctx, k|
-          ctx.handle_recent_input(k)
-          :handled
-        },
-        confirm: lambda { |ctx, k|
-          ctx.handle_recent_input(k)
-          :handled
-        },
-      }
-
-      bindings = Input::BindingGenerator.generate_for_mode(:recent, custom_methods)
-      @dispatcher.register_mode(:recent, bindings)
-    end
-
-    def register_settings_bindings
-      custom_methods = {
-        cancel: lambda { |ctx, _|
-          ctx.switch_to_mode(:menu)
-          ctx.config.save
-          :handled
-        },
-      }
-
-      bindings = Input::BindingGenerator.generate_for_mode(:settings, custom_methods)
-      # Add number key handlers
-      %w[1 2 3 4 5 6].each do |k|
-        bindings[k] = lambda { |ctx, key|
-          ctx.handle_settings_input(key)
-          :handled
-        }
-      end
-
-      @dispatcher.register_mode(:settings, bindings)
-    end
-
-    def register_open_file_bindings
-      custom_methods = {
-        cancel: lambda { |ctx, _|
-          ctx.handle_escape
-          :handled
-        },
-        confirm: lambda { |ctx, _|
-          ctx.handle_enter
-          :handled
-        },
-        backspace: lambda { |ctx, _|
-          ctx.handle_backspace_input
-          :handled
-        },
-      }
-
-      bindings = Input::BindingGenerator.generate_for_mode(:open_file, custom_methods)
-      bindings[:__default__] = lambda { |ctx, key|
-        ctx.handle_character_input(key)
-        :handled
-      }
-
-      @dispatcher.register_mode(:open_file, bindings)
-    end
-
-    def register_annotations_bindings
-      custom_methods = {
-        cancel: lambda { |ctx, _|
-          ctx.switch_to_mode(:menu)
-          :handled
-        },
-        up: lambda { |ctx, _|
-          ctx.input_handler.navigate_annotations_up(ctx.annotations_screen)
-          :handled
-        },
-        down: lambda { |ctx, _|
-          ctx.input_handler.navigate_annotations_down(ctx.annotations_screen)
-          :handled
-        },
-        confirm: lambda { |ctx, _|
-          screen = ctx.annotations_screen
-          annotation = screen.current_annotation
-          book_path = screen.current_book_path
-          ctx.switch_to_edit_annotation(annotation, book_path) if annotation && book_path
-          :handled
-        },
-      }
-
-      bindings = Input::BindingGenerator.generate_for_mode(:annotations, custom_methods)
-      bindings['d'] = lambda { |ctx, _|
-        ctx.input_handler.delete_annotation(ctx.annotations_screen)
-        :handled
-      }
-
-      @dispatcher.register_mode(:annotations, bindings)
-    end
-
-    def register_annotation_editor_bindings
-      bindings = Input::BindingGenerator.generate_for_mode(:annotation_editor, {})
-      bindings[:__default__] = lambda { |ctx, key|
-        screen = ctx.instance_variable_get(:@annotation_editor_screen)
-        result = screen.handle_input(key)
-        if %i[saved cancelled].include?(result)
-          # Refresh annotations data to show any changes
-          ctx.instance_variable_get(:@annotations_screen).refresh_data
-          ctx.switch_to_mode(:annotations)
-        end
-        :handled
-      }
-
-      @dispatcher.register_mode(:annotation_editor, bindings)
-    end
 
     def handle_input(key)
       @input_handler.handle_input(key)
@@ -529,7 +323,7 @@ module EbookReader
     def run_reader(path)
       Terminal.cleanup
       RecentFiles.add(path)
-      MouseableReader.new(path, @config).run
+      MouseableReader.new(path).run
     end
 
     def file_not_found
@@ -558,7 +352,7 @@ module EbookReader
     def handle_file_path(path)
       if File.exist?(path) && path.downcase.end_with?('.epub')
         RecentFiles.add(path)
-        reader = Reader.new(path, @config)
+        reader = MouseableReader.new(path)
         reader.run
       else
         @scanner.scan_message = 'Invalid file path'
@@ -567,9 +361,7 @@ module EbookReader
     end
 
     def load_recent_books
-      books = @recent_screen.load_recent_books
-      @state.browse_selected = @recent_screen.selected
-      books
+      RecentFiles.load
     end
 
     def handle_dialog_error(error)

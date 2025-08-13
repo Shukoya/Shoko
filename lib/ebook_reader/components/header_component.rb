@@ -17,13 +17,13 @@ module EbookReader
         1 # Fixed height header
       end
 
-      def render(surface, bounds)
+      def do_render(surface, bounds)
         width = bounds.width
         doc = @controller.doc
         config = @controller.config
         state = @controller.state
 
-        if config.view_mode == :single && state.mode == :read
+        if state.get([:config, :view_mode]) == :single && state.mode == :read
           title_text = doc&.title.to_s
           centered_col = [(width - title_text.length) / 2, 1].max
           surface.write(bounds, 1, centered_col, Terminal::ANSI::WHITE + title_text + Terminal::ANSI::RESET)

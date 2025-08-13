@@ -17,6 +17,7 @@ module EbookReader
       BOLD = "\e[1m"
       DIM = "\e[2m"
       ITALIC = "\e[3m"
+      REVERSE = "\e[7m"
 
       BLACK = "\e[30m"
       RED = "\e[31m"

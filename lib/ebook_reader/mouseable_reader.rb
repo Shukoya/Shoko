@@ -15,7 +15,7 @@ require_relative 'services/clipboard_service'
 module EbookReader
   # A Reader that supports mouse interactions for annotations.
   class MouseableReader < ReaderController
-    def initialize(epub_path, config = Config.new)
+    def initialize(epub_path, config = nil)
       super
       @mouse_handler = Annotations::MouseHandler.new
       @state.popup_menu = nil

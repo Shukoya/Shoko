@@ -12,22 +12,32 @@ module EbookReader
       class RecentScreenComponent < BaseScreenComponent
         include EbookReader::Constants
 
-        def render(surface, bounds, context)
+        def initialize(main_menu, state)
+          super()
+          @main_menu = main_menu
+          @state = state
+        end
+
+        def do_render(surface, bounds)
           items = load_recent_books
-          selected = context[:selected] || 0
+          selected = @state.browse_selected || 0
 
           render_header(surface, bounds)
 
           if items.empty?
             render_empty_state(surface, bounds)
           else
-            render_recent_list(surface, bounds, items, selected, context[:menu])
+            render_recent_list(surface, bounds, items, selected, @main_menu)
           end
 
           render_footer(surface, bounds)
         end
 
         private
+
+        def load_recent_books
+          @main_menu.send(:load_recent_books)
+        end
 
         def render_header(surface, bounds)
           write_header(

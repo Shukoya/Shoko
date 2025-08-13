@@ -6,7 +6,6 @@ module EbookReader
   module ReaderModes
     # Table of Contents navigation
     class TocMode < BaseMode
-      include Concerns::InputHandler
 
       def initialize(reader)
         super

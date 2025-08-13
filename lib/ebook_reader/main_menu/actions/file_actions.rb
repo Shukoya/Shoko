@@ -30,7 +30,7 @@ module EbookReader
         def run_reader(path)
           Terminal.cleanup
           RecentFiles.add(path)
-          MouseableReader.new(path, @config).run
+          MouseableReader.new(path).run
         end
 
         def file_not_found
@@ -66,7 +66,7 @@ module EbookReader
         def handle_file_path(path)
           if File.exist?(path) && path.downcase.end_with?('.epub')
             RecentFiles.add(path)
-            MouseableReader.new(path, @config).run
+            MouseableReader.new(path).run
           else
             @scanner.scan_message = 'Invalid file path'
             @scanner.scan_status = :error

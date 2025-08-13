@@ -1,0 +1,84 @@
+# frozen_string_literal: true
+
+require_relative 'base_component'
+require_relative 'layouts/vertical'
+require_relative 'screens/menu_screen_component'
+require_relative 'screens/browse_screen_component'
+require_relative 'screens/recent_screen_component'
+require_relative 'screens/settings_screen_component'
+require_relative 'screens/open_file_screen_component'
+require_relative 'screens/annotations_screen_component'
+
+module EbookReader
+  module Components
+    # Root component for the main menu system
+    class MainMenuComponent < BaseComponent
+      def initialize(main_menu)
+        super()
+        @main_menu = main_menu
+        @state = main_menu.state
+        @scanner = main_menu.instance_variable_get(:@scanner)
+        
+        setup_screen_components
+        
+        # Initialize current screen
+        @current_screen = @screen_components[:menu]
+        
+        # Observe mode changes to switch active component
+        @state.add_observer(self, [:menu, :mode], [:menu, :selected])
+      end
+
+      def state_changed(path, _old_value, new_value)
+        if path == [:menu, :mode]
+          @current_screen = @screen_components[new_value] || @screen_components[:menu]
+        end
+      end
+
+      def do_render(surface, bounds)
+        current_screen.render(surface, bounds) if current_screen
+      end
+
+      def preferred_height(_available_height)
+        :fill
+      end
+
+      def current_screen
+        @current_screen
+      end
+
+      # Delegate screen-specific methods
+      def browse_screen
+        @screen_components[:browse]
+      end
+
+      def recent_screen
+        @screen_components[:recent]
+      end
+
+      def settings_screen
+        @screen_components[:settings]
+      end
+
+      def open_file_screen
+        @screen_components[:open_file]
+      end
+
+      def annotations_screen
+        @screen_components[:annotations]
+      end
+
+      private
+
+      def setup_screen_components
+        @screen_components = {
+          menu: Screens::MenuScreenComponent.new(@state),
+          browse: Screens::BrowseScreenComponent.new(@scanner, @state),
+          recent: Screens::RecentScreenComponent.new(@main_menu, @state),
+          settings: Screens::SettingsScreenComponent.new(@state, @scanner),
+          open_file: Screens::OpenFileScreenComponent.new(@state),
+          annotations: Screens::AnnotationsScreenComponent.new(@state)
+        }
+      end
+    end
+  end
+end

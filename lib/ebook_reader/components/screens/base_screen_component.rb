@@ -17,13 +17,6 @@ module EbookReader
           available_height
         end
 
-        # Standard render interface for screens
-        # @param surface [Surface] The rendering surface
-        # @param bounds [Rect] The rendering bounds
-        # @param context [Object] Screen-specific context object
-        def render(surface, bounds, context)
-          raise NotImplementedError, 'Subclasses must implement render method'
-        end
 
         protected
 

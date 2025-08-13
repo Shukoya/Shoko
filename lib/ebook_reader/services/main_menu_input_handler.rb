@@ -5,10 +5,66 @@ module EbookReader
     # Handles all key input for MainMenu so the menu class focuses
     # on rendering and high level actions.
     class MainMenuInputHandler
-      include Concerns::InputHandler
 
       def initialize(menu)
         @menu = menu
+      end
+
+      # Input helper methods (extracted from old InputHandler concern)
+      def navigation_down_keys
+        ["\e[B", 'j']
+      end
+
+      def navigation_up_keys
+        ["\e[A", 'k']
+      end
+
+      def navigation_left_keys
+        ["\e[D", 'h']
+      end
+
+      def navigation_right_keys
+        ["\e[C", 'l']
+      end
+
+      def enter_keys
+        ["\r", "\n"]
+      end
+
+      def escape_key?(key)
+        key == "\e"
+      end
+
+      def enter_key?(key)
+        enter_keys.include?(key)
+      end
+
+      def navigation_key?(key)
+        (navigation_down_keys + navigation_up_keys + 
+         navigation_left_keys + navigation_right_keys).include?(key)
+      end
+
+      def handle_navigation_keys(key, current, max)
+        case key
+        when *navigation_up_keys then [current - 1, 0].max
+        when *navigation_down_keys then [current + 1, max].min
+        else current
+        end
+      end
+
+      def navigate_menu_down
+        state = @menu.state
+        # Main menu has 5 items (0-4), so max is 4
+        state.selected = [state.selected + 1, 4].min
+      end
+
+      def navigate_menu_up
+        state = @menu.state
+        state.selected = [state.selected - 1, 0].max
+      end
+
+      def handle_quit
+        @menu.send(:cleanup_and_exit, 0, "Goodbye!")
       end
 
       def handle_input(key)
@@ -85,8 +141,8 @@ module EbookReader
           return
         end
 
-        @menu.instance_variable_get(:@recent_screen)
-        state = @menu.instance_variable_get(:@state)
+        recent_screen = @menu.recent_screen
+        state = @menu.state
         # Use MainMenu's helper to respect RecentScreen's method visibility
         recent_books = @menu.send(:load_recent_books)
 
@@ -95,6 +151,7 @@ module EbookReader
         if navigation_key?(key)
           new_selection = handle_navigation_keys(key, state.browse_selected, recent_books.size - 1)
           state.browse_selected = new_selection
+          recent_screen.selected = new_selection  # Keep screen in sync
         elsif enter_key?(key)
           selected_book = recent_books[state.browse_selected]
           @menu.send(:open_book, selected_book['path']) if selected_book && selected_book['path']

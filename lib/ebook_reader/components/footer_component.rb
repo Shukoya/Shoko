@@ -17,26 +17,26 @@ module EbookReader
         2 # Fixed height footer
       end
 
-      def render(surface, bounds)
+      def do_render(surface, bounds)
         config = @controller.config
         state = @controller.state
         doc = @controller.doc
         width = bounds.width
         height = bounds.height
 
-        if config.view_mode == :single && state.mode == :read
+        if state.get([:config, :view_mode]) == :single && state.mode == :read
           # Single mode: centered page indicator on last line
           pages = @controller.calculate_current_pages
-          if @controller.config.show_page_numbers && pages[:total].positive?
+          if state.get([:config, :show_page_numbers]) && pages[:total].positive?
             page_text = "#{pages[:current]} / #{pages[:total]}"
             centered_col = [(width - page_text.length) / 2, 1].max
             surface.write(bounds, height, centered_col,
                           Terminal::ANSI::DIM + Terminal::ANSI::GRAY + page_text + Terminal::ANSI::RESET)
           end
-        elsif config.view_mode == :split && state.mode == :read
+        elsif state.get([:config, :view_mode]) == :split && state.mode == :read
           # Duo mode: show consecutive page numbers on both sides
           split_pages = @controller.calculate_split_pages
-          if @controller.config.show_page_numbers && split_pages[:left][:total].positive?
+          if state.get([:config, :show_page_numbers]) && split_pages[:left][:total].positive?
             # Left page number
             left_text = "#{split_pages[:left][:current]} / #{split_pages[:left][:total]}"
             left_col = [(width / 4) - (left_text.length / 2), 1].max
@@ -58,15 +58,15 @@ module EbookReader
           surface.write(bounds, row1, 1, Terminal::ANSI::BLUE + left_prog + Terminal::ANSI::RESET)
 
           # Mode center
-          mode_label = config.view_mode == :split ? '[SPLIT]' : '[SINGLE]'
-          page_mode = config.page_numbering_mode.to_s.upcase
+          mode_label = state.get([:config, :view_mode]) == :split ? '[SPLIT]' : '[SINGLE]'
+          page_mode = state.get([:config, :page_numbering_mode]).to_s.upcase
           mode_text = "#{mode_label} [#{page_mode}]"
           surface.write(bounds, row1, [(width / 2) - 10, 1].max,
                         Terminal::ANSI::YELLOW + mode_text + Terminal::ANSI::RESET)
 
           # Status right
           bookmarks = @controller.state.bookmarks || []
-          right_prog = "L#{config.line_spacing.to_s[0]} B#{bookmarks.count}"
+          right_prog = "L#{state.get([:config, :line_spacing]).to_s[0]} B#{bookmarks.count}"
           surface.write(bounds, row1, [width - right_prog.length - 1, 1].max,
                         Terminal::ANSI::BLUE + right_prog + Terminal::ANSI::RESET)
 

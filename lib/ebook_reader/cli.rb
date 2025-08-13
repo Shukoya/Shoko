@@ -11,8 +11,10 @@ module EbookReader
         setup_logger(options[:debug] || ENV.fetch('DEBUG', nil))
 
         if args.first
-          Reader.new(args.first).run
+          # Use new clean architecture for reader
+          Application::ReaderApplication.new(args.first).run
         else
+          # For now, use legacy MainMenu (will be refactored later)
           MainMenu.new.run
         end
       end

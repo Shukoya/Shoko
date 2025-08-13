@@ -19,17 +19,17 @@ module EbookReader
         @bookmarks_renderer = Reading::BookmarksRenderer.new
 
         state = @controller.state
-        # Observe core fields that affect content rendering
-        state.add_observer(self, :current_chapter, :left_page, :right_page,
-                           :single_page, :current_page_index, :mode)
+        # Observe core fields that affect content rendering with GlobalState paths
+        state.add_observer(self, [:reader, :current_chapter], [:reader, :left_page], [:reader, :right_page],
+                           [:reader, :single_page], [:reader, :current_page_index], [:reader, :mode])
         @needs_redraw = true
       end
 
-      # Observer callback triggered by ReaderState
-      def state_changed(field, _old_value, _new_value)
+      # Observer callback triggered by GlobalState
+      def state_changed(path, _old_value, _new_value)
         @needs_redraw = true
         # Only reset renderer for mode changes, not page changes
-        @view_renderer = nil if field == :mode
+        @view_renderer = nil if path == [:reader, :mode]
       end
 
       # Fill remaining space after fixed components
@@ -37,7 +37,7 @@ module EbookReader
         :fill
       end
 
-      def render(surface, bounds)
+      def do_render(surface, bounds)
         state = @controller.state
 
         # Reset rendered lines registry for selection/highlighting

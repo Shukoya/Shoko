@@ -11,13 +11,17 @@
 #   EbookReader::CLI.run
 #
 # @example Programmatic usage
-#   reader = EbookReader::Reader.new('/path/to/book.epub')
+#   reader = EbookReader::MouseableReader.new('/path/to/book.epub')
 #   reader.run
 
 # Core infrastructure - must be loaded first
 require_relative 'ebook_reader/infrastructure/logger'
 require_relative 'ebook_reader/infrastructure/validator'
 require_relative 'ebook_reader/infrastructure/performance_monitor'
+require_relative 'ebook_reader/infrastructure/event_bus'
+require_relative 'ebook_reader/infrastructure/state_store'
+require_relative 'ebook_reader/infrastructure/document_service'
+require_relative 'ebook_reader/infrastructure/input_dispatcher'
 
 # Error definitions
 require_relative 'ebook_reader/errors'
@@ -36,8 +40,7 @@ require_relative 'ebook_reader/builders/page_setup_builder'
 # Core components
 require_relative 'ebook_reader/version'
 require_relative 'ebook_reader/terminal'
-require_relative 'ebook_reader/config'
-require_relative 'ebook_reader/concerns/input_handler'
+# Config functionality now in GlobalState
 
 # Validators
 require_relative 'ebook_reader/validators/file_path_validator'
@@ -52,14 +55,37 @@ require_relative 'ebook_reader/bookmark_manager'
 # Document handling
 require_relative 'ebook_reader/epub_document'
 
+# Command system - load before input system
+require_relative 'ebook_reader/commands/base_command'
+require_relative 'ebook_reader/commands/navigation_commands'
+require_relative 'ebook_reader/commands/command_factory'
+
 # Input system - load early for dependency resolution
 require_relative 'ebook_reader/input/key_definitions'
 require_relative 'ebook_reader/input/command_factory'
 require_relative 'ebook_reader/input/config_loader'
 require_relative 'ebook_reader/input/binding_generator'
 
-# Core reader components
-require_relative 'ebook_reader/core/reader_state'
+# Domain layer - new architecture
+require_relative 'ebook_reader/domain/dependency_container'
+require_relative 'ebook_reader/domain/services/navigation_service'
+require_relative 'ebook_reader/domain/services/bookmark_service'
+require_relative 'ebook_reader/domain/services/page_calculator_service'
+require_relative 'ebook_reader/domain/commands/base_command'
+require_relative 'ebook_reader/domain/commands/navigation_commands'
+require_relative 'ebook_reader/domain/commands/application_commands'
+require_relative 'ebook_reader/domain/commands/bookmark_commands'
+
+# UI layer - new architecture  
+require_relative 'ebook_reader/ui/view_models/reader_view_model'
+require_relative 'ebook_reader/ui/components/pure_header_component'
+require_relative 'ebook_reader/ui/components/pure_content_component'
+
+# Application layer - new architecture
+require_relative 'ebook_reader/application/reader_application'
+
+# Core reader components (legacy - will be phased out)
+require_relative 'ebook_reader/core/global_state'
 require_relative 'ebook_reader/services/navigation_service'
 require_relative 'ebook_reader/services/bookmark_service'
 require_relative 'ebook_reader/services/state_service'
@@ -85,7 +111,7 @@ require_relative 'ebook_reader/components/screens/menu_screen_component'
 
 # UI components
 require_relative 'ebook_reader/main_menu'
-require_relative 'ebook_reader/reader'
+require_relative 'ebook_reader/mouseable_reader'
 
 # Application entry point
 require_relative 'ebook_reader/cli'
@@ -114,9 +140,9 @@ module EbookReader
 
   # Module-level configuration
   #
-  # @return [Config] Global configuration instance
+  # @return [Core::GlobalState] Global state instance
   def self.config
-    @config ||= Config.new
+    @config ||= Core::GlobalState.new
   end
 
   # Module-level logger

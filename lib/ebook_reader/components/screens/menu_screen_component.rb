@@ -10,6 +10,12 @@ module EbookReader
       class MenuScreenComponent < BaseScreenComponent
         include EbookReader::Constants
 
+        def initialize(state)
+          super()
+          @state = state
+          @state.add_observer(self, [:menu, :selected])
+        end
+
         MENU_ITEMS = [
           { key: 'f', label: 'Browse Library',
             description: 'Find and open books from your collection' },
@@ -20,8 +26,8 @@ module EbookReader
           { key: 'q', label: 'Quit', description: 'Exit the application' },
         ].freeze
 
-        def render(surface, bounds, context)
-          selected = context[:selected] || 0
+        def do_render(surface, bounds)
+          selected = @state.selected || 0
 
           render_header(surface, bounds)
           render_menu_items(surface, bounds, selected)

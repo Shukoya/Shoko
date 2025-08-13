@@ -6,7 +6,6 @@ module EbookReader
   module ReaderModes
     # Bookmark management interface
     class BookmarksMode < BaseMode
-      include Concerns::InputHandler
 
       def initialize(reader)
         super

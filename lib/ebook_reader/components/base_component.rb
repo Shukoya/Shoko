@@ -8,12 +8,23 @@ module EbookReader
 
       def initialize(services = nil)
         @services = services || Services::ServiceRegistry
+        @initialized = false
+        @needs_update = true
       end
 
       # Render this component into the given surface within bounds
       # @param surface [Surface] terminal surface wrapper
       # @param bounds [Rect] local bounds for this component
       def render(surface, bounds)
+        mount unless @initialized
+        
+        # Always render for now to debug display issues
+        do_render(surface, bounds)
+        mark_updated
+      end
+
+      # Override this method in subclasses for actual rendering logic
+      def do_render(surface, bounds)
         # to be implemented by subclasses
       end
 
@@ -31,6 +42,54 @@ module EbookReader
       #   - :fill: Take all remaining space after fixed components
       def preferred_height(_available_height)
         :flexible
+      end
+
+      # Component lifecycle methods
+
+      # Called once when component is first initialized with a parent
+      def mount
+        return if @initialized
+        
+        on_mount
+        @initialized = true
+      end
+
+      # Called when component is removed from the component tree
+      def unmount
+        return unless @initialized
+        
+        on_unmount
+        @initialized = false
+      end
+
+      # Mark component as needing a re-render
+      def invalidate
+        @needs_update = true
+      end
+
+      # Check if component needs to be re-rendered
+      def needs_update?
+        @needs_update
+      end
+
+      # Mark component as updated (called automatically after render)
+      def mark_updated
+        @needs_update = false
+      end
+
+      # Override in subclasses for mount logic
+      def on_mount
+        # no-op by default
+      end
+
+      # Override in subclasses for cleanup logic
+      def on_unmount
+        # no-op by default
+      end
+
+      # Observer pattern support for state changes
+      def state_changed(_path, _old_value, _new_value)
+        invalidate
       end
     end
   end
