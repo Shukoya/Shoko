@@ -9,11 +9,11 @@ module EbookReader
           @action = action
           super(
             name: name || "bookmark_#{action}",
-            description: description || "Bookmark #{action.to_s.gsub('_', ' ')}"
+            description: description || "Bookmark #{action.to_s.tr('_', ' ')}"
           )
         end
 
-        def can_execute?(context, params = {})
+        def can_execute?(context, _params = {})
           context.dependencies.registered?(:bookmark_service) &&
             context.dependencies.registered?(:state_store)
         end
@@ -22,7 +22,7 @@ module EbookReader
 
         def perform(context, params = {})
           bookmark_service = context.dependencies.resolve(:bookmark_service)
-          
+
           case @action
           when :add
             handle_add_bookmark(bookmark_service, params)
@@ -35,7 +35,7 @@ module EbookReader
           else
             raise ExecutionError.new("Unknown bookmark action: #{@action}", command_name: name)
           end
-          
+
           @action
         end
 
@@ -48,28 +48,28 @@ module EbookReader
 
         def handle_remove_bookmark(service, params)
           bookmark = params[:bookmark]
-          
+
           unless bookmark
-            raise ValidationError.new("Bookmark required for remove action", command_name: name)
+            raise ValidationError.new('Bookmark required for remove action', command_name: name)
           end
-          
+
           service.remove_bookmark(bookmark)
         end
 
         def handle_toggle_bookmark(service, params)
           text_snippet = params[:text_snippet]
           result = service.toggle_bookmark(text_snippet)
-          
+
           { result: result }
         end
 
         def handle_jump_to_bookmark(service, params)
           bookmark = params[:bookmark]
-          
+
           unless bookmark
-            raise ValidationError.new("Bookmark required for jump_to action", command_name: name)
+            raise ValidationError.new('Bookmark required for jump_to action', command_name: name)
           end
-          
+
           service.jump_to_bookmark(bookmark)
         end
       end
@@ -79,13 +79,13 @@ module EbookReader
           @list_action = list_action
           super(
             name: name || "bookmarks_#{list_action}",
-            description: description || "Bookmarks list #{list_action.to_s.gsub('_', ' ')}"
+            description: description || "Bookmarks list #{list_action.to_s.tr('_', ' ')}"
           )
         end
 
         protected
 
-        def perform(context, params = {})
+        def perform(context, _params = {})
           case @list_action
           when :navigate_up
             handle_navigate_list(context, :up)
@@ -96,7 +96,8 @@ module EbookReader
           when :delete_current
             handle_delete_current(context)
           else
-            raise ExecutionError.new("Unknown bookmark list action: #{@list_action}", command_name: name)
+            raise ExecutionError.new("Unknown bookmark list action: #{@list_action}",
+                                     command_name: name)
           end
         end
 
@@ -105,59 +106,59 @@ module EbookReader
         def handle_navigate_list(context, direction)
           state_store = context.dependencies.resolve(:state_store)
           current_state = state_store.current_state
-          
+
           bookmarks = current_state.dig(:reader, :bookmarks) || []
           return if bookmarks.empty?
-          
+
           current_selection = current_state.dig(:reader, :bookmark_selected) || 0
-          
+
           new_selection = case direction
-                         when :up
-                           [current_selection - 1, 0].max
-                         when :down
-                           [current_selection + 1, bookmarks.size - 1].min
-                         else
-                           current_selection
-                         end
-          
-          state_store.set([:reader, :bookmark_selected], new_selection)
+                          when :up
+                            [current_selection - 1, 0].max
+                          when :down
+                            [current_selection + 1, bookmarks.size - 1].min
+                          else
+                            current_selection
+                          end
+
+          state_store.set(%i[reader bookmark_selected], new_selection)
         end
 
         def handle_select_current(context)
           state_store = context.dependencies.resolve(:state_store)
           current_state = state_store.current_state
-          
+
           bookmarks = current_state.dig(:reader, :bookmarks) || []
           selected_index = current_state.dig(:reader, :bookmark_selected) || 0
-          
+
           return unless selected_index < bookmarks.size
-          
+
           bookmark = bookmarks[selected_index]
           bookmark_service = context.dependencies.resolve(:bookmark_service)
           bookmark_service.jump_to_bookmark(bookmark)
-          
+
           # Switch back to reading mode
-          state_store.set([:reader, :mode], :read)
+          state_store.set(%i[reader mode], :read)
         end
 
         def handle_delete_current(context)
           state_store = context.dependencies.resolve(:state_store)
           current_state = state_store.current_state
-          
+
           bookmarks = current_state.dig(:reader, :bookmarks) || []
           selected_index = current_state.dig(:reader, :bookmark_selected) || 0
-          
+
           return unless selected_index < bookmarks.size
-          
+
           bookmark = bookmarks[selected_index]
           bookmark_service = context.dependencies.resolve(:bookmark_service)
           bookmark_service.remove_bookmark(bookmark)
-          
+
           # Adjust selection if needed
           new_bookmarks = bookmark_service.get_bookmarks
-          if selected_index >= new_bookmarks.size && new_bookmarks.size > 0
-            state_store.set([:reader, :bookmark_selected], new_bookmarks.size - 1)
-          end
+          return unless selected_index >= new_bookmarks.size && new_bookmarks.size.positive?
+
+          state_store.set(%i[reader bookmark_selected], new_bookmarks.size - 1)
         end
       end
 
@@ -165,7 +166,7 @@ module EbookReader
       module BookmarkCommandFactory
         def self.add_bookmark(text_snippet = nil)
           command = BookmarkCommand.new(:add)
-          
+
           # If text_snippet provided, create a wrapper that includes it in params
           if text_snippet
             lambda do |context, params = {}|

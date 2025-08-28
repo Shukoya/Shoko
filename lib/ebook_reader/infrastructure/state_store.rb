@@ -37,9 +37,9 @@ module EbookReader
         @mutex.synchronize do
           old_state = @state
           new_state = apply_updates(old_state, updates)
-          
+
           return if old_state == new_state
-          
+
           @state = new_state
           emit_change_events(old_state, new_state, updates)
         end
@@ -68,7 +68,7 @@ module EbookReader
       # @param new_state [Hash] Proposed new state
       # @param updates [Hash] Applied updates
       # @return [Boolean] Whether transition is valid
-      def valid_transition?(old_state, new_state, updates)
+      def valid_transition?(_old_state, _new_state, _updates)
         true # Base implementation allows all transitions
       end
 
@@ -82,56 +82,56 @@ module EbookReader
             view_mode: :split,
             sidebar_visible: false,
             mode: :read,
-            running: true
+            running: true,
           },
           menu: {
             selected_index: 0,
             mode: :main,
             search_query: '',
-            search_active: false
+            search_active: false,
           },
           config: {
             line_spacing: :normal,
             page_numbering_mode: :absolute,
             theme: :dark,
-            show_page_numbers: true
+            show_page_numbers: true,
           },
           ui: {
             terminal_width: 80,
             terminal_height: 24,
-            needs_redraw: true
-          }
+            needs_redraw: true,
+          },
         }
       end
 
       def apply_updates(state, updates)
         new_state = deep_dup(state, false)
-        
+
         updates.each do |path, value|
           validate_update(path, value)
           set_nested(new_state, Array(path), value)
         end
-        
+
         new_state
       end
 
       def validate_update(path, value)
         # Add validation logic here
         path_array = Array(path)
-        
+
         case path_array
-        when [:reader, :current_chapter]
-          raise ArgumentError, "current_chapter must be non-negative" if value < 0
-        when [:reader, :view_mode]
-          raise ArgumentError, "invalid view_mode" unless [:single, :split].include?(value)
-        when [:ui, :terminal_width], [:ui, :terminal_height]
-          raise ArgumentError, "terminal dimensions must be positive" if value <= 0
+        when %i[reader current_chapter]
+          raise ArgumentError, 'current_chapter must be non-negative' if value.negative?
+        when %i[reader view_mode]
+          raise ArgumentError, 'invalid view_mode' unless %i[single split].include?(value)
+        when %i[ui terminal_width], %i[ui terminal_height]
+          raise ArgumentError, 'terminal dimensions must be positive' if value <= 0
         end
       end
 
       def set_nested(hash, path, value)
         *keys, last_key = path
-        
+
         if keys.empty?
           hash[last_key] = value
         else
@@ -154,7 +154,11 @@ module EbookReader
           result = obj.map { |v| deep_dup(v, freeze_result) }
           freeze_result ? result.freeze : result
         else
-          obj.dup rescue obj # For immutable objects
+          begin
+            obj.dup
+          rescue StandardError
+            obj
+          end
         end
       end
 
@@ -162,13 +166,13 @@ module EbookReader
         updates.each do |path, new_value|
           old_value = get_nested_value(old_state, Array(path))
           next if old_value == new_value
-          
+
           @event_bus.emit_event(:state_changed, {
-            path: Array(path),
-            old_value: old_value,
-            new_value: new_value,
-            full_state: new_state
-          })
+                                  path: Array(path),
+                                  old_value: old_value,
+                                  new_value: new_value,
+                                  full_state: new_state,
+                                })
         end
       end
 

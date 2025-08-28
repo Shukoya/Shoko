@@ -15,14 +15,15 @@ module EbookReader
           @scanner = scanner
           @state = state
           @filtered_epubs = []
-          
+
           # Observe state changes for search and selection
-          @state.add_observer(self, [:menu, :browse_selected], [:menu, :search_query], [:menu, :search_active])
+          @state.add_observer(self, %i[menu browse_selected], %i[menu search_query],
+                              %i[menu search_active])
         end
 
         def state_changed(path, _old_value, _new_value)
           case path
-          when [:menu, :search_query]
+          when %i[menu search_query]
             filter_books
           end
         end
@@ -42,10 +43,10 @@ module EbookReader
           max_index = @filtered_epubs.length - 1
 
           new_selected = case key
-                        when :up then [current - 1, 0].max
-                        when :down then [current + 1, max_index].min
-                        else current
-                        end
+                         when :up then [current - 1, 0].max
+                         when :down then [current + 1, max_index].min
+                         else current
+                         end
 
           @state.browse_selected = new_selected
         end
@@ -106,26 +107,26 @@ module EbookReader
           end
         end
 
-        def render_status(surface, bounds, width, _height)
+        def render_status(surface, bounds, _width, _height)
           status = @scanner.scan_status
           return unless status
 
           text = case status
-                when :scanning then "#{COLOR_TEXT_WARNING}⟳ #{@scanner.scan_message || ''}#{Terminal::ANSI::RESET}"
-                when :error then "#{COLOR_TEXT_ERROR}✗ #{@scanner.scan_message || ''}#{Terminal::ANSI::RESET}"
-                when :done then "#{COLOR_TEXT_SUCCESS}✓ #{@scanner.scan_message || ''}#{Terminal::ANSI::RESET}"
-                else ''
-                end
+                 when :scanning then "#{COLOR_TEXT_WARNING}⟳ #{@scanner.scan_message || ''}#{Terminal::ANSI::RESET}"
+                 when :error then "#{COLOR_TEXT_ERROR}✗ #{@scanner.scan_message || ''}#{Terminal::ANSI::RESET}"
+                 when :done then "#{COLOR_TEXT_SUCCESS}✓ #{@scanner.scan_message || ''}#{Terminal::ANSI::RESET}"
+                 else ''
+                 end
           surface.write(bounds, 4, 2, text) unless text.empty?
         end
 
         def render_empty_state(surface, bounds, width, height)
           status = @scanner.scan_status
           empty_text = if status == :scanning
-                        "#{COLOR_TEXT_WARNING}⟳ Scanning for books...#{Terminal::ANSI::RESET}"
-                      else
-                        "#{COLOR_TEXT_DIM}No matching books#{Terminal::ANSI::RESET}"
-                      end
+                         "#{COLOR_TEXT_WARNING}⟳ Scanning for books...#{Terminal::ANSI::RESET}"
+                       else
+                         "#{COLOR_TEXT_DIM}No matching books#{Terminal::ANSI::RESET}"
+                       end
           surface.write(bounds, height / 2, [(width - 20) / 2, 1].max, empty_text)
         end
 
@@ -149,13 +150,9 @@ module EbookReader
           total_books = @filtered_epubs.length
           start_index = 0
 
-          if selected >= list_height
-            start_index = selected - list_height + 1
-          end
+          start_index = selected - list_height + 1 if selected >= list_height
 
-          if total_books > list_height
-            start_index = [start_index, total_books - list_height].min
-          end
+          start_index = [start_index, total_books - list_height].min if total_books > list_height
 
           end_index = [start_index + list_height - 1, total_books - 1].min
           visible_books = @filtered_epubs[start_index..end_index] || []
@@ -166,7 +163,7 @@ module EbookReader
         def render_book_item(surface, bounds, row, width, book, is_selected)
           title = book['name'] || 'Unknown Title'
           author = book['author'] || 'Unknown Author'
-          
+
           # Truncate long titles/authors
           max_title_length = [width - 40, 30].max
           title = truncate_text(title, max_title_length)
@@ -174,7 +171,9 @@ module EbookReader
 
           prefix = is_selected ? '▶ ' : '  '
           text = "#{prefix}#{title}"
-          text += " #{COLOR_TEXT_DIM}by #{author}#{Terminal::ANSI::RESET}" if author != 'Unknown Author'
+          if author != 'Unknown Author'
+            text += " #{COLOR_TEXT_DIM}by #{author}#{Terminal::ANSI::RESET}"
+          end
 
           if is_selected
             surface.write(bounds, row, 1, SELECTION_HIGHLIGHT + text + Terminal::ANSI::RESET)
@@ -185,7 +184,8 @@ module EbookReader
 
         def truncate_text(text, max_length)
           return text if text.length <= max_length
-          "#{text[0...max_length - 3]}..."
+
+          "#{text[0...(max_length - 3)]}..."
         end
       end
     end

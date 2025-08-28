@@ -17,7 +17,7 @@ module EbookReader
 
       def do_render(surface, bounds)
         return unless @view_model_provider
-        
+
         view_model = @view_model_provider.call
         render_footer(surface, bounds, view_model)
       end
@@ -40,8 +40,8 @@ module EbookReader
       end
 
       def render_single_mode_footer(surface, bounds, view_model, width, height)
-        return unless view_model.show_page_numbers && view_model.page_info[:total] > 0
-        
+        return unless view_model.show_page_numbers && view_model.page_info[:total].positive?
+
         page_text = "#{view_model.page_info[:current]} / #{view_model.page_info[:total]}"
         centered_col = [(width - page_text.length) / 2, 1].max
         surface.write(bounds, height, centered_col,
@@ -50,21 +50,23 @@ module EbookReader
 
       def render_split_mode_footer(surface, bounds, view_model, width, height)
         page_info = view_model.page_info
-        return unless view_model.show_page_numbers && page_info[:left] && page_info[:left][:total] > 0
+        unless view_model.show_page_numbers && page_info[:left] && page_info[:left][:total].positive?
+          return
+        end
 
         # Left page number
         left_text = "#{page_info[:left][:current]} / #{page_info[:left][:total]}"
         left_col = [(width / 4) - (left_text.length / 2), 1].max
         surface.write(bounds, height, left_col,
                       Terminal::ANSI::DIM + Terminal::ANSI::GRAY + left_text + Terminal::ANSI::RESET)
-        
+
         # Right page number
-        if page_info[:right]
-          right_text = "#{page_info[:right][:current]} / #{page_info[:right][:total]}"
-          right_col = [(3 * width / 4) - (right_text.length / 2), 1].max
-          surface.write(bounds, height, right_col,
-                        Terminal::ANSI::DIM + Terminal::ANSI::GRAY + right_text + Terminal::ANSI::RESET)
-        end
+        return unless page_info[:right]
+
+        right_text = "#{page_info[:right][:current]} / #{page_info[:right][:total]}"
+        right_col = [(3 * width / 4) - (right_text.length / 2), 1].max
+        surface.write(bounds, height, right_col,
+                      Terminal::ANSI::DIM + Terminal::ANSI::GRAY + right_text + Terminal::ANSI::RESET)
       end
 
       def render_default_footer(surface, bounds, view_model, width, height)
@@ -87,17 +89,17 @@ module EbookReader
                       Terminal::ANSI::BLUE + right_prog + Terminal::ANSI::RESET)
 
         # Second line with doc metadata
-        if height >= 2
-          title_text = view_model.document_title[0, [width - 15, 0].max]
-          surface.write(bounds, height, 1, Terminal::ANSI::WHITE + "[#{title_text}]" + Terminal::ANSI::RESET)
-          surface.write(bounds, height, [width - 10, 1].max,
-                        Terminal::ANSI::WHITE + "[#{view_model.language}]" + Terminal::ANSI::RESET)
-        end
+        return unless height >= 2
+
+        title_text = view_model.document_title[0, [width - 15, 0].max]
+        surface.write(bounds, height, 1, Terminal::ANSI::WHITE + "[#{title_text}]" + Terminal::ANSI::RESET)
+        surface.write(bounds, height, [width - 10, 1].max,
+                      Terminal::ANSI::WHITE + "[#{view_model.language}]" + Terminal::ANSI::RESET)
       end
 
       def render_message_overlay(surface, bounds, view_model, width, height)
         return unless view_model.message && !view_model.message.to_s.empty?
-        
+
         text = " #{view_model.message} "
         col = [(width - text.length) / 2, 1].max
         mid_row = [(height / 2.0).ceil, 1].max

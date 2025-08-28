@@ -36,21 +36,23 @@ module EbookReader
 
           state = controller.state
           config = controller.config
-          
+
           # Get the next page for right column
           right_page_data = page_manager.get_page(controller.state.current_page_index + 1)
 
           col_width, _content_height = layout_metrics(bounds.width, bounds.height, :split)
-          
+
           # Render components
           chapter = controller.doc.get_chapter(state.current_chapter)
           render_chapter_header(surface, bounds, state, chapter) if chapter
-          render_dynamic_left_column(surface, bounds, page_data[:lines], col_width, config, controller)
+          render_dynamic_left_column(surface, bounds, page_data[:lines], col_width, config,
+                                     controller)
           render_divider(surface, bounds, col_width)
-          
-          if right_page_data
-            render_dynamic_right_column(surface, bounds, right_page_data[:lines], col_width, config, controller)
-          end
+
+          return unless right_page_data
+
+          render_dynamic_right_column(surface, bounds, right_page_data[:lines], col_width,
+                                      config, controller)
         end
 
         # Absolute mode: Manually wraps and slices chapter content
@@ -67,9 +69,11 @@ module EbookReader
 
           # Render components
           render_chapter_header(surface, bounds, state, chapter)
-          render_left_column(surface, bounds, wrapped, state, config, col_width, display_height, controller)
+          render_left_column(surface, bounds, wrapped, state, config, col_width, display_height,
+                             controller)
           render_divider(surface, bounds, col_width)
-          render_right_column(surface, bounds, wrapped, state, config, col_width, display_height, controller)
+          render_right_column(surface, bounds, wrapped, state, config, col_width, display_height,
+                              controller)
         end
 
         def render_chapter_header(surface, bounds, state, chapter)
@@ -87,7 +91,8 @@ module EbookReader
         def render_right_column(surface, bounds, wrapped, state, config, col_width, display_height,
                                 controller)
           right_lines = wrapped.slice(state.right_page || 0, display_height) || []
-          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width, config, controller)
+          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width, config,
+                              controller)
         end
 
         def render_divider(surface, bounds, col_width)
@@ -105,7 +110,8 @@ module EbookReader
           render_column_lines(surface, bounds, lines, col_width + 5, col_width, config, controller)
         end
 
-        def render_column_lines(surface, bounds, lines, start_col, col_width, config, controller = nil, context = nil)
+        def render_column_lines(surface, bounds, lines, start_col, col_width, config,
+                                controller = nil, context = nil)
           lines.each_with_index do |line, idx|
             row = 3 + (config.line_spacing == :relaxed ? idx * 2 : idx)
             break if row >= bounds.height - 1
@@ -127,32 +133,35 @@ module EbookReader
           right_page_data = page_manager.get_page(context.current_page_index + 1)
 
           col_width, _content_height = layout_metrics(bounds.width, bounds.height, :split)
-          
+
           # Render components
           chapter = context.current_chapter
           render_chapter_header_with_context(surface, bounds, context, chapter) if chapter
-          render_dynamic_left_column_with_context(surface, bounds, page_data[:lines], col_width, context)
+          render_dynamic_left_column_with_context(surface, bounds, page_data[:lines], col_width,
+                                                  context)
           render_divider(surface, bounds, col_width)
-          
-          if right_page_data
-            render_dynamic_right_column_with_context(surface, bounds, right_page_data[:lines], col_width, context)
-          end
+
+          return unless right_page_data
+
+          render_dynamic_right_column_with_context(surface, bounds, right_page_data[:lines],
+                                                   col_width, context)
         end
 
-        def render_absolute_mode_with_context(surface, bounds, context)
+        def render_absolute_mode_with_context(_surface, bounds, context)
           chapter = context.current_chapter
           return unless chapter
 
-          col_width, content_height = layout_metrics(bounds.width, bounds.height, :split)
-          display_height = adjust_for_line_spacing(content_height, context.config.line_spacing)
-          
+          _, content_height = layout_metrics(bounds.width, bounds.height, :split)
+          adjust_for_line_spacing(content_height, context.config.line_spacing)
+
           # For absolute mode, we need access to wrap_lines method - fall back to legacy for now
           # This is a limitation of the current architecture
           # In a complete refactor, wrap_lines would be moved to a service
-          
+
           # Since we can't access wrap_lines from context, we'll need to handle this differently
           # For now, we'll delegate back to the legacy method
-          raise NotImplementedError, 'Absolute mode with context not yet fully implemented - use legacy view_render'
+          raise NotImplementedError,
+                'Absolute mode with context not yet fully implemented - use legacy view_render'
         end
 
         def render_chapter_header_with_context(surface, bounds, context, chapter)
@@ -166,9 +175,9 @@ module EbookReader
         end
 
         def render_dynamic_right_column_with_context(surface, bounds, lines, col_width, context)
-          render_column_lines(surface, bounds, lines, col_width + 5, col_width, context.config, nil, context)
+          render_column_lines(surface, bounds, lines, col_width + 5, col_width, context.config,
+                              nil, context)
         end
-
       end
     end
   end

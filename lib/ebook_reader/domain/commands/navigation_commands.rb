@@ -16,21 +16,21 @@ module EbookReader
 
         def validate_context(context)
           super
-          unless context.respond_to?(:dependencies)
-            raise ValidationError.new("Context must provide dependencies", command_name: name)
-          end
+          return if context.respond_to?(:dependencies)
+
+          raise ValidationError.new('Context must provide dependencies', command_name: name)
         end
 
-        def can_execute?(context, params = {})
+        def can_execute?(context, _params = {})
           context.dependencies.registered?(:navigation_service) &&
             context.dependencies.registered?(:state_store)
         end
 
         protected
 
-        def perform(context, params = {})
+        def perform(context, _params = {})
           navigation_service = context.dependencies.resolve(:navigation_service)
-          
+
           case @action
           when :next_page
             navigation_service.next_page
@@ -51,14 +51,14 @@ module EbookReader
           else
             raise ExecutionError.new("Unknown navigation action: #{@action}", command_name: name)
           end
-          
+
           @action
         end
 
         private
 
         def humanize_action(action)
-          action.to_s.gsub('_', ' ')
+          action.to_s.tr('_', ' ')
         end
       end
 
@@ -74,23 +74,24 @@ module EbookReader
 
         def validate_parameters(params)
           super
-          
-          valid_directions = [:up, :down]
+
+          valid_directions = %i[up down]
           unless valid_directions.include?(@direction)
-            raise ValidationError.new("Direction must be one of #{valid_directions}", command_name: name)
+            raise ValidationError.new("Direction must be one of #{valid_directions}",
+                                      command_name: name)
           end
-          
-          unless @lines.is_a?(Integer) && @lines > 0
-            raise ValidationError.new("Lines must be a positive integer", command_name: name)
-          end
+
+          return if @lines.is_a?(Integer) && @lines.positive?
+
+          raise ValidationError.new('Lines must be a positive integer', command_name: name)
         end
 
         protected
 
-        def perform(context, params = {})
+        def perform(context, _params = {})
           navigation_service = context.dependencies.resolve(:navigation_service)
           navigation_service.scroll(@direction, @lines)
-          
+
           { direction: @direction, lines: @lines }
         end
       end
@@ -106,13 +107,14 @@ module EbookReader
 
         def validate_parameters(params)
           super
-          
+
           # Chapter index can come from params or constructor
           index = params[:chapter_index] || @chapter_index
-          
-          unless index.is_a?(Integer) && index >= 0
-            raise ValidationError.new("Chapter index must be a non-negative integer", command_name: name)
-          end
+
+          return if index.is_a?(Integer) && index >= 0
+
+          raise ValidationError.new('Chapter index must be a non-negative integer',
+                                    command_name: name)
         end
 
         protected
@@ -120,9 +122,9 @@ module EbookReader
         def perform(context, params = {})
           navigation_service = context.dependencies.resolve(:navigation_service)
           index = params[:chapter_index] || @chapter_index
-          
+
           navigation_service.jump_to_chapter(index)
-          
+
           { chapter_index: index }
         end
       end

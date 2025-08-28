@@ -5,7 +5,6 @@ module EbookReader
     # Handles all key input for MainMenu so the menu class focuses
     # on rendering and high level actions.
     class MainMenuInputHandler
-
       def initialize(menu)
         @menu = menu
       end
@@ -40,7 +39,7 @@ module EbookReader
       end
 
       def navigation_key?(key)
-        (navigation_down_keys + navigation_up_keys + 
+        (navigation_down_keys + navigation_up_keys +
          navigation_left_keys + navigation_right_keys).include?(key)
       end
 
@@ -64,7 +63,7 @@ module EbookReader
       end
 
       def handle_quit
-        @menu.send(:cleanup_and_exit, 0, "Goodbye!")
+        @menu.send(:cleanup_and_exit, 0, 'Goodbye!')
       end
 
       def handle_input(key)
@@ -151,7 +150,7 @@ module EbookReader
         if navigation_key?(key)
           new_selection = handle_navigation_keys(key, state.browse_selected, recent_books.size - 1)
           state.browse_selected = new_selection
-          recent_screen.selected = new_selection  # Keep screen in sync
+          recent_screen.selected = new_selection # Keep screen in sync
         elsif enter_key?(key)
           selected_book = recent_books[state.browse_selected]
           @menu.send(:open_book, selected_book['path']) if selected_book && selected_book['path']

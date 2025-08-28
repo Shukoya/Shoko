@@ -17,7 +17,9 @@ module EbookReader
       def subscribe(subscriber, *event_types)
         @mutex.synchronize do
           event_types.each do |event_type|
-            @subscribers[event_type] << subscriber unless @subscribers[event_type].include?(subscriber)
+            unless @subscribers[event_type].include?(subscriber)
+              @subscribers[event_type] << subscriber
+            end
           end
         end
       end
@@ -36,7 +38,7 @@ module EbookReader
       # @param event [Event] Event to emit
       def emit(event)
         subscribers = @mutex.synchronize { @subscribers[event.type].dup }
-        
+
         subscribers.each do |subscriber|
           safely_notify(subscriber, event)
         end
@@ -57,7 +59,7 @@ module EbookReader
         subscriber.handle_event(event)
       rescue StandardError => e
         Infrastructure::Logger.error(
-          "Event subscriber error",
+          'Event subscriber error',
           subscriber: subscriber.class.name,
           event_type: event.type,
           error: e.message

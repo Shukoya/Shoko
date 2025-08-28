@@ -33,7 +33,7 @@ module EbookReader
       # @return [Symbol] :handled, :pass, or :error
       def handle_key(key)
         command = @bindings[key]
-        
+
         if command
           execute_command(command, key)
         elsif @default_handler
@@ -71,7 +71,7 @@ module EbookReader
           command.execute(@context, { key: key })
         else
           Infrastructure::Logger.error(
-            "Invalid command object",
+            'Invalid command object',
             command: command.class.name,
             key: key
           )
@@ -79,7 +79,7 @@ module EbookReader
         end
       rescue StandardError => e
         Infrastructure::Logger.error(
-          "Command execution failed",
+          'Command execution failed',
           command: command.class.name,
           key: key,
           error: e.message
@@ -94,7 +94,7 @@ module EbookReader
           handler.execute(@context, { key: key })
         else
           Infrastructure::Logger.error(
-            "Invalid default handler",
+            'Invalid default handler',
             handler: handler.class.name,
             key: key
           )
@@ -102,7 +102,7 @@ module EbookReader
         end
       rescue StandardError => e
         Infrastructure::Logger.error(
-          "Default handler execution failed",
+          'Default handler execution failed',
           handler: handler.class.name,
           key: key,
           error: e.message

@@ -6,7 +6,6 @@ module EbookReader
   module ReaderModes
     # Table of Contents navigation
     class TocMode < BaseMode
-
       def initialize(reader)
         super
         @selected = reader.current_chapter

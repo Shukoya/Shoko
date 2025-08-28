@@ -14,7 +14,7 @@ module EbookReader
         go_to_start: :go_to_start,
         go_to_end: :go_to_end,
         scroll_up: :scroll_up,
-        scroll_down: :scroll_down
+        scroll_down: :scroll_down,
       }.freeze
 
       def initialize(action)
@@ -32,7 +32,7 @@ module EbookReader
 
       protected
 
-      def perform(context, key = nil)
+      def perform(context, _key = nil)
         context.clear_selection! if context.respond_to?(:clear_selection!)
         context.public_send(@action)
         :handled
@@ -59,7 +59,7 @@ module EbookReader
 
       protected
 
-      def perform(context, key = nil)
+      def perform(context, _key = nil)
         if @options.empty?
           context.switch_mode(@mode)
         else
@@ -88,7 +88,7 @@ module EbookReader
 
       protected
 
-      def perform(context, key = nil)
+      def perform(context, _key = nil)
         context.clear_selection! if context.respond_to?(:clear_selection!)
         context.public_send(@action)
         :handled
@@ -114,7 +114,7 @@ module EbookReader
 
       protected
 
-      def perform(context, key = nil)
+      def perform(context, _key = nil)
         context.public_send(@action)
         :handled
       end
@@ -132,7 +132,7 @@ module EbookReader
         recent: :switch_to_mode,
         settings: :switch_to_mode,
         annotations: :switch_to_mode,
-        open_file: :open_file_dialog
+        open_file: :open_file_dialog,
       }.freeze
 
       def initialize(action, *args)
@@ -152,9 +152,9 @@ module EbookReader
 
       protected
 
-      def perform(context, key = nil)
+      def perform(context, _key = nil)
         method_name = ACTIONS[@action]
-        
+
         case @action
         when :navigate_up
           context.public_send(method_name, :up)
@@ -183,8 +183,8 @@ module EbookReader
       end
 
       def can_execute?(context)
-        context.respond_to?(@action) && context.respond_to?(:state) && 
-        context.state.respond_to?(:get) && context.state.get([:reader, :popup_menu])
+        context.respond_to?(@action) && context.respond_to?(:state) &&
+          context.state.respond_to?(:get) && context.state.get(%i[reader popup_menu])
       end
 
       def description

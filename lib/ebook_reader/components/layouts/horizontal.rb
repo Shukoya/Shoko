@@ -22,17 +22,19 @@ module EbookReader
           right_width = bounds.width - left_width
 
           # Render left child (sidebar)
-          if left_width > 0
-            left_bounds = Rect.new(x: bounds.x, y: bounds.y, width: left_width, height: bounds.height)
+          if left_width.positive?
+            left_bounds = Rect.new(x: bounds.x, y: bounds.y, width: left_width,
+                                   height: bounds.height)
             @left_child.render(surface, left_bounds)
           end
 
           # Render right child (content)
-          if right_width > 0
-            right_x = bounds.x + left_width
-            right_bounds = Rect.new(x: right_x, y: bounds.y, width: right_width, height: bounds.height)
-            @right_child.render(surface, right_bounds)
-          end
+          return unless right_width.positive?
+
+          right_x = bounds.x + left_width
+          right_bounds = Rect.new(x: right_x, y: bounds.y, width: right_width,
+                                  height: bounds.height)
+          @right_child.render(surface, right_bounds)
         end
 
         private
@@ -47,7 +49,7 @@ module EbookReader
           when :hidden
             0
           when :flexible
-            total_width / 3  # Default to 1/3 width
+            total_width / 3 # Default to 1/3 width
           else
             0
           end

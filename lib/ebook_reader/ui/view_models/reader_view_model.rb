@@ -8,7 +8,7 @@ module EbookReader
       class ReaderViewModel
         attr_reader :current_chapter, :total_chapters, :current_page, :total_pages,
                     :chapter_title, :document_title, :view_mode, :sidebar_visible, :mode, :message,
-                    :bookmarks, :toc_entries, :content_lines, :page_info, :show_page_numbers, 
+                    :bookmarks, :toc_entries, :content_lines, :page_info, :show_page_numbers,
                     :page_numbering_mode, :line_spacing, :language
 
         def initialize(
@@ -54,17 +54,20 @@ module EbookReader
 
         # Derived properties
         def progress_percentage
-          return 0 if total_pages == 0
+          return 0 if total_pages.zero?
+
           ((current_page.to_f / total_pages) * 100).round(1)
         end
 
         def chapter_progress
-          return "0/0" if total_chapters == 0
+          return '0/0' if total_chapters.zero?
+
           "#{current_chapter + 1}/#{total_chapters}"
         end
 
         def page_progress
-          return "0/0" if total_pages == 0
+          return '0/0' if total_pages.zero?
+
           "#{current_page + 1}/#{total_pages}"
         end
 
@@ -108,10 +111,10 @@ module EbookReader
             show_page_numbers: show_page_numbers,
             page_numbering_mode: page_numbering_mode,
             line_spacing: line_spacing,
-            language: language
+            language: language,
           }
-          
-          self.class.new(**current_attributes.merge(changes))
+
+          self.class.new(**current_attributes, **changes)
         end
       end
 
@@ -162,10 +165,10 @@ module EbookReader
             search_query: search_query,
             search_active: search_active,
             message: message,
-            title: title
+            title: title,
           }
-          
-          self.class.new(**current_attributes.merge(changes))
+
+          self.class.new(**current_attributes, **changes)
         end
       end
     end

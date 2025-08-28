@@ -6,7 +6,6 @@ module EbookReader
   module ReaderModes
     # Bookmark management interface
     class BookmarksMode < BaseMode
-
       def initialize(reader)
         super
         @selected = 0

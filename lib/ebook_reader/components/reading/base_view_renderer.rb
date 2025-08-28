@@ -10,7 +10,7 @@ module EbookReader
       # Base class for all view renderers
       class BaseViewRenderer < BaseComponent
         def initialize(services = nil)
-          super(services)
+          super
         end
 
         # Override the base render method to maintain legacy interface
@@ -50,7 +50,8 @@ module EbookReader
         end
 
         def calculate_center_start_row(content_height, lines_count, line_spacing)
-          Services::LayoutService.calculate_center_start_row(content_height, lines_count, line_spacing)
+          Services::LayoutService.calculate_center_start_row(content_height, lines_count,
+                                                             line_spacing)
         end
 
         private
@@ -76,7 +77,7 @@ module EbookReader
 
           abs_row = bounds.y + row - 1
           abs_col = bounds.x + col - 1
-          
+
           # Store line data in format compatible with mouse selection
           # Use a key that includes both row and column range to distinguish columns
           state = context ? context.state : controller&.state
@@ -88,7 +89,7 @@ module EbookReader
               col: abs_col,
               col_end: abs_col + width - 1,
               text: text,
-              width: width
+              width: width,
             }
           end
 

@@ -13,7 +13,7 @@ module EbookReader
         # Render content with view model data
         #
         # @param surface [Components::Surface] Rendering surface
-        # @param bounds [Components::Rect] Rendering bounds  
+        # @param bounds [Components::Rect] Rendering bounds
         # @param view_model [ViewModels::ReaderViewModel] View data
         def render(surface, bounds, view_model)
           return if bounds.height < 1 || bounds.width < 1
@@ -44,10 +44,10 @@ module EbookReader
 
         def render_split_view(surface, bounds, view_model)
           return if bounds.width < 10 # Need minimum width for split view
-          
+
           left_width = bounds.width / 2
           right_width = bounds.width - left_width - 1 # -1 for separator
-          
+
           # Left column
           left_bounds = Components::Rect.new(
             x: bounds.x,
@@ -55,25 +55,25 @@ module EbookReader
             width: left_width,
             height: bounds.height
           )
-          
-          # Right column  
+
+          # Right column
           right_bounds = Components::Rect.new(
             x: bounds.x + left_width + 1,
             y: bounds.y,
             width: right_width,
             height: bounds.height
           )
-          
+
           # Separator
           separator_x = bounds.x + left_width
           (0...bounds.height).each do |row|
             surface.write(separator_x, bounds.y + row, '│', theme_color(:separator))
           end
-          
+
           # Render content in each column
           left_content = get_page_content(view_model, :left)
           right_content = get_page_content(view_model, :right)
-          
+
           render_text_in_bounds(surface, left_bounds, left_content)
           render_text_in_bounds(surface, right_bounds, right_content)
         end
@@ -85,17 +85,17 @@ module EbookReader
 
         def render_toc_content(surface, bounds, view_model)
           if view_model.toc_entries.empty?
-            render_placeholder(surface, bounds, "No table of contents available")
+            render_placeholder(surface, bounds, 'No table of contents available')
             return
           end
 
           view_model.toc_entries.each_with_index do |entry, index|
             next if index >= bounds.height
-            
+
             prefix = index == view_model.current_chapter ? '► ' : '  '
             text = "#{prefix}#{entry[:title]}"
             color = index == view_model.current_chapter ? theme_color(:selected) : theme_color(:text)
-            
+
             truncated = truncate_text(text, bounds.width)
             surface.write(bounds.x, bounds.y + index, truncated, color)
           end
@@ -103,47 +103,47 @@ module EbookReader
 
         def render_bookmarks_content(surface, bounds, view_model)
           if view_model.bookmarks.empty?
-            render_placeholder(surface, bounds, "No bookmarks")
+            render_placeholder(surface, bounds, 'No bookmarks')
             return
           end
 
           view_model.bookmarks.each_with_index do |bookmark, index|
             next if index >= bounds.height
-            
+
             prefix = '📖 '
             text = "#{prefix}#{bookmark.text_snippet || 'Bookmark'}"
             color = theme_color(:text)
-            
+
             truncated = truncate_text(text, bounds.width)
             surface.write(bounds.x, bounds.y + index, truncated, color)
           end
         end
 
-        def render_help_content(surface, bounds, view_model)
+        def render_help_content(surface, bounds, _view_model)
           help_lines = [
-            "Navigation:",
-            "  j/↓     - Next page",
-            "  k/↑     - Previous page", 
-            "  n       - Next chapter",
-            "  p       - Previous chapter",
-            "  g       - Go to start",
-            "  G       - Go to end",
-            "",
-            "Bookmarks:",
-            "  b       - Add bookmark",
-            "  B       - View bookmarks",
-            "",
-            "Other:",
-            "  t       - Table of contents",
-            "  v       - Toggle view mode",
-            "  q       - Quit to menu",
-            "  Q       - Quit application",
-            "  ?       - Show/hide help"
+            'Navigation:',
+            '  j/↓     - Next page',
+            '  k/↑     - Previous page',
+            '  n       - Next chapter',
+            '  p       - Previous chapter',
+            '  g       - Go to start',
+            '  G       - Go to end',
+            '',
+            'Bookmarks:',
+            '  b       - Add bookmark',
+            '  B       - View bookmarks',
+            '',
+            'Other:',
+            '  t       - Table of contents',
+            '  v       - Toggle view mode',
+            '  q       - Quit to menu',
+            '  Q       - Quit application',
+            '  ?       - Show/hide help',
           ]
-          
+
           help_lines.each_with_index do |line, index|
             next if index >= bounds.height
-            
+
             color = line.start_with?(' ') ? theme_color(:help_detail) : theme_color(:help_header)
             truncated = truncate_text(line, bounds.width)
             surface.write(bounds.x, bounds.y + index, truncated, color)
@@ -153,14 +153,15 @@ module EbookReader
         def render_placeholder(surface, bounds, message)
           centered_y = bounds.height / 2
           centered_x = calculate_centered_x(bounds.width, message.length)
-          
-          surface.write(bounds.x + centered_x, bounds.y + centered_y, message, theme_color(:placeholder))
+
+          surface.write(bounds.x + centered_x, bounds.y + centered_y, message,
+                        theme_color(:placeholder))
         end
 
         def render_text_in_bounds(surface, bounds, content_lines)
           content_lines.each_with_index do |line, index|
             next if index >= bounds.height
-            
+
             truncated = truncate_text(line, bounds.width)
             surface.write(bounds.x, bounds.y + index, truncated, theme_color(:text))
           end
@@ -173,7 +174,7 @@ module EbookReader
           when :left
             view_model.content_lines[0...(view_model.content_lines.size / 2)]
           when :right
-            view_model.content_lines[(view_model.content_lines.size / 2)..-1] || []
+            view_model.content_lines[(view_model.content_lines.size / 2)..] || []
           when :single
             view_model.content_lines
           else
@@ -187,8 +188,8 @@ module EbookReader
 
         def truncate_text(text, max_length)
           return text if text.length <= max_length
-          return "" if max_length < 3
-          
+          return '' if max_length < 3
+
           "#{text[0...(max_length - 3)]}..."
         end
 

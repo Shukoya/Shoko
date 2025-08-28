@@ -18,33 +18,31 @@ module EbookReader
         @main_menu = main_menu
         @state = main_menu.state
         @scanner = main_menu.instance_variable_get(:@scanner)
-        
+
         setup_screen_components
-        
+
         # Initialize current screen
         @current_screen = @screen_components[:menu]
-        
+
         # Observe mode changes to switch active component
-        @state.add_observer(self, [:menu, :mode], [:menu, :selected])
+        @state.add_observer(self, %i[menu mode], %i[menu selected])
       end
 
       def state_changed(path, _old_value, new_value)
-        if path == [:menu, :mode]
-          @current_screen = @screen_components[new_value] || @screen_components[:menu]
-        end
+        return unless path == %i[menu mode]
+
+        @current_screen = @screen_components[new_value] || @screen_components[:menu]
       end
 
       def do_render(surface, bounds)
-        current_screen.render(surface, bounds) if current_screen
+        current_screen&.render(surface, bounds)
       end
 
       def preferred_height(_available_height)
         :fill
       end
 
-      def current_screen
-        @current_screen
-      end
+      attr_reader :current_screen
 
       # Delegate screen-specific methods
       def browse_screen
@@ -76,7 +74,7 @@ module EbookReader
           recent: Screens::RecentScreenComponent.new(@main_menu, @state),
           settings: Screens::SettingsScreenComponent.new(@state, @scanner),
           open_file: Screens::OpenFileScreenComponent.new(@state),
-          annotations: Screens::AnnotationsScreenComponent.new(@state)
+          annotations: Screens::AnnotationsScreenComponent.new(@state),
         }
       end
     end

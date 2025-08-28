@@ -42,7 +42,9 @@ module EbookReader
         else
           paths.each do |path|
             normalized_path = normalize_path(path)
-            @observers_by_path[normalized_path] << observer unless @observers_by_path[normalized_path].include?(observer)
+            unless @observers_by_path[normalized_path].include?(observer)
+              @observers_by_path[normalized_path] << observer
+            end
           end
         end
       end
@@ -96,39 +98,39 @@ module EbookReader
             right_page: 0,
             single_page: 0,
             current_page_index: 0,
-            
+
             # Mode and UI state
             mode: :read,
             selection: nil,
             message: nil,
             running: true,
-            
+
             # Lists and selections
             toc_selected: 0,
             bookmark_selected: 0,
             bookmarks: [],
             annotations: [],
-            
+
             # Pagination state
             page_map: [],
             total_pages: 0,
             pages_per_chapter: [],
-            
+
             # Terminal sizing
             last_width: 0,
             last_height: 0,
-            
+
             # Dynamic pagination
             dynamic_page_map: nil,
             dynamic_total_pages: 0,
             dynamic_chapter_starts: [],
             last_dynamic_width: 0,
             last_dynamic_height: 0,
-            
+
             # UI state
             rendered_lines: {},
             popup_menu: nil,
-            
+
             # Sidebar state
             sidebar_visible: false,
             sidebar_active_tab: :toc,
@@ -137,9 +139,9 @@ module EbookReader
             sidebar_annotations_selected: 0,
             sidebar_bookmarks_selected: 0,
             sidebar_toc_filter: nil,
-            sidebar_toc_filter_active: false
+            sidebar_toc_filter_active: false,
           },
-          
+
           menu: {
             selected: 0,
             mode: :menu,
@@ -147,9 +149,9 @@ module EbookReader
             search_query: '',
             search_cursor: 0,
             file_input: '',
-            search_active: false
+            search_active: false,
           },
-          
+
           config: {
             view_mode: :split,
             line_spacing: :normal,
@@ -157,52 +159,52 @@ module EbookReader
             theme: :dark,
             show_page_numbers: true,
             highlight_quotes: false,
-            highlight_keywords: false
-          }
+            highlight_keywords: false,
+          },
         }
       end
 
       # Convenience methods for common state paths
-      
+
       # Reader state accessors
       def current_chapter
-        get([:reader, :current_chapter])
+        get(%i[reader current_chapter])
       end
 
       def current_chapter=(value)
-        update([:reader, :current_chapter], value)
+        update(%i[reader current_chapter], value)
       end
 
       def left_page
-        get([:reader, :left_page])
+        get(%i[reader left_page])
       end
 
       def left_page=(value)
-        update([:reader, :left_page], value)
+        update(%i[reader left_page], value)
       end
 
       def right_page
-        get([:reader, :right_page])
+        get(%i[reader right_page])
       end
 
       def right_page=(value)
-        update([:reader, :right_page], value)
+        update(%i[reader right_page], value)
       end
 
       def single_page
-        get([:reader, :single_page])
+        get(%i[reader single_page])
       end
 
       def single_page=(value)
-        update([:reader, :single_page], value)
+        update(%i[reader single_page], value)
       end
 
       def current_page_index
-        get([:reader, :current_page_index])
+        get(%i[reader current_page_index])
       end
 
       def current_page_index=(value)
-        update([:reader, :current_page_index], value)
+        update(%i[reader current_page_index], value)
       end
 
       def current_page
@@ -214,343 +216,343 @@ module EbookReader
       end
 
       def mode
-        get([:reader, :mode])
+        get(%i[reader mode])
       end
 
       def mode=(value)
-        update([:reader, :mode], value)
+        update(%i[reader mode], value)
       end
 
       def message
-        get([:reader, :message])
+        get(%i[reader message])
       end
 
       def message=(value)
-        update([:reader, :message], value)
+        update(%i[reader message], value)
       end
 
       def running
-        get([:reader, :running])
+        get(%i[reader running])
       end
 
       def running=(value)
-        update([:reader, :running], value)
+        update(%i[reader running], value)
       end
 
       # Menu state accessors
       def selected
-        get([:menu, :selected])
+        get(%i[menu selected])
       end
 
       def selected=(value)
-        update([:menu, :selected], value)
+        update(%i[menu selected], value)
       end
 
       def browse_selected
-        get([:menu, :browse_selected])
+        get(%i[menu browse_selected])
       end
 
       def browse_selected=(value)
-        update([:menu, :browse_selected], value)
+        update(%i[menu browse_selected], value)
       end
 
       def search_active
-        get([:menu, :search_active])
+        get(%i[menu search_active])
       end
 
       def search_active=(value)
-        update([:menu, :search_active], value)
+        update(%i[menu search_active], value)
       end
 
       def search_query
-        get([:menu, :search_query])
+        get(%i[menu search_query])
       end
 
       def search_query=(value)
-        update([:menu, :search_query], value)
+        update(%i[menu search_query], value)
       end
 
       def file_input
-        get([:menu, :file_input])
+        get(%i[menu file_input])
       end
 
       def file_input=(value)
-        update([:menu, :file_input], value)
+        update(%i[menu file_input], value)
       end
 
       def search_cursor
-        get([:menu, :search_cursor])
+        get(%i[menu search_cursor])
       end
 
       def search_cursor=(value)
-        update([:menu, :search_cursor], value)
+        update(%i[menu search_cursor], value)
       end
 
       def menu_mode
-        get([:menu, :mode])
+        get(%i[menu mode])
       end
 
       def menu_mode=(value)
-        update([:menu, :mode], value)
+        update(%i[menu mode], value)
       end
 
       # Config accessors
       def view_mode
-        get([:config, :view_mode])
+        get(%i[config view_mode])
       end
 
       def view_mode=(value)
-        update([:config, :view_mode], value)
+        update(%i[config view_mode], value)
       end
 
       def page_numbering_mode
-        get([:config, :page_numbering_mode])
+        get(%i[config page_numbering_mode])
       end
 
       def page_numbering_mode=(value)
-        update([:config, :page_numbering_mode], value)
+        update(%i[config page_numbering_mode], value)
       end
 
       def line_spacing
-        get([:config, :line_spacing])
+        get(%i[config line_spacing])
       end
 
       def line_spacing=(value)
-        update([:config, :line_spacing], value)
+        update(%i[config line_spacing], value)
       end
 
       def theme
-        get([:config, :theme])
+        get(%i[config theme])
       end
 
       def theme=(value)
-        update([:config, :theme], value)
+        update(%i[config theme], value)
       end
 
       def show_page_numbers
-        get([:config, :show_page_numbers])
+        get(%i[config show_page_numbers])
       end
 
       def show_page_numbers=(value)
-        update([:config, :show_page_numbers], value)
+        update(%i[config show_page_numbers], value)
       end
 
       def highlight_quotes
-        get([:config, :highlight_quotes])
+        get(%i[config highlight_quotes])
       end
 
       def highlight_quotes=(value)
-        update([:config, :highlight_quotes], value)
+        update(%i[config highlight_quotes], value)
       end
 
       def highlight_keywords
-        get([:config, :highlight_keywords])
+        get(%i[config highlight_keywords])
       end
 
       def highlight_keywords=(value)
-        update([:config, :highlight_keywords], value)
+        update(%i[config highlight_keywords], value)
       end
 
       # Missing reader state accessors
       def bookmarks
-        get([:reader, :bookmarks])
+        get(%i[reader bookmarks])
       end
 
       def bookmarks=(value)
-        update([:reader, :bookmarks], value)
+        update(%i[reader bookmarks], value)
       end
 
       def rendered_lines
-        get([:reader, :rendered_lines])
+        get(%i[reader rendered_lines])
       end
 
       def rendered_lines=(value)
-        update([:reader, :rendered_lines], value)
+        update(%i[reader rendered_lines], value)
       end
 
       def last_width
-        get([:reader, :last_width])
+        get(%i[reader last_width])
       end
 
       def last_width=(value)
-        update([:reader, :last_width], value)
+        update(%i[reader last_width], value)
       end
 
       def last_height
-        get([:reader, :last_height])
+        get(%i[reader last_height])
       end
 
       def last_height=(value)
-        update([:reader, :last_height], value)
+        update(%i[reader last_height], value)
       end
 
       def dynamic_page_map
-        get([:reader, :dynamic_page_map])
+        get(%i[reader dynamic_page_map])
       end
 
       def dynamic_page_map=(value)
-        update([:reader, :dynamic_page_map], value)
+        update(%i[reader dynamic_page_map], value)
       end
 
       def dynamic_total_pages
-        get([:reader, :dynamic_total_pages])
+        get(%i[reader dynamic_total_pages])
       end
 
       def dynamic_total_pages=(value)
-        update([:reader, :dynamic_total_pages], value)
+        update(%i[reader dynamic_total_pages], value)
       end
 
       def last_dynamic_width
-        get([:reader, :last_dynamic_width])
+        get(%i[reader last_dynamic_width])
       end
 
       def last_dynamic_width=(value)
-        update([:reader, :last_dynamic_width], value)
+        update(%i[reader last_dynamic_width], value)
       end
 
       def last_dynamic_height
-        get([:reader, :last_dynamic_height])
+        get(%i[reader last_dynamic_height])
       end
 
       def last_dynamic_height=(value)
-        update([:reader, :last_dynamic_height], value)
+        update(%i[reader last_dynamic_height], value)
       end
 
       def page_map
-        get([:reader, :page_map])
+        get(%i[reader page_map])
       end
 
       def page_map=(value)
-        update([:reader, :page_map], value)
+        update(%i[reader page_map], value)
       end
 
       def total_pages
-        get([:reader, :total_pages])
+        get(%i[reader total_pages])
       end
 
       def total_pages=(value)
-        update([:reader, :total_pages], value)
+        update(%i[reader total_pages], value)
       end
 
       def toc_selected
-        get([:reader, :toc_selected])
+        get(%i[reader toc_selected])
       end
 
       def toc_selected=(value)
-        update([:reader, :toc_selected], value)
+        update(%i[reader toc_selected], value)
       end
 
       def bookmark_selected
-        get([:reader, :bookmark_selected])
+        get(%i[reader bookmark_selected])
       end
 
       def bookmark_selected=(value)
-        update([:reader, :bookmark_selected], value)
+        update(%i[reader bookmark_selected], value)
       end
 
       def popup_menu
-        get([:reader, :popup_menu])
+        get(%i[reader popup_menu])
       end
 
       def popup_menu=(value)
-        update([:reader, :popup_menu], value)
+        update(%i[reader popup_menu], value)
       end
 
       def selection
-        get([:reader, :selection])
+        get(%i[reader selection])
       end
 
       def selection=(value)
-        update([:reader, :selection], value)
+        update(%i[reader selection], value)
       end
 
       def pages_per_chapter
-        get([:reader, :pages_per_chapter])
+        get(%i[reader pages_per_chapter])
       end
 
       def pages_per_chapter=(value)
-        update([:reader, :pages_per_chapter], value)
+        update(%i[reader pages_per_chapter], value)
       end
 
       def dynamic_chapter_starts
-        get([:reader, :dynamic_chapter_starts])
+        get(%i[reader dynamic_chapter_starts])
       end
 
       def dynamic_chapter_starts=(value)
-        update([:reader, :dynamic_chapter_starts], value)
+        update(%i[reader dynamic_chapter_starts], value)
       end
 
       def annotations
-        get([:reader, :annotations])
+        get(%i[reader annotations])
       end
 
       def annotations=(value)
-        update([:reader, :annotations], value)
+        update(%i[reader annotations], value)
       end
 
       # Sidebar state accessors
       def sidebar_visible
-        get([:reader, :sidebar_visible])
+        get(%i[reader sidebar_visible])
       end
 
       def sidebar_visible=(value)
-        update([:reader, :sidebar_visible], value)
+        update(%i[reader sidebar_visible], value)
       end
 
       def sidebar_active_tab
-        get([:reader, :sidebar_active_tab])
+        get(%i[reader sidebar_active_tab])
       end
 
       def sidebar_active_tab=(value)
-        update([:reader, :sidebar_active_tab], value)
+        update(%i[reader sidebar_active_tab], value)
       end
 
       def sidebar_width_percent
-        get([:reader, :sidebar_width_percent])
+        get(%i[reader sidebar_width_percent])
       end
 
       def sidebar_width_percent=(value)
-        update([:reader, :sidebar_width_percent], value)
+        update(%i[reader sidebar_width_percent], value)
       end
 
       def sidebar_toc_selected
-        get([:reader, :sidebar_toc_selected])
+        get(%i[reader sidebar_toc_selected])
       end
 
       def sidebar_toc_selected=(value)
-        update([:reader, :sidebar_toc_selected], value)
+        update(%i[reader sidebar_toc_selected], value)
       end
 
       def sidebar_annotations_selected
-        get([:reader, :sidebar_annotations_selected])
+        get(%i[reader sidebar_annotations_selected])
       end
 
       def sidebar_annotations_selected=(value)
-        update([:reader, :sidebar_annotations_selected], value)
+        update(%i[reader sidebar_annotations_selected], value)
       end
 
       def sidebar_bookmarks_selected
-        get([:reader, :sidebar_bookmarks_selected])
+        get(%i[reader sidebar_bookmarks_selected])
       end
 
       def sidebar_bookmarks_selected=(value)
-        update([:reader, :sidebar_bookmarks_selected], value)
+        update(%i[reader sidebar_bookmarks_selected], value)
       end
 
       def sidebar_toc_filter
-        get([:reader, :sidebar_toc_filter])
+        get(%i[reader sidebar_toc_filter])
       end
 
       def sidebar_toc_filter=(value)
-        update([:reader, :sidebar_toc_filter], value)
+        update(%i[reader sidebar_toc_filter], value)
       end
 
       def sidebar_toc_filter_active
-        get([:reader, :sidebar_toc_filter_active])
+        get(%i[reader sidebar_toc_filter_active])
       end
 
       def sidebar_toc_filter_active=(value)
-        update([:reader, :sidebar_toc_filter_active], value)
+        update(%i[reader sidebar_toc_filter_active], value)
       end
 
       # Terminal size tracking methods
@@ -565,8 +567,8 @@ module EbookReader
 
       # Legacy compatibility method
       def page_offset=(value)
-        update([:reader, :single_page], value)
-        update([:reader, :left_page], value)
+        update(%i[reader single_page], value)
+        update(%i[reader left_page], value)
       end
 
       # State snapshot for persistence
@@ -575,16 +577,16 @@ module EbookReader
           current_chapter: current_chapter,
           page_offset: single_page,
           mode: mode.to_s,
-          timestamp: Time.now.iso8601
+          timestamp: Time.now.iso8601,
         }
       end
 
       # Restore reader state from snapshot
       def restore_reader_from(snapshot)
-        update([:reader, :current_chapter], snapshot['current_chapter'] || 0)
-        update([:reader, :single_page], snapshot['page_offset'] || 0)
-        update([:reader, :left_page], snapshot['page_offset'] || 0)
-        update([:reader, :mode], (snapshot['mode'] || 'read').to_sym)
+        update(%i[reader current_chapter], snapshot['current_chapter'] || 0)
+        update(%i[reader single_page], snapshot['page_offset'] || 0)
+        update(%i[reader left_page], snapshot['page_offset'] || 0)
+        update(%i[reader mode], (snapshot['mode'] || 'read').to_sym)
       end
 
       # Configuration persistence methods

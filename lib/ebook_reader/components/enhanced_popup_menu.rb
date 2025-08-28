@@ -13,7 +13,7 @@ module EbookReader
 
       def initialize(selection_range, available_actions = nil)
         @selection_range = Services::CoordinateService.normalize_selection_range(selection_range)
-        
+
         unless @selection_range
           @visible = false
           return
@@ -121,10 +121,8 @@ module EbookReader
 
       def move_selection(direction)
         return if @items.empty?
-        
-        old_index = @selected_index
+
         @selected_index = (@selected_index + direction) % @items.length
-        
       end
 
       def execute_selected_action

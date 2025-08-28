@@ -33,18 +33,19 @@ module EbookReader
 
           # File path input
           surface.write(bounds, 3, 2, "#{COLOR_TEXT_PRIMARY}File path:#{Terminal::ANSI::RESET}")
-          
+
           # Input field with cursor
           input_text = @state.file_input || ''
           input_width = [width - 15, 40].max
           display_input = truncate_input(input_text, input_width)
-          
-          surface.write(bounds, 4, 4, SELECTION_HIGHLIGHT + display_input + '█' + Terminal::ANSI::RESET)
+
+          surface.write(bounds, 4, 4, "#{SELECTION_HIGHLIGHT}#{display_input}█#{Terminal::ANSI::RESET}")
 
           # Instructions
           surface.write(bounds, 6, 2, "#{COLOR_TEXT_DIM}Enter the path to an EPUB file#{Terminal::ANSI::RESET}")
-          surface.write(bounds, 7, 2, "#{COLOR_TEXT_DIM}Supports ~ for home directory and tab completion#{Terminal::ANSI::RESET}")
-          
+          surface.write(bounds, 7, 2,
+                        "#{COLOR_TEXT_DIM}Supports ~ for home directory and tab completion#{Terminal::ANSI::RESET}")
+
           # Controls
           surface.write(bounds, height - 3, 2, "#{COLOR_TEXT_DIM}[Enter] Open file#{Terminal::ANSI::RESET}")
           surface.write(bounds, height - 2, 2, "#{COLOR_TEXT_DIM}[ESC] Cancel#{Terminal::ANSI::RESET}")
@@ -58,10 +59,10 @@ module EbookReader
 
         def truncate_input(text, max_width)
           return text if text.length <= max_width
-          
+
           # Show end of path if too long
           excess = text.length - max_width + 3
-          "...#{text[excess..-1]}"
+          "...#{text[excess..]}"
         end
       end
     end

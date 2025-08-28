@@ -1,9 +1,13 @@
 # frozen_string_literal: true
 
+require_relative 'component_interface'
+
 module EbookReader
   module Components
-    # Base interface for all UI components
+    # Base implementation for all UI components following ComponentInterface
     class BaseComponent
+      include ComponentInterface
+
       attr_reader :services
 
       def initialize(services = nil)
@@ -17,7 +21,7 @@ module EbookReader
       # @param bounds [Rect] local bounds for this component
       def render(surface, bounds)
         mount unless @initialized
-        
+
         # Always render for now to debug display issues
         do_render(surface, bounds)
         mark_updated
@@ -49,7 +53,7 @@ module EbookReader
       # Called once when component is first initialized with a parent
       def mount
         return if @initialized
-        
+
         on_mount
         @initialized = true
       end
@@ -57,7 +61,7 @@ module EbookReader
       # Called when component is removed from the component tree
       def unmount
         return unless @initialized
-        
+
         on_unmount
         @initialized = false
       end

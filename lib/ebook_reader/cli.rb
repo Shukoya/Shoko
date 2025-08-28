@@ -10,13 +10,7 @@ module EbookReader
         options, args = parse_options(argv)
         setup_logger(options[:debug] || ENV.fetch('DEBUG', nil))
 
-        if args.first
-          # Use new clean architecture for reader
-          Application::ReaderApplication.new(args.first).run
-        else
-          # For now, use legacy MainMenu (will be refactored later)
-          MainMenu.new.run
-        end
+        Application::UnifiedApplication.new(args.first).run
       end
 
       private

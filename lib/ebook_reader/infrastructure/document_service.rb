@@ -17,7 +17,7 @@ module EbookReader
       def load_document
         @document ||= EPUBDocument.new(@epub_path)
       rescue StandardError => e
-        Infrastructure::Logger.error("Failed to load document", path: @epub_path, error: e.message)
+        Infrastructure::Logger.error('Failed to load document', path: @epub_path, error: e.message)
         create_error_document(e.message)
       end
 
@@ -27,6 +27,7 @@ module EbookReader
       # @return [Chapter] Chapter object or nil
       def get_chapter(index)
         return nil unless @document
+
         @document.get_chapter(index)
       end
 
@@ -35,12 +36,12 @@ module EbookReader
       # @return [Array<Hash>] Array of TOC entries
       def get_table_of_contents
         return [] unless @document
-        
+
         @document.chapters.map.with_index do |chapter, index|
           {
             index: index,
             title: chapter.title || "Chapter #{index + 1}",
-            level: 0 # Could be enhanced to support nested TOC
+            level: 0, # Could be enhanced to support nested TOC
           }
         end
       end
@@ -53,68 +54,68 @@ module EbookReader
       # @return [Array<String>] Array of content lines
       def get_page_content(chapter_index, page_offset, lines_per_page = 20)
         cache_key = "#{chapter_index}_#{page_offset}_#{lines_per_page}"
-        
+
         return @content_cache[cache_key] if @content_cache.key?(cache_key)
-        
+
         chapter = get_chapter(chapter_index)
         return [] unless chapter
-        
+
         lines = chapter.lines || []
         start_line = page_offset * lines_per_page
         end_line = start_line + lines_per_page - 1
-        
+
         content = lines[start_line..end_line] || []
         @content_cache[cache_key] = content
-        
+
         content
       end
 
       # Get wrapped content for specific page
       #
-      # @param chapter_index [Integer] Chapter index  
+      # @param chapter_index [Integer] Chapter index
       # @param page_offset [Integer] Page offset within chapter
       # @param column_width [Integer] Column width for wrapping
       # @param lines_per_page [Integer] Number of lines per page
       # @return [Array<String>] Array of wrapped content lines
       def get_wrapped_page_content(chapter_index, page_offset, column_width, lines_per_page = 20)
         cache_key = "wrapped_#{chapter_index}_#{page_offset}_#{column_width}_#{lines_per_page}"
-        
+
         return @content_cache[cache_key] if @content_cache.key?(cache_key)
-        
+
         chapter = get_chapter(chapter_index)
         return [] unless chapter
-        
+
         lines = chapter.lines || []
         wrapped_lines = wrap_lines(lines, column_width)
-        
+
         start_line = page_offset * lines_per_page
         end_line = start_line + lines_per_page - 1
-        
+
         content = wrapped_lines[start_line..end_line] || []
         @content_cache[cache_key] = content
-        
+
         content
       end
 
       # Get total wrapped lines for chapter
       #
       # @param chapter_index [Integer] Chapter index
-      # @param column_width [Integer] Column width for wrapping  
+      # @param column_width [Integer] Column width for wrapping
       # @return [Integer] Total wrapped lines
       def get_chapter_wrapped_line_count(chapter_index, column_width)
         cache_key = "line_count_#{chapter_index}_#{column_width}"
-        
+
         return @content_cache[cache_key] if @content_cache.key?(cache_key)
-        
+
         chapter = get_chapter(chapter_index)
         return 0 unless chapter
-        
+
         lines = chapter.lines || []
         wrapped_lines = wrap_lines(lines, column_width)
-        
+
         count = wrapped_lines.size
         @content_cache[cache_key] = count
-        
+
         count
       end
 
@@ -139,7 +140,7 @@ module EbookReader
 
       def wrap_lines(lines, column_width)
         return lines if column_width <= 0
-        
+
         wrapped = []
         lines.each do |line|
           if line.length <= column_width
@@ -148,26 +149,26 @@ module EbookReader
             wrapped.concat(wrap_long_line(line, column_width))
           end
         end
-        
+
         wrapped
       end
 
       def wrap_long_line(line, width)
         words = line.split(/\s+/)
         wrapped_lines = []
-        current_line = ""
-        
+        current_line = ''
+
         words.each do |word|
           if current_line.empty?
             current_line = word
-          elsif (current_line + " " + word).length <= width
-            current_line += " " + word
+          elsif "#{current_line} #{word}".length <= width
+            current_line += " #{word}"
           else
             wrapped_lines << current_line
             current_line = word
           end
         end
-        
+
         wrapped_lines << current_line unless current_line.empty?
         wrapped_lines
       end
@@ -186,8 +187,8 @@ module EbookReader
       end
 
       def get_chapter(index)
-        return nil unless index == 0
-        
+        return nil unless index.zero?
+
         ErrorChapter.new(@error_message)
       end
 
@@ -201,15 +202,15 @@ module EbookReader
       attr_reader :title, :lines
 
       def initialize(error_message)
-        @title = "Error Loading Book"
+        @title = 'Error Loading Book'
         @lines = [
-          "Failed to load the EPUB file:",
-          "",
+          'Failed to load the EPUB file:',
+          '',
           error_message,
-          "",
-          "Please check that the file exists and is a valid EPUB.",
-          "",
-          "Press 'q' to return to the main menu."
+          '',
+          'Please check that the file exists and is a valid EPUB.',
+          '',
+          "Press 'q' to return to the main menu.",
         ]
       end
     end

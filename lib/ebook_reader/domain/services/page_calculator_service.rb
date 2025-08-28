@@ -19,7 +19,7 @@ module EbookReader
         def calculate_pages_for_chapter(chapter_index)
           current_state = @state_store.current_state
           cache_key = build_cache_key(chapter_index, current_state)
-          
+
           @cache[cache_key] ||= perform_page_calculation(chapter_index, current_state)
         end
 
@@ -28,19 +28,19 @@ module EbookReader
         # @param chapter_index [Integer] Chapter index
         # @param line_offset [Integer] Line offset within chapter
         # @return [Integer] Page number within chapter
-        def calculate_page_from_line(chapter_index, line_offset)
+        def calculate_page_from_line(_chapter_index, line_offset)
           lines_per_page = calculate_lines_per_page
           return 0 if lines_per_page <= 0
-          
+
           (line_offset.to_f / lines_per_page).floor
         end
 
         # Calculate line offset from page number
         #
-        # @param chapter_index [Integer] Chapter index  
+        # @param chapter_index [Integer] Chapter index
         # @param page_number [Integer] Page number within chapter
         # @return [Integer] Line offset
-        def calculate_line_from_page(chapter_index, page_number)
+        def calculate_line_from_page(_chapter_index, page_number)
           lines_per_page = calculate_lines_per_page
           page_number * lines_per_page
         end
@@ -59,7 +59,7 @@ module EbookReader
         # @param page_within_chapter [Integer] Page within current chapter
         # @param total_chapters [Integer] Total chapters
         # @return [Integer] Global page number
-        def calculate_global_page_number(chapter_index, page_within_chapter, total_chapters)
+        def calculate_global_page_number(chapter_index, page_within_chapter, _total_chapters)
           pages_before = (0...chapter_index).sum { |i| calculate_pages_for_chapter(i) }
           pages_before + page_within_chapter + 1
         end
@@ -82,20 +82,20 @@ module EbookReader
         def perform_page_calculation(chapter_index, state)
           lines_per_page = calculate_lines_per_page
           return 0 if lines_per_page <= 0
-          
+
           chapter_lines = get_chapter_lines(chapter_index, state)
           wrapped_lines = @text_wrapper.wrap_chapter_lines(chapter_lines, calculate_column_width)
-          
+
           (wrapped_lines.size.to_f / lines_per_page).ceil
         end
 
         def calculate_lines_per_page
           state = @state_store.current_state
           terminal_height = state.dig(:ui, :terminal_height) || 24
-          
+
           # Account for header and footer
           content_height = terminal_height - 3 # header(1) + footer(1) + padding(1)
-          
+
           # Adjust for line spacing
           line_spacing = state.dig(:config, :line_spacing) || :normal
           case line_spacing
@@ -110,7 +110,7 @@ module EbookReader
           state = @state_store.current_state
           terminal_width = state.dig(:ui, :terminal_width) || 80
           view_mode = state.dig(:reader, :view_mode) || :split
-          
+
           case view_mode
           when :single
             terminal_width - 4 # Account for padding
@@ -121,7 +121,7 @@ module EbookReader
           end
         end
 
-        def get_chapter_lines(chapter_index, state)
+        def get_chapter_lines(_chapter_index, _state)
           # This would interface with the document/EPUB system
           # For now, return empty array as placeholder
           []
@@ -132,7 +132,7 @@ module EbookReader
           height = state.dig(:ui, :terminal_height) || 24
           view_mode = state.dig(:reader, :view_mode) || :split
           line_spacing = state.dig(:config, :line_spacing) || :normal
-          
+
           "#{chapter_index}_#{width}x#{height}_#{view_mode}_#{line_spacing}"
         end
       end
@@ -141,7 +141,7 @@ module EbookReader
       class DefaultTextWrapper
         def wrap_chapter_lines(lines, column_width)
           return [] if lines.empty? || column_width <= 0
-          
+
           wrapped = []
           lines.each do |line|
             if line.length <= column_width
@@ -158,19 +158,19 @@ module EbookReader
         def wrap_long_line(line, width)
           words = line.split(/\s+/)
           wrapped_lines = []
-          current_line = ""
-          
+          current_line = ''
+
           words.each do |word|
             if current_line.empty?
               current_line = word
-            elsif (current_line + " " + word).length <= width
-              current_line += " " + word
+            elsif "#{current_line} #{word}".length <= width
+              current_line += " #{word}"
             else
               wrapped_lines << current_line
               current_line = word
             end
           end
-          
+
           wrapped_lines << current_line unless current_line.empty?
           wrapped_lines
         end

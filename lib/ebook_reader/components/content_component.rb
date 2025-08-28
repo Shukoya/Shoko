@@ -20,8 +20,8 @@ module EbookReader
 
         state = @controller.state
         # Observe core fields that affect content rendering with GlobalState paths
-        state.add_observer(self, [:reader, :current_chapter], [:reader, :left_page], [:reader, :right_page],
-                           [:reader, :single_page], [:reader, :current_page_index], [:reader, :mode], [:config, :view_mode])
+        state.add_observer(self, %i[reader current_chapter], %i[reader left_page], %i[reader right_page],
+                           %i[reader single_page], %i[reader current_page_index], %i[reader mode], %i[config view_mode])
         @needs_redraw = true
       end
 
@@ -29,7 +29,7 @@ module EbookReader
       def state_changed(path, _old_value, _new_value)
         @needs_redraw = true
         # Reset renderer for mode changes or view mode changes
-        @view_renderer = nil if path == [:reader, :mode] || path == [:config, :view_mode]
+        @view_renderer = nil if [%i[reader mode], %i[config view_mode]].include?(path)
       end
 
       # Fill remaining space after fixed components

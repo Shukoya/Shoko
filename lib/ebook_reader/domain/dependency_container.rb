@@ -105,7 +105,10 @@ module EbookReader
       end
 
       def detect_circular_dependency(name)
-        raise CircularDependencyError, "Circular dependency detected for '#{name}'" if @resolving.include?(name)
+        if @resolving.include?(name)
+          raise CircularDependencyError,
+                "Circular dependency detected for '#{name}'"
+        end
 
         @resolving.add(name)
         begin
@@ -126,24 +129,31 @@ module EbookReader
         container.register_singleton(:state_store) { |c| Infrastructure::StateStore.new(c.resolve(:event_bus)) }
         container.register_singleton(:logger) { Infrastructure::Logger }
 
-        # Domain services (will be created below)
-        container.register_factory(:navigation_service) { |c| Services::NavigationService.new(c.resolve(:state_store)) }
-        container.register_factory(:bookmark_service) { |c| Services::BookmarkService.new(c.resolve(:state_store), c.resolve(:event_bus)) }
-        container.register_factory(:page_calculator) { |c| Services::PageCalculatorService.new(c.resolve(:state_store)) }
+        # Domain services with dependency injection
+        container.register_factory(:navigation_service) { |c| Domain::Services::NavigationService.new(c) }
+        container.register_factory(:bookmark_service) { |c| Domain::Services::BookmarkService.new(c) }
+        container.register_factory(:page_calculator) { |c| Domain::Services::PageCalculatorService.new(c) }
+        container.register_factory(:coordinate_service) { |c| Domain::Services::CoordinateService.new(c) }
+        container.register_factory(:layout_service) { |c| Domain::Services::LayoutService.new(c) }
+        container.register_factory(:clipboard_service) { |c| Domain::Services::ClipboardService.new(c) }
 
         container
       end
 
       def self.create_test_container
         require 'rspec/mocks'
-        
+
         container = DependencyContainer.new
-        
+
         # Mock services for testing
-        container.register(:event_bus, RSpec::Mocks::Double.new('EventBus', subscribe: nil, emit_event: nil))
-        container.register(:state_store, RSpec::Mocks::Double.new('StateStore', get: nil, set: nil, current_state: {}))
-        container.register(:logger, RSpec::Mocks::Double.new('Logger', info: nil, error: nil, debug: nil))
-        
+        container.register(:event_bus,
+                           RSpec::Mocks::Double.new('EventBus', subscribe: nil, emit_event: nil))
+        container.register(:state_store,
+                           RSpec::Mocks::Double.new('StateStore', get: nil, set: nil,
+                                                                  current_state: {}))
+        container.register(:logger,
+                           RSpec::Mocks::Double.new('Logger', info: nil, error: nil, debug: nil))
+
         container
       end
     end

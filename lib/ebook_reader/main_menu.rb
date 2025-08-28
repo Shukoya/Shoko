@@ -106,7 +106,6 @@ module EbookReader
       direction = case key
                   when "\e[A", 'k' then :up
                   when "\e[B", 'j' then :down
-                  else nil
                   end
       @main_menu_component.browse_screen.navigate(direction) if direction
     end
@@ -135,7 +134,7 @@ module EbookReader
       @main_menu_component.open_file_screen.input = @state.file_input
     end
 
-    def switch_to_edit_annotation(annotation, book_path)
+    def switch_to_edit_annotation(_annotation, _book_path)
       # This functionality would need to be implemented in a component
       # For now, switch to annotations mode
       switch_to_mode(:annotations)
@@ -149,7 +148,7 @@ module EbookReader
     def handle_selection
       handle_menu_selection
     end
-    
+
     def handle_cancel
       case @state.menu_mode
       when :menu
@@ -160,11 +159,11 @@ module EbookReader
         switch_to_mode(:menu)
       end
     end
-    
+
     def exit_current_mode
       handle_cancel
     end
-    
+
     def delete_selected_item
       # This would be context-dependent, but for now just pass
       case @state.menu_mode
@@ -174,7 +173,7 @@ module EbookReader
         # No-op for other modes
       end
     end
-    
+
     def handle_settings_input(key)
       @input_handler.handle_setting_change(key)
     end
@@ -275,11 +274,11 @@ module EbookReader
     def draw_screen
       height, width = Terminal.size
       Terminal.start_frame
-      
+
       surface = Components::Surface.new(Terminal)
       bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
       @main_menu_component.render(surface, bounds)
-      
+
       Terminal.end_frame
     end
 
@@ -300,7 +299,6 @@ module EbookReader
       @dispatcher.register_mode(:annotations, Commands::CommandFactory.create_bindings_for_mode(:annotations))
       @dispatcher.register_mode(:annotation_editor, Commands::CommandFactory.create_bindings_for_mode(:annotation_editor))
     end
-
 
     def handle_input(key)
       @input_handler.handle_input(key)

@@ -45,7 +45,7 @@ module EbookReader
       #
       # @param context [Object] The execution context
       # @return [Boolean] true if command can execute
-      def can_execute?(context)
+      def can_execute?(_context)
         true
       end
 
@@ -72,7 +72,7 @@ module EbookReader
       #
       # @param context [Object] The execution context
       # @param error [StandardError] The error that occurred
-      def handle_error(context, error)
+      def handle_error(_context, error)
         Infrastructure::Logger.error("Command #{description} failed", error: error.message)
       end
     end

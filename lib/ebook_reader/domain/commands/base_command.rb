@@ -34,9 +34,9 @@ module EbookReader
         def execute(context, params = {})
           validate_context(context)
           validate_parameters(params)
-          
+
           return :pass unless can_execute?(context, params)
-          
+
           begin
             result = perform(context, params)
             handle_success(context, result)
@@ -52,7 +52,7 @@ module EbookReader
         # @param context [Object] Execution context
         # @param params [Hash] Command parameters
         # @return [Boolean]
-        def can_execute?(context, params = {})
+        def can_execute?(_context, _params = {})
           true # Override in subclasses for conditional execution
         end
 
@@ -61,7 +61,7 @@ module EbookReader
         # @param context [Object] Execution context
         # @raise [ValidationError] if context is invalid
         def validate_context(context)
-          raise ValidationError.new("Context cannot be nil", command_name: name) if context.nil?
+          raise ValidationError.new('Context cannot be nil', command_name: name) if context.nil?
         end
 
         # Validate command parameters
@@ -99,18 +99,18 @@ module EbookReader
         # @param params [Hash] Command parameters
         def handle_error(context, error, params = {})
           log_error(context, error, params)
-          
+
           # Show user-friendly error message if possible
-          if context.respond_to?(:show_error_message)
-            context.show_error_message(user_friendly_error_message(error))
-          end
+          return unless context.respond_to?(:show_error_message)
+
+          context.show_error_message(user_friendly_error_message(error))
         end
 
         private
 
         def log_success(context, result)
           Infrastructure::Logger.debug(
-            "Command executed successfully",
+            'Command executed successfully',
             command: name,
             context: context.class.name,
             result: result.inspect
@@ -119,7 +119,7 @@ module EbookReader
 
         def log_error(context, error, params)
           Infrastructure::Logger.error(
-            "Command execution failed",
+            'Command execution failed',
             command: name,
             context: context.class.name,
             error: error.message,
@@ -135,7 +135,7 @@ module EbookReader
           when CommandError
             error.message
           else
-            "An unexpected error occurred"
+            'An unexpected error occurred'
           end
         end
       end

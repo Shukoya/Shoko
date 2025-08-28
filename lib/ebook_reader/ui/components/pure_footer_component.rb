@@ -32,19 +32,19 @@ module EbookReader
         def render_mode_info(surface, bounds, view_model)
           mode_text = build_mode_text(view_model)
           color = theme_color(:footer_text)
-          
+
           surface.write(bounds.x + 1, bounds.y, mode_text, color)
         end
 
         def render_help_hint(surface, bounds, view_model)
           return if view_model.mode == :help
-          
-          help_text = "Press ? for help"
+
+          help_text = 'Press ? for help'
           color = theme_color(:footer_hint)
-          
+
           help_x = bounds.x + bounds.width - help_text.length - 1
           return if help_x <= 10 # Not enough space
-          
+
           surface.write(help_x, bounds.y, help_text, color)
         end
 
@@ -52,16 +52,16 @@ module EbookReader
           case view_model.mode
           when :read
             if view_model.split_mode?
-              "Split View"
+              'Split View'
             else
-              "Single View"
+              'Single View'
             end
           when :toc
-            "Table of Contents - Use j/k to navigate, Enter to select"
+            'Table of Contents - Use j/k to navigate, Enter to select'
           when :bookmarks
-            "Bookmarks - Use j/k to navigate, Enter to jump, d to delete"
+            'Bookmarks - Use j/k to navigate, Enter to jump, d to delete'
           when :help
-            "Help - Press any key to return to reading"
+            'Help - Press any key to return to reading'
           else
             view_model.mode.to_s.capitalize
           end

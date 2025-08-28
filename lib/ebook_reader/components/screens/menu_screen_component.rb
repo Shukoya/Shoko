@@ -13,7 +13,7 @@ module EbookReader
         def initialize(state)
           super()
           @state = state
-          @state.add_observer(self, [:menu, :selected])
+          @state.add_observer(self, %i[menu selected])
         end
 
         MENU_ITEMS = [

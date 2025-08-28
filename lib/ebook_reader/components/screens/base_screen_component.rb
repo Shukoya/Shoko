@@ -17,7 +17,6 @@ module EbookReader
           available_height
         end
 
-
         protected
 
         def write_header(surface, bounds, title, help_text = nil)

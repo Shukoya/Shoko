@@ -7,7 +7,7 @@ module EbookReader
     class RenderingContext
       attr_reader :document, :page_manager, :state, :config, :view_model
 
-      def initialize(document:, page_manager: nil, state:, config:, view_model:)
+      def initialize(document:, state:, config:, view_model:, page_manager: nil)
         @document = document
         @page_manager = page_manager
         @state = state
@@ -36,6 +36,7 @@ module EbookReader
       # Dynamic mode page data access
       def get_page_data(index)
         return nil unless @page_manager && page_numbering_mode == :dynamic
+
         @page_manager.get_page(index)
       end
 

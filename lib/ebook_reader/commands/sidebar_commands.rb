@@ -11,8 +11,8 @@ module EbookReader
       end
 
       def can_execute?(context)
-        context.respond_to?(:state) && 
-        context.state.respond_to?(:sidebar_visible)
+        context.respond_to?(:state) &&
+          context.state.respond_to?(:sidebar_visible)
       end
 
       def description
@@ -21,7 +21,7 @@ module EbookReader
 
       protected
 
-      def perform(context, key = nil)
+      def perform(context, _key = nil)
         case @action
         when :toggle_sidebar
           toggle_sidebar(context)
@@ -58,20 +58,20 @@ module EbookReader
         state = context.state
         new_visible = !state.sidebar_visible
         state.sidebar_visible = new_visible
-        
+
         # Force single-page mode when sidebar is visible
         if new_visible && context.config.view_mode == :split
           context.config.view_mode = :single
           context.config.save
           force_content_refresh(context)
         end
-        
+
         :handled
       end
 
       def switch_tab(context, tab)
         state = context.state
-        
+
         # If sidebar not visible, show it and switch to tab
         unless state.sidebar_visible
           state.sidebar_visible = true
@@ -81,7 +81,7 @@ module EbookReader
             force_content_refresh(context)
           end
         end
-        
+
         state.sidebar_active_tab = tab
         :handled
       end
@@ -89,7 +89,7 @@ module EbookReader
       def navigate_sidebar(context, direction)
         state = context.state
         return :pass unless state.sidebar_visible
-        
+
         case state.sidebar_active_tab
         when :toc
           navigate_toc(state, direction)
@@ -98,7 +98,7 @@ module EbookReader
         when :bookmarks
           navigate_bookmarks(state, direction)
         end
-        
+
         :handled
       end
 
@@ -106,8 +106,8 @@ module EbookReader
         current = state.sidebar_toc_selected || 0
         # We'd need access to the document to get chapter count
         # For now, let's assume a reasonable range
-        max_chapters = 50  # This should be passed from context
-        
+        max_chapters = 50 # This should be passed from context
+
         case direction
         when :up
           state.sidebar_toc_selected = [current - 1, 0].max
@@ -120,7 +120,7 @@ module EbookReader
         current = state.sidebar_annotations_selected || 0
         # Similar constraint - we'd need annotation count
         max_annotations = 100
-        
+
         case direction
         when :up
           state.sidebar_annotations_selected = [current - 1, 0].max
@@ -133,7 +133,7 @@ module EbookReader
         current = state.sidebar_bookmarks_selected || 0
         bookmarks = state.bookmarks || []
         return if bookmarks.empty?
-        
+
         case direction
         when :up
           state.sidebar_bookmarks_selected = [current - 1, 0].max
@@ -145,7 +145,7 @@ module EbookReader
       def activate_sidebar_item(context)
         state = context.state
         return :pass unless state.sidebar_visible
-        
+
         case state.sidebar_active_tab
         when :toc
           activate_toc_item(context)
@@ -154,7 +154,7 @@ module EbookReader
         when :bookmarks
           activate_bookmark_item(context)
         end
-        
+
         :handled
       end
 
@@ -172,28 +172,28 @@ module EbookReader
         bookmarks = context.state.bookmarks || []
         selected = context.state.sidebar_bookmarks_selected || 0
         return unless selected < bookmarks.length
-        
+
         bookmark = bookmarks[selected]
-        if bookmark && context.respond_to?(:jump_to_bookmark)
-          context.state.bookmark_selected = selected
-          context.jump_to_bookmark
-        end
+        return unless bookmark && context.respond_to?(:jump_to_bookmark)
+
+        context.state.bookmark_selected = selected
+        context.jump_to_bookmark
       end
 
       def cycle_tabs(context, direction)
         state = context.state
         return :pass unless state.sidebar_visible
-        
-        tabs = [:toc, :annotations, :bookmarks]
+
+        tabs = %i[toc annotations bookmarks]
         current_index = tabs.index(state.sidebar_active_tab) || 0
-        
+
         case direction
         when :forward
           new_index = (current_index + 1) % tabs.length
         when :backward
           new_index = (current_index - 1) % tabs.length
         end
-        
+
         state.sidebar_active_tab = tabs[new_index]
         :handled
       end
@@ -201,13 +201,13 @@ module EbookReader
       def start_filter(context)
         state = context.state
         return :pass unless state.sidebar_visible && state.sidebar_active_tab == :toc
-        
+
         state.sidebar_toc_filter_active = true
-        state.sidebar_toc_filter = ""
+        state.sidebar_toc_filter = ''
         :handled
       end
 
-      def edit_annotation(context)
+      def edit_annotation(_context)
         # Implementation for editing annotation
         :pass
       end
@@ -215,25 +215,23 @@ module EbookReader
       def delete_item(context)
         state = context.state
         return :pass unless state.sidebar_visible
-        
+
         case state.sidebar_active_tab
         when :annotations
           # Delete selected annotation
         when :bookmarks
           # Delete selected bookmark
-          if context.respond_to?(:delete_selected_bookmark)
-            context.delete_selected_bookmark
-          end
+          context.delete_selected_bookmark if context.respond_to?(:delete_selected_bookmark)
         end
-        
+
         :handled
       end
 
       def force_content_refresh(context)
         # Force re-render of content component
-        if context.respond_to?(:force_redraw)
-          context.force_redraw
-        end
+        return unless context.respond_to?(:force_redraw)
+
+        context.force_redraw
       end
     end
   end

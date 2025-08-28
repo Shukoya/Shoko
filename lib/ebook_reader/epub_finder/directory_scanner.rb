@@ -30,6 +30,7 @@ module EbookReader
       def priority_directories
         [
           '~/Books',
+          '~/Bücher', # German books directory
           '~/Documents/Books',
           '~/Downloads',
           '~/Desktop',

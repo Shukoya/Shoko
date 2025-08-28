@@ -69,20 +69,26 @@ require_relative 'ebook_reader/input/binding_generator'
 
 # Domain layer - new architecture
 require_relative 'ebook_reader/domain/dependency_container'
+require_relative 'ebook_reader/domain/services/base_service'
 require_relative 'ebook_reader/domain/services/navigation_service'
 require_relative 'ebook_reader/domain/services/bookmark_service'
 require_relative 'ebook_reader/domain/services/page_calculator_service'
+require_relative 'ebook_reader/domain/services/coordinate_service'
+require_relative 'ebook_reader/domain/services/layout_service'
+require_relative 'ebook_reader/domain/services/clipboard_service'
 require_relative 'ebook_reader/domain/commands/base_command'
 require_relative 'ebook_reader/domain/commands/navigation_commands'
 require_relative 'ebook_reader/domain/commands/application_commands'
 require_relative 'ebook_reader/domain/commands/bookmark_commands'
 
-# UI layer - new architecture  
+# UI layer - new architecture
 require_relative 'ebook_reader/ui/view_models/reader_view_model'
 require_relative 'ebook_reader/ui/components/pure_content_component'
 
 # Application layer - new architecture
 require_relative 'ebook_reader/application/reader_application'
+require_relative 'ebook_reader/application/unified_application'
+require_relative 'ebook_reader/application/menu_application'
 
 # Core reader components (legacy - will be phased out)
 require_relative 'ebook_reader/core/global_state'
@@ -101,6 +107,8 @@ require_relative 'ebook_reader/components/reading/toc_renderer'
 require_relative 'ebook_reader/components/reading/bookmarks_renderer'
 require_relative 'ebook_reader/components/reading/view_renderer_factory'
 
+# Component system
+require_relative 'ebook_reader/components/component_interface'
 # Screen components
 require_relative 'ebook_reader/components/screens/base_screen_component'
 require_relative 'ebook_reader/components/screens/recent_screen_component'

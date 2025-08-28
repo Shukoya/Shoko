@@ -20,21 +20,11 @@ module EbookReader
           refresh_data
         end
 
-        def selected
-          @selected
-        end
+        attr_reader :selected, :current_annotation, :current_book_path
 
         def selected=(value)
           @selected = [value, 0].max
           update_current_annotation
-        end
-
-        def current_annotation
-          @current_annotation
-        end
-
-        def current_book_path
-          @current_book_path
         end
 
         def navigate(direction)
@@ -47,14 +37,14 @@ module EbookReader
           when :down
             @selected = [@selected + 1, annotations.length - 1].min
           end
-          
+
           update_current_annotation
         end
 
         def refresh_data
           # Load annotations from store - would need to implement proper loading
           @annotations_by_book = {}
-          
+
           # For now, use empty state - this would be populated from actual annotation store
           @selected = 0
           update_current_annotation
@@ -69,7 +59,7 @@ module EbookReader
           surface.write(bounds, 1, width - 20, "#{COLOR_TEXT_DIM}[ESC] Back#{Terminal::ANSI::RESET}")
 
           annotations = current_annotations
-          
+
           if annotations.empty?
             render_empty_state(surface, bounds, width, height)
           else
@@ -91,6 +81,7 @@ module EbookReader
 
         def current_annotations
           return [] unless @current_book_path
+
           @annotations_by_book[@current_book_path] || []
         end
 
@@ -101,10 +92,12 @@ module EbookReader
 
         def render_empty_state(surface, bounds, width, height)
           empty_text = "#{COLOR_TEXT_DIM}No annotations found#{Terminal::ANSI::RESET}"
-          surface.write(bounds, height / 2, [(width - empty_text.length + 10) / 2, 1].max, empty_text)
-          
+          surface.write(bounds, height / 2, [(width - empty_text.length + 10) / 2, 1].max,
+                        empty_text)
+
           help_text = "#{COLOR_TEXT_DIM}Annotations you create while reading will appear here#{Terminal::ANSI::RESET}"
-          surface.write(bounds, height / 2 + 2, [(width - help_text.length + 10) / 2, 1].max, help_text)
+          surface.write(bounds, (height / 2) + 2, [(width - help_text.length + 10) / 2, 1].max,
+                        help_text)
         end
 
         def render_annotations_list(surface, bounds, width, height, annotations)
@@ -126,9 +119,7 @@ module EbookReader
           total_annotations = annotations.length
           start_index = 0
 
-          if @selected >= list_height
-            start_index = @selected - list_height + 1
-          end
+          start_index = @selected - list_height + 1 if @selected >= list_height
 
           if total_annotations > list_height
             start_index = [start_index, total_annotations - list_height].min
@@ -144,15 +135,18 @@ module EbookReader
           # Extract annotation details
           text = annotation[:text] || 'No text'
           note = annotation[:note] || ''
-          book_title = annotation[:book_title] || 'Unknown Book'
-          
+          annotation[:book_title] || 'Unknown Book'
+
           # Truncate for display
           max_text_length = [width - 20, 40].max
           display_text = truncate_text(text, max_text_length)
-          
+
           prefix = is_selected ? '▶ ' : '  '
           content = "#{prefix}\"#{display_text}\""
-          content += " #{COLOR_TEXT_DIM}(#{truncate_text(note, 20)})#{Terminal::ANSI::RESET}" unless note.empty?
+          unless note.empty?
+            content += " #{COLOR_TEXT_DIM}(#{truncate_text(note,
+                                                           20)})#{Terminal::ANSI::RESET}"
+          end
 
           if is_selected
             surface.write(bounds, row, 1, SELECTION_HIGHLIGHT + content + Terminal::ANSI::RESET)
@@ -163,7 +157,8 @@ module EbookReader
 
         def truncate_text(text, max_length)
           return text if text.length <= max_length
-          "#{text[0...max_length - 3]}..."
+
+          "#{text[0...(max_length - 3)]}..."
         end
       end
     end

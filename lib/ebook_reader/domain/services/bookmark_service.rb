@@ -1,15 +1,24 @@
 # frozen_string_literal: true
 
+require_relative 'base_service'
+
 module EbookReader
   module Domain
     module Services
       # Pure business logic for bookmark management.
       # Replaces the tightly coupled BookmarkService with clean domain logic.
-      class BookmarkService
-        def initialize(state_store, event_bus, persistence = nil)
-          @state_store = state_store
-          @event_bus = event_bus
-          @persistence = persistence || DefaultBookmarkPersistence.new
+      class BookmarkService < BaseService
+        protected
+
+        def required_dependencies
+          %i[state_store event_bus]
+        end
+
+        def setup_service_dependencies
+          @state_store = resolve(:state_store)
+          @event_bus = resolve(:event_bus)
+          @persistence = resolve(:bookmark_persistence) if registered?(:bookmark_persistence)
+          @setup_service_dependencies ||= DefaultBookmarkPersistence.new
         end
 
         # Add bookmark at current position
@@ -18,10 +27,10 @@ module EbookReader
         # @return [Bookmark] Created bookmark
         def add_bookmark(text_snippet = nil)
           current_state = @state_store.current_state
-          
+
           bookmark = create_bookmark_from_state(current_state, text_snippet)
           save_bookmark(bookmark)
-          
+
           @event_bus.emit_event(:bookmark_added, { bookmark: bookmark })
           bookmark
         end
@@ -32,7 +41,7 @@ module EbookReader
         def remove_bookmark(bookmark)
           @persistence.delete_bookmark(current_book_path, bookmark)
           refresh_bookmarks
-          
+
           @event_bus.emit_event(:bookmark_removed, { bookmark: bookmark })
         end
 
@@ -42,7 +51,7 @@ module EbookReader
         def get_bookmarks
           book_path = current_book_path
           return [] unless book_path
-          
+
           @persistence.load_bookmarks(book_path)
         end
 
@@ -51,10 +60,10 @@ module EbookReader
         # @param bookmark [Bookmark] Bookmark to navigate to
         def jump_to_bookmark(bookmark)
           @state_store.update({
-            [:reader, :current_chapter] => bookmark.chapter_index,
-            [:reader, :current_page] => bookmark.page_offset
-          })
-          
+                                %i[reader current_chapter] => bookmark.chapter_index,
+                                %i[reader current_page] => bookmark.page_offset,
+                              })
+
           @event_bus.emit_event(:navigated_to_bookmark, { bookmark: bookmark })
         end
 
@@ -64,13 +73,13 @@ module EbookReader
         def current_position_bookmarked?
           current_state = @state_store.current_state
           bookmarks = get_bookmarks
-          
+
           current_chapter = current_state.dig(:reader, :current_chapter) || 0
           current_page = current_state.dig(:reader, :current_page) || 0
-          
+
           bookmarks.any? do |bookmark|
             bookmark.chapter_index == current_chapter &&
-            bookmark.page_offset == current_page
+              bookmark.page_offset == current_page
           end
         end
 
@@ -80,13 +89,13 @@ module EbookReader
         def bookmark_at_current_position
           current_state = @state_store.current_state
           bookmarks = get_bookmarks
-          
+
           current_chapter = current_state.dig(:reader, :current_chapter) || 0
           current_page = current_state.dig(:reader, :current_page) || 0
-          
+
           bookmarks.find do |bookmark|
             bookmark.chapter_index == current_chapter &&
-            bookmark.page_offset == current_page
+              bookmark.page_offset == current_page
           end
         end
 
@@ -96,7 +105,7 @@ module EbookReader
         # @return [Symbol] :added or :removed
         def toggle_bookmark(text_snippet = nil)
           existing_bookmark = bookmark_at_current_position
-          
+
           if existing_bookmark
             remove_bookmark(existing_bookmark)
             :removed
@@ -126,20 +135,20 @@ module EbookReader
         end
 
         def current_book_path
-          @state_store.get([:reader, :book_path])
+          @state_store.get(%i[reader book_path])
         end
 
         def save_bookmark(bookmark)
           book_path = current_book_path
           return unless book_path
-          
+
           @persistence.save_bookmark(book_path, bookmark)
           refresh_bookmarks
         end
 
         def refresh_bookmarks
           bookmarks = get_bookmarks
-          @state_store.set([:reader, :bookmarks], bookmarks)
+          @state_store.set(%i[reader bookmarks], bookmarks)
         end
       end
 

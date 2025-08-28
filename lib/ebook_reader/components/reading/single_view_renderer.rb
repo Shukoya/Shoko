@@ -111,21 +111,22 @@ module EbookReader
                                context.config, nil, context)
         end
 
-        def render_absolute_mode_with_context(surface, bounds, context)
+        def render_absolute_mode_with_context(_surface, bounds, context)
           chapter = context.current_chapter
           return unless chapter
 
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :single)
-          col_start = [(bounds.width - col_width) / 2, 1].max
-          displayable = adjust_for_line_spacing(content_height, context.config.line_spacing)
-          
+          [(bounds.width - col_width) / 2, 1].max
+          adjust_for_line_spacing(content_height, context.config.line_spacing)
+
           # For absolute mode, we need access to wrap_lines method - fall back to legacy for now
           # This is a limitation of the current architecture
           # In a complete refactor, wrap_lines would be moved to a service
-          
+
           # Since we can't access wrap_lines from context, we'll need to handle this differently
           # For now, we'll delegate back to the legacy method
-          raise NotImplementedError, 'Absolute mode with context not yet fully implemented - use legacy view_render'
+          raise NotImplementedError,
+                'Absolute mode with context not yet fully implemented - use legacy view_render'
         end
       end
     end
