@@ -137,6 +137,11 @@ module EbookReader
         container.register_factory(:layout_service) { |c| Domain::Services::LayoutService.new(c) }
         container.register_factory(:clipboard_service) { |c| Domain::Services::ClipboardService.new(c) }
 
+        # Legacy services (to be migrated to domain)
+        # TODO: Convert to domain service
+        container.register_factory(:chapter_cache) do |_c|
+          EbookReader::Services::ChapterCache.new
+        end
         container
       end
 

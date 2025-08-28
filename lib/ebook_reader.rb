@@ -56,10 +56,7 @@ require_relative 'ebook_reader/bookmark_manager'
 # Document handling
 require_relative 'ebook_reader/epub_document'
 
-# Command system - load before input system
-require_relative 'ebook_reader/commands/base_command'
-require_relative 'ebook_reader/commands/navigation_commands'
-require_relative 'ebook_reader/commands/command_factory'
+# Legacy command system removed - now using Domain commands only
 
 # Input system - load early for dependency resolution
 require_relative 'ebook_reader/input/key_definitions'
@@ -67,7 +64,7 @@ require_relative 'ebook_reader/input/command_factory'
 require_relative 'ebook_reader/input/config_loader'
 require_relative 'ebook_reader/input/binding_generator'
 
-# Domain layer - new architecture
+# Domain layer - new architecture (must load before bridge)
 require_relative 'ebook_reader/domain/dependency_container'
 require_relative 'ebook_reader/domain/services/base_service'
 require_relative 'ebook_reader/domain/services/navigation_service'
@@ -81,6 +78,9 @@ require_relative 'ebook_reader/domain/commands/navigation_commands'
 require_relative 'ebook_reader/domain/commands/application_commands'
 require_relative 'ebook_reader/domain/commands/bookmark_commands'
 
+# Input system bridge (load after domain commands)
+require_relative 'ebook_reader/input/domain_command_bridge'
+
 # UI layer - new architecture
 require_relative 'ebook_reader/ui/view_models/reader_view_model'
 require_relative 'ebook_reader/ui/components/pure_content_component'
@@ -92,8 +92,8 @@ require_relative 'ebook_reader/application/menu_application'
 
 # Core reader components (legacy - will be phased out)
 require_relative 'ebook_reader/core/global_state'
-require_relative 'ebook_reader/services/state_service'
-require_relative 'ebook_reader/services/page_manager'
+# Removed: state_service (replaced with direct state management)
+# Removed: page_manager (merged into PageCalculatorService)
 require_relative 'ebook_reader/services/main_menu_input_handler'
 require_relative 'ebook_reader/services/coordinate_service'
 require_relative 'ebook_reader/services/clipboard_service'

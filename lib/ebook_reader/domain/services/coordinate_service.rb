@@ -50,6 +50,53 @@ module EbookReader
           Math.sqrt(((x2 - x1)**2) + ((y2 - y1)**2))
         end
 
+        # Calculate optimal popup position near selection end
+        def calculate_popup_position(selection_end, popup_width, popup_height)
+          terminal_height, terminal_width = Terminal.size
+
+          # Start with position below selection end
+          popup_x = selection_end[:x]
+          popup_y = selection_end[:y] + 1
+
+          # Adjust if popup would go off right edge
+          popup_x = [terminal_width - popup_width, 1].max if popup_x + popup_width > terminal_width
+
+          # Adjust if popup would go off bottom edge
+          if popup_y + popup_height > terminal_height
+            # Try to position above selection instead
+            popup_y = [selection_end[:y] - popup_height, 1].max
+          end
+
+          {
+            x: popup_x,
+            y: popup_y,
+          }
+        end
+
+        # Check if coordinates are within bounds
+        def within_bounds?(x, y, bounds)
+          x >= bounds.x && x < (bounds.x + bounds.width) &&
+            y >= bounds.y && y < (bounds.y + bounds.height)
+        end
+
+        # Convert line-relative coordinates to absolute terminal coordinates
+        def line_to_terminal(line_col, line_start_col, terminal_row)
+          {
+            x: line_start_col + line_col,
+            y: terminal_row,
+          }
+        end
+
+        # Normalize position hash to consistent format
+        def normalize_position(pos)
+          return nil unless pos
+
+          {
+            x: pos[:x] || pos['x'],
+            y: pos[:y] || pos['y'],
+          }
+        end
+
         protected
 
         def required_dependencies

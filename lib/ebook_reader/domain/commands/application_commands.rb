@@ -39,13 +39,17 @@ module EbookReader
         private
 
         def handle_quit_to_menu(context)
-          state_store = context.dependencies.resolve(:state_store)
-
           # Save progress before quitting
           save_progress(context)
 
-          # Set running flag to false
-          state_store.set(%i[reader running], false)
+          # Set running flag to false in the context's state (GlobalState)
+          if context.respond_to?(:state)
+            context.state.running = false
+          else
+            # Fallback to state_store if context doesn't have direct state access
+            state_store = context.dependencies.resolve(:state_store)
+            state_store.set(%i[reader running], false)
+          end
         end
 
         def handle_quit_application(context)

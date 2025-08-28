@@ -25,6 +25,16 @@ module EbookReader
           handle_reader_error(path, e)
         ensure
           Terminal.setup
+          # Reset menu mode to browse after returning from reader
+          @state.menu_mode = :browse if @state
+          # Reactivate main menu input dispatcher after returning from reader
+          if respond_to?(:setup_input_dispatcher)
+            setup_input_dispatcher
+          elsif @dispatcher && respond_to?(:setup_consolidated_input_bindings)
+            # Alternative: reinitialize dispatcher and bindings manually
+            setup_consolidated_input_bindings
+            @dispatcher.activate(:browse)
+          end
         end
 
         def run_reader(path)

@@ -4,7 +4,10 @@ require_relative 'base_mode'
 
 module EbookReader
   module ReaderModes
-    # Handles the main reading view
+    # DEPRECATED: Legacy navigation command class
+    # This class is being phased out in favor of the unified Input system
+    # with Domain commands. Navigation now flows through:
+    # Input::Commands -> Domain::Commands -> Services
     class NavigationCommand
       COMMANDS = {
         'j' => :scroll_down,
@@ -29,8 +32,12 @@ module EbookReader
       }.freeze
 
       def self.execute(key, reader)
+        # Use the unified Input system instead of direct method calls
         command = COMMANDS[key]
-        reader.send(command) if command
+        return unless command
+
+        # Route through the Input system for proper command handling
+        Input::Commands.execute(command, reader, key)
       end
     end
 
@@ -83,10 +90,18 @@ module EbookReader
 
       def handle_mode_switch(key)
         case key
-        when 't', 'T' then reader.switch_mode(:toc)
-        when 'b' then reader.add_bookmark
-        when 'B' then reader.switch_mode(:bookmarks)
-        when '?' then reader.switch_mode(:help)
+        when 't', 'T'
+          # Use domain command for mode switching
+          Input::Commands.execute(:open_toc, reader, key)
+        when 'b'
+          # Bookmark operations remain direct for now (complex context needed)
+          reader.add_bookmark
+        when 'B'
+          # Use domain command for mode switching
+          Input::Commands.execute(:open_bookmarks, reader, key)
+        when '?'
+          # Use domain command for mode switching
+          Input::Commands.execute(:show_help, reader, key)
         end
       end
 
@@ -100,8 +115,12 @@ module EbookReader
 
       def handle_action(key)
         case key
-        when 'q' then reader.quit_to_menu
-        when 'Q' then reader.quit_application
+        when 'q'
+          # Use domain command for application lifecycle
+          Input::Commands.execute(:quit_to_menu, reader, key)
+        when 'Q'
+          # Use domain command for application lifecycle
+          Input::Commands.execute(:quit, reader, key)
         end
       end
 

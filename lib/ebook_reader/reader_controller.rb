@@ -9,11 +9,9 @@ require_relative 'constants/ui_constants'
 require_relative 'errors'
 require_relative 'constants/messages'
 require_relative 'helpers/reader_helpers'
-require_relative 'services/state_service'
 require_relative 'dynamic_page_calculator'
 require_relative 'presenters/reader_presenter'
 require_relative 'rendering/render_cache'
-require_relative 'services/chapter_cache'
 require_relative 'components/surface'
 require_relative 'components/rect'
 require_relative 'components/layouts/vertical'
@@ -24,7 +22,6 @@ require_relative 'components/footer_component'
 require_relative 'components/popup_overlay_component'
 require_relative 'components/sidebar_panel_component'
 require_relative 'input/dispatcher'
-require_relative 'services/layout_service'
 
 module EbookReader
   # Main reader interface for displaying EPUB content.
@@ -42,7 +39,7 @@ module EbookReader
   #
   # @attr_reader doc [EPUBDocument] The loaded EPUB document.
   # @attr_reader config [Config] The reader configuration.
-  # @attr_reader page_manager [Services::PageManager] Manages page calculations.
+  # @attr_reader page_manager [Domain::Services::PageCalculatorService] Manages page calculations.
   # @attr_reader path [String] The path to the EPUB file.
   # @attr_reader state [Core::GlobalState] The current state of the reader.
   class ReaderController
@@ -68,21 +65,30 @@ module EbookReader
                    :single_page, :single_page=, :current_page_index, :current_page_index=,
                    :left_page, :left_page=, :right_page, :right_page=
 
-    def initialize(epub_path, _config = nil)
+    def initialize(epub_path, _config = nil, dependencies = nil)
       @path = epub_path
       @state = Core::GlobalState.new
+      @dependencies = dependencies || Domain::ContainerFactory.create_default_container
+
+      # Resolve domain services
+      @page_calculator = @dependencies.resolve(:page_calculator)
+      if @dependencies.registered?(:chapter_cache)
+        @chapter_cache = @dependencies.resolve(:chapter_cache)
+      end
+      @layout_service = @dependencies.resolve(:layout_service)
+      @clipboard_service = @dependencies.resolve(:clipboard_service)
+
       @presenter = Presenters::ReaderPresenter.new(self, config)
       @selected_text = nil
       load_document
-      @page_manager = Services::PageManager.new(@doc, config) if @doc
 
-      # Initialize state service directly
-      @state_service = Services::StateService.new(self)
+      # Use page calculator instead of page manager (compatibility maintained)
+      @page_manager = @page_calculator if @doc
 
       load_data
       @terminal_cache = { width: nil, height: nil, checked_at: nil }
       @render_cache = Rendering::RenderCache.new
-      @chapter_cache = Services::ChapterCache.new
+      # NOTE: @chapter_cache now resolved via DI above
       @last_rendered_state = {}
       build_component_layout
       setup_input_dispatcher
@@ -352,8 +358,8 @@ module EbookReader
         { current: @state.current_page_index + 1, total: @page_manager.total_pages }
       else
         height, width = Terminal.size
-        _, content_height = Services::LayoutService.calculate_metrics(width, height,
-                                                                      @state.get(%i[config view_mode]))
+        _, content_height = @layout_service.calculate_metrics(width, height,
+                                                              @state.get(%i[config view_mode]))
         actual_height = adjust_for_line_spacing(content_height)
 
         return { current: 0, total: 0 } if actual_height <= 0
@@ -396,7 +402,7 @@ module EbookReader
         { left: { current: left_page, total: total }, right: { current: right_page, total: total } }
       else
         height, width = Terminal.size
-        _, content_height = Services::LayoutService.calculate_metrics(width, height, :split)
+        _, content_height = @layout_service.calculate_metrics(width, height, :split)
         actual_height = adjust_for_line_spacing(content_height)
 
         if actual_height <= 0
@@ -485,7 +491,7 @@ module EbookReader
 
       if config.page_numbering_mode == :dynamic && @page_manager
         # Build page map for dynamic mode
-        @page_manager.build_page_map(width, height)
+        @page_manager.build_page_map(width, height, @doc, @state)
       else
         # Update page map for absolute mode
         update_page_map(width, height)
@@ -574,9 +580,9 @@ module EbookReader
     end
 
     def setup_consolidated_reader_bindings
-      # Use CommandFactory for standardized command creation
-      @dispatcher.register_mode(:read, Commands::CommandFactory.create_bindings_for_mode(:read))
-      @dispatcher.register_mode(:popup_menu, Commands::CommandFactory.create_bindings_for_mode(:popup_menu))
+      # Register reader mode bindings using Input::CommandFactory patterns
+      register_read_bindings
+      register_popup_menu_bindings
 
       # Keep legacy bindings for modes not yet converted
       register_help_bindings_new
@@ -584,6 +590,21 @@ module EbookReader
       register_bookmarks_bindings_new
       register_annotation_editor_bindings_new
       register_annotations_list_bindings_new
+    end
+
+    def register_read_bindings
+      bindings = Input::CommandFactory.reader_navigation_commands
+      bindings.merge!(Input::CommandFactory.reader_control_commands)
+      @dispatcher.register_mode(:read, bindings)
+    end
+
+    def register_popup_menu_bindings
+      bindings = Input::CommandFactory.navigation_commands(nil, :selected, lambda { |_ctx|
+        5 # Reasonable default for popup menu options
+      })
+      bindings.merge!(Input::CommandFactory.menu_selection_commands)
+      bindings.merge!(Input::CommandFactory.exit_commands(:exit_popup_menu))
+      @dispatcher.register_mode(:popup_menu, bindings)
     end
 
     def register_help_bindings_new
@@ -657,7 +678,7 @@ module EbookReader
     def refresh_page_map(width, height)
       if @state.get(%i[config page_numbering_mode]) == :dynamic && @page_manager
         if size_changed?(width, height)
-          @page_manager.build_page_map(width, height)
+          @page_manager.build_page_map(width, height, @doc, @state)
           @state.current_page_index = [@state.current_page_index, @page_manager.total_pages - 1].min
           @state.current_page_index = [0, @state.current_page_index].max
         end
@@ -671,7 +692,7 @@ module EbookReader
     end
 
     def adjust_for_line_spacing(height)
-      Services::LayoutService.adjust_for_line_spacing(height, @state.get(%i[config line_spacing]))
+      @layout_service.adjust_for_line_spacing(height, @state.get(%i[config line_spacing]))
     end
 
     def load_document
@@ -776,8 +797,8 @@ module EbookReader
         return
       end
 
-      col_width, content_height = Services::LayoutService.calculate_metrics(width, height,
-                                                                            @state.get(%i[config view_mode]))
+      col_width, content_height = @layout_service.calculate_metrics(width, height,
+                                                                    @state.get(%i[config view_mode]))
       actual_height = adjust_for_line_spacing(content_height)
       return if actual_height <= 0
 
@@ -800,11 +821,32 @@ module EbookReader
     end
 
     def load_progress
-      progress = @state_service.load_progress
+      progress = ProgressManager.load(@path)
       return unless progress
 
-      @state.current_chapter = progress.fetch('chapter', 0)
-      @state.single_page = progress.fetch('line_offset', 0)
+      apply_progress_data(progress)
+    end
+
+    def apply_progress_data(progress)
+      # Set chapter (with validation)
+      chapter = progress['chapter'] || 0
+      @state.current_chapter = chapter >= @doc.chapter_count ? 0 : chapter
+
+      # Set page offset
+      line_offset = progress['line_offset'] || 0
+
+      if @state.page_numbering_mode == :dynamic && @page_manager
+        # Dynamic page mode
+        height, width = Terminal.size
+        @page_manager.build_page_map(width, height, @doc, @state)
+        @state.current_page_index = @page_manager.find_page_index(@state.current_chapter,
+                                                                  line_offset)
+      else
+        # Absolute page mode
+        page_offsets = line_offset
+        @state.single_page = page_offsets
+        @state.left_page = page_offsets
+      end
     end
 
     def page_offsets=(offset)
@@ -813,7 +855,37 @@ module EbookReader
     end
 
     def save_progress
-      @state_service.save_progress
+      return unless @path && @doc
+
+      progress_data = collect_progress_data
+      ProgressManager.save(@path, progress_data[:chapter], progress_data[:line_offset])
+    end
+
+    def collect_progress_data
+      if @state.page_numbering_mode == :dynamic && @page_manager
+        collect_dynamic_progress
+      else
+        collect_absolute_progress
+      end
+    end
+
+    def collect_dynamic_progress
+      page_data = @page_manager.get_page(@state.current_page_index)
+      return { chapter: 0, line_offset: 0 } unless page_data
+
+      {
+        chapter: page_data[:chapter_index],
+        line_offset: page_data[:start_line],
+      }
+    end
+
+    def collect_absolute_progress
+      line_offset = @state.view_mode == :split ? @state.left_page : @state.single_page
+
+      {
+        chapter: @state.current_chapter,
+        line_offset: line_offset,
+      }
     end
 
     def load_bookmarks
@@ -822,8 +894,8 @@ module EbookReader
 
     def extract_bookmark_text(chapter, line_offset)
       height, width = Terminal.size
-      col_width, = Services::LayoutService.calculate_metrics(width, height,
-                                                             @state.get(%i[config view_mode]))
+      col_width, = @layout_service.calculate_metrics(width, height,
+                                                     @state.get(%i[config view_mode]))
       wrapped = wrap_lines(chapter.lines || [], col_width)
       text = wrapped[line_offset] || 'Bookmark'
       text.strip[0, 50]
@@ -940,10 +1012,10 @@ module EbookReader
     end
 
     def handle_copy_to_clipboard_action(_action_data)
-      if Services::ClipboardService.available?
-        success = Services::ClipboardService.copy_with_feedback(@selected_text, lambda { |msg|
+      if @clipboard_service.available?
+        success = @clipboard_service.copy_with_feedback(@selected_text) do |msg|
           set_message(msg)
-        })
+        end
         set_message('Failed to copy to clipboard') unless success
       else
         set_message('Copy to clipboard not available')
@@ -964,10 +1036,6 @@ module EbookReader
     def position_at_chapter_end
       # Position at the end of current chapter
       @state.current_page_index = @state.total_pages - 1
-    end
-
-    def save_progress
-      @state_service.save_progress
     end
 
     public

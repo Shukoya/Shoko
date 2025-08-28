@@ -11,14 +11,17 @@ require_relative 'components/tooltip_overlay_component'
 require_relative 'reader_modes/annotation_editor_mode'
 require_relative 'reader_modes/annotations_mode'
 require_relative 'terminal_mouse_patch'
-require_relative 'services/coordinate_service'
-require_relative 'services/clipboard_service'
 
 module EbookReader
   # A Reader that supports mouse interactions for annotations.
   class MouseableReader < ReaderController
-    def initialize(epub_path, config = nil)
+    def initialize(epub_path, config = nil, dependencies = nil)
+      # Pass dependencies to parent ReaderController
       super
+
+      # Resolve coordinate service (clipboard already resolved in parent)
+      @coordinate_service = @dependencies.resolve(:coordinate_service)
+
       @mouse_handler = Annotations::MouseHandler.new
       @state.popup_menu = nil
       @selected_text = nil
@@ -95,7 +98,7 @@ module EbookReader
 
     def handle_popup_click(event)
       # Use coordinate service for consistent mouse-to-terminal conversion
-      terminal_coords = Services::CoordinateService.mouse_to_terminal(event[:x], event[:y])
+      terminal_coords = @coordinate_service.mouse_to_terminal(event[:x], event[:y])
 
       item = @state.popup_menu.handle_click(terminal_coords[:x], terminal_coords[:y])
 
@@ -139,7 +142,8 @@ module EbookReader
       return unless @state.selection
 
       # Use enhanced popup menu with coordinate service
-      @state.popup_menu = Components::EnhancedPopupMenu.new(@state.selection)
+      @state.popup_menu = Components::EnhancedPopupMenu.new(@state.selection, nil,
+                                                            @coordinate_service)
       return unless @state.popup_menu&.visible # Only proceed if menu was created successfully
 
       # Ensure popup menu has proper focus and state
@@ -167,7 +171,7 @@ module EbookReader
       return '' unless range && @state.rendered_lines
 
       # Use coordinate service for consistent normalization
-      normalized_range = Services::CoordinateService.normalize_selection_range(range)
+      normalized_range = @coordinate_service.normalize_selection_range(range)
       return '' unless normalized_range
 
       start_pos = normalized_range[:start]
@@ -181,7 +185,7 @@ module EbookReader
 
       (start_pos[:y]..end_pos[:y]).each do |y|
         # Use coordinate service for terminal coordinate conversion
-        terminal_coords = Services::CoordinateService.mouse_to_terminal(0, y)
+        terminal_coords = @coordinate_service.mouse_to_terminal(0, y)
         terminal_row = terminal_coords[:y]
 
         # Find line segments for this row that belong to the target column
@@ -228,17 +232,17 @@ module EbookReader
     end
 
     def copy_to_clipboard(text)
-      Services::ClipboardService.copy_with_feedback(text) do |message|
+      @clipboard_service.copy_with_feedback(text) do |message|
         set_message(message)
       end
-    rescue Services::ClipboardService::ClipboardError => e
+    rescue Domain::Services::ClipboardService::ClipboardError => e
       set_message("Copy failed: #{e.message}")
       false
     end
 
     def determine_column_bounds(click_pos)
       # Find which column the click position belongs to
-      terminal_coords = Services::CoordinateService.mouse_to_terminal(0, click_pos[:y])
+      terminal_coords = @coordinate_service.mouse_to_terminal(0, click_pos[:y])
       terminal_row = terminal_coords[:y]
 
       @state.rendered_lines.each_value do |line_info|

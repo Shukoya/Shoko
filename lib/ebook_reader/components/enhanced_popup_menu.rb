@@ -11,8 +11,15 @@ module EbookReader
     class EnhancedPopupMenu < BaseComponent
       attr_reader :visible, :selected_index, :x, :y, :width, :height
 
-      def initialize(selection_range, available_actions = nil)
-        @selection_range = Services::CoordinateService.normalize_selection_range(selection_range)
+      def initialize(selection_range, available_actions = nil, coordinate_service = nil)
+        @coordinate_service = coordinate_service
+
+        @selection_range = if @coordinate_service
+                             @coordinate_service.normalize_selection_range(selection_range)
+                           else
+                             # Fallback to legacy service during migration
+                             Services::CoordinateService.normalize_selection_range(selection_range)
+                           end
 
         unless @selection_range
           @visible = false
@@ -33,9 +40,13 @@ module EbookReader
         end
 
         # Calculate optimal position using coordinate service
-        position = Services::CoordinateService.calculate_popup_position(
-          @selection_range[:end], @width, @height
-        )
+        if @coordinate_service
+          position = @coordinate_service.calculate_popup_position(@selection_range[:end], @width,
+                                                                  @height)
+        else
+          position = Services::CoordinateService.calculate_popup_position(@selection_range[:end],
+                                                                          @width, @height)
+        end
         @x = position[:x]
         @y = position[:y]
       end
@@ -85,9 +96,12 @@ module EbookReader
       end
 
       def contains?(x, y)
-        Services::CoordinateService.within_bounds?(
-          x, y, Components::Rect.new(x: @x, y: @y, width: @width, height: @height)
-        )
+        bounds = Components::Rect.new(x: @x, y: @y, width: @width, height: @height)
+        if @coordinate_service
+          @coordinate_service.within_bounds?(x, y, bounds)
+        else
+          Services::CoordinateService.within_bounds?(x, y, bounds)
+        end
       end
 
       private

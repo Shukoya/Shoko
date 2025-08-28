@@ -84,7 +84,7 @@ module EbookReader
 
     def switch_to_mode(mode)
       @state.menu_mode = mode
-      @state.browse_selected = 0
+      @state.browse_selected = 0 # Reset selection for all submenu modes
       @dispatcher.activate(@state.menu_mode)
     end
 
@@ -186,7 +186,9 @@ module EbookReader
     end
 
     def setup_services
+      # Use legacy services temporarily during migration
       @scanner = Services::LibraryScanner.new
+      # Remove input_handler - replace with command system (TODO: Phase 2)
       @input_handler = Services::MainMenuInputHandler.new(self)
       setup_input_dispatcher
     end
@@ -289,15 +291,225 @@ module EbookReader
     end
 
     def setup_consolidated_input_bindings
-      # Use CommandFactory for standardized command creation
-      @dispatcher.register_mode(:menu, Commands::CommandFactory.create_bindings_for_mode(:menu))
-      @dispatcher.register_mode(:browse, Commands::CommandFactory.create_bindings_for_mode(:browse))
-      @dispatcher.register_mode(:search, Commands::CommandFactory.create_bindings_for_mode(:search))
-      @dispatcher.register_mode(:recent, Commands::CommandFactory.create_bindings_for_mode(:recent))
-      @dispatcher.register_mode(:settings, Commands::CommandFactory.create_bindings_for_mode(:settings))
-      @dispatcher.register_mode(:open_file, Commands::CommandFactory.create_bindings_for_mode(:open_file))
-      @dispatcher.register_mode(:annotations, Commands::CommandFactory.create_bindings_for_mode(:annotations))
-      @dispatcher.register_mode(:annotation_editor, Commands::CommandFactory.create_bindings_for_mode(:annotation_editor))
+      # Register mode bindings using Input::CommandFactory patterns
+      register_menu_bindings
+      register_browse_bindings
+      register_search_bindings
+      register_recent_bindings
+      register_settings_bindings
+      register_open_file_bindings
+      register_annotations_bindings
+      register_annotation_editor_bindings
+    end
+
+    private
+
+    def register_menu_bindings
+      bindings = Input::CommandFactory.navigation_commands(nil, :selected, lambda { |_ctx|
+        5 # 6 menu items (0-5)
+      })
+      bindings.merge!(Input::CommandFactory.menu_selection_commands)
+
+      # Main menu quit (quit entire application)
+      Input::KeyDefinitions::ACTIONS[:quit].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.cleanup_and_exit(0, '')
+          :handled
+        }
+      end
+
+      @dispatcher.register_mode(:menu, bindings)
+    end
+
+    def register_browse_bindings
+      bindings = {}
+
+      # Simple browse navigation
+      Input::KeyDefinitions::NAVIGATION[:up].each do |key|
+        bindings[key] = lambda do |ctx, _|
+          current = ctx.state.browse_selected
+          ctx.state.browse_selected = [current - 1, 0].max
+          :handled
+        end
+      end
+      Input::KeyDefinitions::NAVIGATION[:down].each do |key|
+        bindings[key] = lambda do |ctx, _|
+          current = ctx.state.browse_selected
+          epubs = ctx.instance_variable_defined?(:@filtered_epubs) ? ctx.instance_variable_get(:@filtered_epubs) : []
+          max_val = [(epubs&.length&.- 1), 0].max
+          ctx.state.browse_selected = [current + 1, max_val].min
+          :handled
+        end
+      end
+
+      # Browse-specific selection: open selected book (only if books are available)
+      Input::KeyDefinitions::ACTIONS[:confirm].each do |key|
+        bindings[key] = lambda do |ctx, _|
+          epubs = ctx.instance_variable_defined?(:@filtered_epubs) ? ctx.instance_variable_get(:@filtered_epubs) : []
+          ctx.open_selected_book if epubs && !epubs.empty?
+          :handled
+        end
+      end
+
+      # Exit browse mode
+      Input::KeyDefinitions::ACTIONS[:quit].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+
+      @dispatcher.register_mode(:browse, bindings)
+    end
+
+    def register_search_bindings
+      bindings = Input::CommandFactory.text_input_commands(:search_query)
+
+      # Go back to main menu
+      Input::KeyDefinitions::ACTIONS[:quit].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+      Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+
+      @dispatcher.register_mode(:search, bindings)
+    end
+
+    def register_recent_bindings
+      # Use Input::CommandFactory with browse_selected for recent mode navigation
+      bindings = Input::CommandFactory.navigation_commands(nil, :browse_selected, lambda { |ctx|
+        (ctx.instance_variable_get(:@filtered_epubs)&.length || 1) - 1
+      })
+
+      # Recent-specific selection: open selected recent book
+      Input::KeyDefinitions::ACTIONS[:confirm].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.open_selected_book
+          :handled
+        }
+      end
+
+      # Go back to main menu
+      Input::KeyDefinitions::ACTIONS[:quit].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+      Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+
+      @dispatcher.register_mode(:recent, bindings)
+    end
+
+    def register_settings_bindings
+      # Use Input::CommandFactory with browse_selected for settings mode navigation
+      bindings = Input::CommandFactory.navigation_commands(nil, :browse_selected, lambda { |_ctx|
+        10 # Estimated settings options
+      })
+
+      # Settings-specific selection: handle setting change
+      Input::KeyDefinitions::ACTIONS[:confirm].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.handle_settings_input(key)
+          :handled
+        }
+      end
+
+      # Go back to main menu
+      Input::KeyDefinitions::ACTIONS[:quit].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+      Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+
+      @dispatcher.register_mode(:settings, bindings)
+    end
+
+    def register_open_file_bindings
+      bindings = Input::CommandFactory.text_input_commands(:file_input)
+
+      # Go back to main menu
+      Input::KeyDefinitions::ACTIONS[:quit].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+      Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+
+      @dispatcher.register_mode(:open_file, bindings)
+    end
+
+    def register_annotations_bindings
+      # Use Input::CommandFactory with browse_selected for annotations mode navigation
+      bindings = Input::CommandFactory.navigation_commands(nil, :browse_selected, lambda { |ctx|
+        (ctx.state.annotations&.length || 1) - 1
+      })
+
+      # Annotations-specific selection: open/edit annotation
+      Input::KeyDefinitions::ACTIONS[:confirm].each do |key|
+        bindings[key] = ->(_ctx, _) { :handled } # Placeholder for now
+      end
+
+      # Go back to main menu
+      Input::KeyDefinitions::ACTIONS[:quit].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+      Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+
+      @dispatcher.register_mode(:annotations, bindings)
+    end
+
+    def register_annotation_editor_bindings
+      bindings = Input::CommandFactory.text_input_commands(:search_query)
+
+      # Go back to main menu
+      Input::KeyDefinitions::ACTIONS[:quit].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+      Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.state.menu_mode = :menu
+          :handled
+        }
+      end
+
+      @dispatcher.register_mode(:annotation_editor, bindings)
     end
 
     def handle_input(key)
