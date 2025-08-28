@@ -17,6 +17,22 @@ module EbookReader
           end
         end
 
+        # Open the currently selected recent book (uses RecentFiles list)
+        def open_selected_recent_book
+          items = RecentFiles.load.select { |r| r && r['path'] && File.exist?(r['path']) }
+          return unless items && !items.empty?
+
+          index = @state.browse_selected || 0
+          index = [[index, 0].max, items.length - 1].min
+          path = items[index]['path']
+          if path && File.exist?(path)
+            open_book(path)
+          else
+            @scanner.scan_message = 'File not found'
+            @scanner.scan_status = :error
+          end
+        end
+
         def open_book(path)
           return file_not_found unless File.exist?(path)
 

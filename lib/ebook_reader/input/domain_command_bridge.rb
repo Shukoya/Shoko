@@ -53,38 +53,12 @@ module EbookReader
         # @param symbol [Symbol] Input symbol
         # @param context [Object] Execution context
         # @return [Domain::Commands::BaseCommand, nil] Command or nil if no mapping
-        def symbol_to_command(symbol, _context = nil)
-          case symbol
-          # Reader navigation - temporarily disabled to fall back to direct method calls
-          # until state synchronization between GlobalState and StateStore is resolved
-          # when :next_page then navigation_command(:next_page)
-          # when :prev_page then navigation_command(:prev_page)
-          # when :next_chapter then navigation_command(:next_chapter)
-          # when :prev_chapter then navigation_command(:prev_chapter)
-          # when :scroll_up then navigation_command(:scroll_up)
-          # when :scroll_down then navigation_command(:scroll_down)
-          # when :go_to_start then navigation_command(:go_to_start)
-          # when :go_to_end then navigation_command(:go_to_end)
-
-          # Reader controls
-          when :toggle_view_mode then application_command(:toggle_view_mode)
-          when :add_bookmark then bookmark_command(:add)
-          # NOTE: :toggle_page_numbering_mode, :increase_line_spacing, :decrease_line_spacing
-          # fall back to direct method calls on reader controller
-
-          # Application modes
-          when :show_help then mode_switch_command(:help)
-          when :open_toc then mode_switch_command(:toc)
-          when :open_bookmarks then mode_switch_command(:bookmarks)
-
-            # Application lifecycle - temporarily disabled to fall back to direct method calls
-            # until state synchronization issues are resolved
-            # when :quit then application_command(:quit)
-            # when :quit_to_menu then application_command(:quit_to_menu)
-            # when :quit_application then application_command(:quit_application)
-
-            # Return nil for symbols that should remain as direct calls
-          end
+        def symbol_to_command(_symbol, _context = nil)
+          # Intentionally return nil for all symbols for now so Input::Commands
+          # falls back to direct method calls on the reader/menu controllers.
+          # This avoids state desync between GlobalState and StateStore until
+          # Phase 3 unifies state updates.
+          nil
         end
 
         # Check if a symbol can be converted to a Domain command

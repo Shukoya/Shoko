@@ -354,7 +354,14 @@ module EbookReader
       # Exit browse mode
       Input::KeyDefinitions::ACTIONS[:quit].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
+          :handled
+        }
+      end
+      # Also handle cancel (ESC) to return to main menu
+      Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
+        bindings[key] = lambda { |ctx, _|
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
@@ -368,13 +375,13 @@ module EbookReader
       # Go back to main menu
       Input::KeyDefinitions::ACTIONS[:quit].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
       Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
@@ -385,13 +392,15 @@ module EbookReader
     def register_recent_bindings
       # Use Input::CommandFactory with browse_selected for recent mode navigation
       bindings = Input::CommandFactory.navigation_commands(nil, :browse_selected, lambda { |ctx|
-        (ctx.instance_variable_get(:@filtered_epubs)&.length || 1) - 1
+        # Recent list comes from RecentFiles, not @filtered_epubs
+        items = ctx.load_recent_books rescue []
+        [(items&.length || 1) - 1, 0].max
       })
 
       # Recent-specific selection: open selected recent book
       Input::KeyDefinitions::ACTIONS[:confirm].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.open_selected_book
+          ctx.open_selected_recent_book
           :handled
         }
       end
@@ -399,13 +408,13 @@ module EbookReader
       # Go back to main menu
       Input::KeyDefinitions::ACTIONS[:quit].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
       Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
@@ -430,13 +439,13 @@ module EbookReader
       # Go back to main menu
       Input::KeyDefinitions::ACTIONS[:quit].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
       Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
@@ -450,13 +459,13 @@ module EbookReader
       # Go back to main menu
       Input::KeyDefinitions::ACTIONS[:quit].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
       Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
@@ -478,13 +487,13 @@ module EbookReader
       # Go back to main menu
       Input::KeyDefinitions::ACTIONS[:quit].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
       Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
@@ -498,13 +507,13 @@ module EbookReader
       # Go back to main menu
       Input::KeyDefinitions::ACTIONS[:quit].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
       Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
         bindings[key] = lambda { |ctx, _|
-          ctx.state.menu_mode = :menu
+          ctx.switch_to_mode(:menu)
           :handled
         }
       end
