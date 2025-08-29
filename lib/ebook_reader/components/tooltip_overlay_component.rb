@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 require_relative 'base_component'
-require_relative '../services/coordinate_service'
-
 module EbookReader
   module Components
     # Unified overlay component that handles all tooltip/popup rendering
@@ -13,6 +11,7 @@ module EbookReader
     class TooltipOverlayComponent < BaseComponent
       def initialize(controller)
         @controller = controller
+        @coordinate_service = Domain::ContainerFactory.create_default_container.resolve(:coordinate_service)
       end
 
       # Render all overlay elements: highlights, popups, tooltips
@@ -26,10 +25,10 @@ module EbookReader
       private
 
       def render_saved_annotations(surface, bounds)
-        return unless @controller.state.annotations
+        return unless @controller.state.get([:reader, :annotations])
 
-        @controller.state.annotations
-                   .select { |a| a['chapter_index'] == @controller.state.current_chapter }
+        @controller.state.get([:reader, :annotations])
+                   .select { |a| a['chapter_index'] == @controller.state.get([:reader, :current_chapter]) }
                    .each do |annotation|
           render_text_highlight(surface, bounds, annotation['range'], Terminal::ANSI::BG_CYAN)
         end
@@ -38,7 +37,7 @@ module EbookReader
       def render_active_selection(surface, bounds)
         # Render current selection highlight
         selection_range = @controller.instance_variable_get(:@mouse_handler)&.selection_range ||
-                          @controller.state.selection
+                          @controller.state.get([:reader, :selection])
 
         return unless selection_range
 
@@ -46,7 +45,7 @@ module EbookReader
       end
 
       def render_popup_menu(surface, bounds)
-        popup_menu = @controller.state.popup_menu
+        popup_menu = @controller.state.get([:reader, :popup_menu])
         return unless popup_menu&.visible
 
         # Handle both old and new popup menu interfaces
@@ -58,10 +57,10 @@ module EbookReader
       end
 
       def render_text_highlight(surface, bounds, range, color)
-        normalized_range = Services::CoordinateService.normalize_selection_range(range)
+        normalized_range = @coordinate_service.normalize_selection_range(range)
         return unless normalized_range
 
-        rendered_lines = @controller.state.rendered_lines || {}
+        rendered_lines = @controller.state.get([:reader, :rendered_lines]) || {}
         start_pos = normalized_range[:start]
         end_pos = normalized_range[:end]
 

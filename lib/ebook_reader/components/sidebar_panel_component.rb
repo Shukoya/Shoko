@@ -21,9 +21,9 @@ module EbookReader
         super() # Call BaseComponent constructor
         @controller = controller
         @tab_header = Sidebar::TabHeaderComponent.new(controller)
-        @toc_renderer = Sidebar::TocTabRenderer.new
-        @annotations_renderer = Sidebar::AnnotationsTabRenderer.new
-        @bookmarks_renderer = Sidebar::BookmarksTabRenderer.new
+        @toc_renderer = Sidebar::TocTabRenderer.new(controller)
+        @annotations_renderer = Sidebar::AnnotationsTabRenderer.new(controller)
+        @bookmarks_renderer = Sidebar::BookmarksTabRenderer.new(controller)
 
         # Observe sidebar state changes
         state = @controller.state
@@ -46,7 +46,7 @@ module EbookReader
         [preferred, MIN_WIDTH].max
       end
 
-      def render(surface, bounds)
+      def do_render(surface, bounds)
         state = @controller.state
         return unless state.sidebar_visible && bounds.width >= MIN_WIDTH
 
@@ -146,11 +146,11 @@ module EbookReader
 
         case state.sidebar_active_tab
         when :toc
-          @toc_renderer.render(surface, bounds, @controller)
+          @toc_renderer.render(surface, bounds)
         when :annotations
-          @annotations_renderer.render(surface, bounds, @controller)
+          @annotations_renderer.render(surface, bounds)
         when :bookmarks
-          @bookmarks_renderer.render(surface, bounds, @controller)
+          @bookmarks_renderer.render(surface, bounds)
         end
       end
     end

@@ -53,12 +53,18 @@ module EbookReader
         # @param symbol [Symbol] Input symbol
         # @param context [Object] Execution context
         # @return [Domain::Commands::BaseCommand, nil] Command or nil if no mapping
-        def symbol_to_command(_symbol, _context = nil)
-          # Intentionally return nil for all symbols for now so Input::Commands
-          # falls back to direct method calls on the reader/menu controllers.
-          # This avoids state desync between GlobalState and StateStore until
-          # Phase 3 unifies state updates.
-          nil
+        def symbol_to_command(symbol, _context = nil)
+          case symbol
+          when :toggle_view_mode then application_command(:toggle_view_mode)
+          when :show_help then application_command(:show_help)
+          # Defer TOC toggle to controller to ensure sidebar behavior
+          # when :open_toc then application_command(:show_toc)
+          when :open_bookmarks then application_command(:show_bookmarks)
+          when :open_annotations then application_command(:show_annotations)
+          when :quit_to_menu then application_command(:quit_to_menu)
+          else
+            nil
+          end
         end
 
         # Check if a symbol can be converted to a Domain command

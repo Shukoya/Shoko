@@ -29,6 +29,8 @@ module EbookReader
             handle_show_toc(context)
           when :show_bookmarks
             handle_show_bookmarks(context)
+          when :show_annotations
+            handle_show_annotations(context)
           else
             raise ExecutionError.new("Unknown application action: #{@action}", command_name: name)
           end
@@ -39,14 +41,15 @@ module EbookReader
         private
 
         def handle_quit_to_menu(context)
+          # Prefer controller implementation to preserve side effects
+          return context.quit_to_menu if context.respond_to?(:quit_to_menu)
+
           # Save progress before quitting
           save_progress(context)
-
-          # Set running flag to false in the context's state (GlobalState)
+          # Fallback: update state store
           if context.respond_to?(:state)
-            context.state.running = false
+            context.state.dispatch(EbookReader::Domain::Actions::QuitToMenuAction.new)
           else
-            # Fallback to state_store if context doesn't have direct state access
             state_store = context.dependencies.resolve(:state_store)
             state_store.set(%i[reader running], false)
           end
@@ -62,22 +65,19 @@ module EbookReader
         end
 
         def handle_toggle_view_mode(context)
-          state_store = context.dependencies.resolve(:state_store)
-          current_state = state_store.current_state
+          # Prefer controller implementation to preserve renderer reset side effects
+          return context.toggle_view_mode if context.respond_to?(:toggle_view_mode)
 
-          current_mode = current_state.dig(:reader, :view_mode) || :split
-          new_mode = current_mode == :split ? :single : :split
-
-          state_store.update({
-                               %i[reader view_mode] => new_mode,
-                               %i[ui needs_redraw] => true,
-                             })
-
-          # Clear page cache since layout changed
-          return unless context.dependencies.registered?(:page_calculator)
-
-          page_calculator = context.dependencies.resolve(:page_calculator)
-          page_calculator.clear_cache if page_calculator.respond_to?(:clear_cache)
+          # Fallback: dispatch action
+          if context.respond_to?(:state)
+            context.state.dispatch(EbookReader::Domain::Actions::ToggleViewModeAction.new)
+          else
+            state_store = context.dependencies.resolve(:state_store)
+            current_state = state_store.current_state
+            current_mode = current_state.dig(:reader, :view_mode) || :split
+            new_mode = current_mode == :split ? :single : :split
+            state_store.update({ %i[reader view_mode] => new_mode })
+          end
         end
 
         def handle_show_help(context)
@@ -86,13 +86,30 @@ module EbookReader
         end
 
         def handle_show_toc(context)
-          state_store = context.dependencies.resolve(:state_store)
-          state_store.set(%i[reader mode], :toc)
+          return context.open_toc if context.respond_to?(:open_toc)
+          if context.respond_to?(:state)
+            context.state.dispatch(EbookReader::Domain::Actions::SwitchReaderModeAction.new(mode: :toc))
+          else
+            context.dependencies.resolve(:state_store).set(%i[reader mode], :toc)
+          end
         end
 
         def handle_show_bookmarks(context)
-          state_store = context.dependencies.resolve(:state_store)
-          state_store.set(%i[reader mode], :bookmarks)
+          return context.open_bookmarks if context.respond_to?(:open_bookmarks)
+          if context.respond_to?(:state)
+            context.state.dispatch(EbookReader::Domain::Actions::SwitchReaderModeAction.new(mode: :bookmarks))
+          else
+            context.dependencies.resolve(:state_store).set(%i[reader mode], :bookmarks)
+          end
+        end
+
+        def handle_show_annotations(context)
+          return context.open_annotations if context.respond_to?(:open_annotations)
+          if context.respond_to?(:state)
+            context.state.dispatch(EbookReader::Domain::Actions::SwitchReaderModeAction.new(mode: :annotations))
+          else
+            context.dependencies.resolve(:state_store).set(%i[reader mode], :annotations)
+          end
         end
 
         def save_progress(context)
@@ -191,6 +208,10 @@ module EbookReader
 
         def self.show_bookmarks
           ApplicationCommand.new(:show_bookmarks)
+        end
+
+        def self.show_annotations
+          ApplicationCommand.new(:show_annotations)
         end
 
         def self.switch_to_mode(mode)

@@ -11,20 +11,20 @@ module EbookReader
         end
 
         def scroll_down
-          if @app_state.config_state.view_mode == :split
-            @state.left_page += 1
-            @state.right_page += 1
+          if @app_state.config_state.get([:config, :view_mode]) == :split
+            @state.update([:reader, :left_page], @state.get([:reader, :left_page]) + 1)
+            @state.update([:reader, :right_page], @state.get([:reader, :right_page]) + 1)
           else
-            @state.single_page += 1
+            @state.update([:reader, :single_page], @state.get([:reader, :single_page]) + 1)
           end
         end
 
         def scroll_up
-          if @app_state.config_state.view_mode == :split
-            @state.left_page = [@state.left_page - 1, 0].max
-            @state.right_page = [@state.right_page - 1, 0].max
+          if @app_state.config_state.get([:config, :view_mode]) == :split
+            @state.update([:reader, :left_page], [@state.get([:reader, :left_page]) - 1, 0].max)
+            @state.update([:reader, :right_page], [@state.get([:reader, :right_page]) - 1, 0].max)
           else
-            @state.single_page = [@state.single_page - 1, 0].max
+            @state.update([:reader, :single_page], [@state.get([:reader, :single_page]) - 1, 0].max)
           end
         end
 
@@ -37,16 +37,18 @@ module EbookReader
         end
 
         def next_chapter
-          return unless @state.current_chapter < @doc.chapter_count - 1
+          return unless @state.get([:reader, :current_chapter]) < @doc.chapter_count - 1
 
-          @state.current_chapter += 1
+          current = @state.get([:reader, :current_chapter])
+          @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(current + 1))
           reset_pages
         end
 
         def prev_chapter
-          return unless @state.current_chapter.positive?
+          return unless @state.get([:reader, :current_chapter]).positive?
 
-          @state.current_chapter -= 1
+          current = @state.get([:reader, :current_chapter])
+          @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(current - 1))
           reset_pages
         end
 
@@ -55,41 +57,41 @@ module EbookReader
         end
 
         def go_to_end
-          @state.current_chapter = @doc.chapter_count - 1
+          @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(@doc.chapter_count - 1))
           reset_pages
         end
 
         def toggle_view_mode
-          new_mode = @app_state.config_state.view_mode == :split ? :single : :split
-          @app_state.config_state.view_mode = new_mode
+          new_mode = @app_state.config_state.get([:config, :view_mode]) == :split ? :single : :split
+          @app_state.config_state.update([:config, :view_mode], new_mode)
           reset_pages
         end
 
         def toggle_page_numbering_mode
-          current = @app_state.config_state.page_numbering_mode
-          @app_state.config_state.page_numbering_mode = (current == :absolute ? :dynamic : :absolute)
+          current = @app_state.config_state.get([:config, :page_numbering_mode])
+          @app_state.config_state.update([:config, :page_numbering_mode], (current == :absolute ? :dynamic : :absolute))
         end
 
         def increase_line_spacing
           modes = %i[compact normal relaxed]
-          current = modes.index(@app_state.config_state.line_spacing) || 1
+          current = modes.index(@app_state.config_state.get([:config, :line_spacing])) || 1
           return unless current < 2
 
-          @app_state.config_state.line_spacing = modes[current + 1]
+          @app_state.config_state.update([:config, :line_spacing], modes[current + 1])
         end
 
         def decrease_line_spacing
           modes = %i[compact normal relaxed]
-          current = modes.index(@app_state.config_state.line_spacing) || 1
+          current = modes.index(@app_state.config_state.get([:config, :line_spacing])) || 1
           return unless current.positive?
 
-          @app_state.config_state.line_spacing = modes[current - 1]
+          @app_state.config_state.update([:config, :line_spacing], modes[current - 1])
         end
 
         def reset_pages
-          @state.single_page = 0
-          @state.left_page = 0
-          @state.right_page = 0
+          @state.update([:reader, :single_page], 0)
+          @state.update([:reader, :left_page], 0)
+          @state.update([:reader, :right_page], 0)
         end
       end
     end

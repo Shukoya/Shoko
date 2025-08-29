@@ -41,9 +41,9 @@ module EbookReader
         state = @controller.state
 
         # Reset rendered lines registry for selection/highlighting
-        @controller.state.rendered_lines = {}
+        @controller.state.update([:reader, :rendered_lines], {})
 
-        case state.mode
+        case state.get([:reader, :mode])
         when :help
           @help_renderer.render(surface, bounds, @controller)
         when :toc

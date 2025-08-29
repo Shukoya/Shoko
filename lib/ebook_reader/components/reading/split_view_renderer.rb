@@ -9,7 +9,7 @@ module EbookReader
       # Supports both dynamic and absolute page numbering modes
       class SplitViewRenderer < BaseViewRenderer
         def view_render(surface, bounds, controller)
-          if controller.config.page_numbering_mode == :dynamic
+          if EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(controller.config) == :dynamic
             render_dynamic_mode(surface, bounds, controller)
           else
             render_absolute_mode(surface, bounds, controller)
@@ -31,19 +31,19 @@ module EbookReader
           page_manager = controller.page_manager
           return unless page_manager
 
-          page_data = page_manager.get_page(controller.state.current_page_index)
+          page_data = page_manager.get_page(controller.state.get([:reader, :current_page_index]))
           return unless page_data
 
           state = controller.state
           config = controller.config
 
           # Get the next page for right column
-          right_page_data = page_manager.get_page(controller.state.current_page_index + 1)
+          right_page_data = page_manager.get_page(controller.state.get([:reader, :current_page_index]) + 1)
 
           col_width, _content_height = layout_metrics(bounds.width, bounds.height, :split)
 
           # Render components
-          chapter = controller.doc.get_chapter(state.current_chapter)
+          chapter = controller.doc.get_chapter(state.get([:reader, :current_chapter]))
           render_chapter_header(surface, bounds, state, chapter) if chapter
           render_dynamic_left_column(surface, bounds, page_data[:lines], col_width, config,
                                      controller)
@@ -57,14 +57,14 @@ module EbookReader
 
         # Absolute mode: Manually wraps and slices chapter content
         def render_absolute_mode(surface, bounds, controller)
-          chapter = controller.doc.get_chapter(controller.state.current_chapter)
+          chapter = controller.doc.get_chapter(controller.state.get([:reader, :current_chapter]))
           return unless chapter
 
           state = controller.state
           config = controller.config
 
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :split)
-          display_height = adjust_for_line_spacing(content_height, config.line_spacing)
+          display_height = adjust_for_line_spacing(content_height, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(controller.config))
           wrapped = controller.wrap_lines(chapter.lines || [], col_width)
 
           # Render components
@@ -77,7 +77,7 @@ module EbookReader
         end
 
         def render_chapter_header(surface, bounds, state, chapter)
-          chapter_info = "[#{state.current_chapter + 1}] #{chapter.title || 'Unknown'}"
+          chapter_info = "[#{state.get([:reader, :current_chapter]) + 1}] #{chapter.title || 'Unknown'}"
           surface.write(bounds, 1, 1,
                         Terminal::ANSI::BLUE + chapter_info[0, bounds.width - 2].to_s + Terminal::ANSI::RESET)
         end
@@ -113,7 +113,7 @@ module EbookReader
         def render_column_lines(surface, bounds, lines, start_col, col_width, config,
                                 controller = nil, context = nil)
           lines.each_with_index do |line, idx|
-            row = 3 + (config.line_spacing == :relaxed ? idx * 2 : idx)
+            row = 3 + (EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(controller.config) == :relaxed ? idx * 2 : idx)
             break if row >= bounds.height - 1
 
             draw_line(surface, bounds, line: line, row: row, col: start_col, width: col_width,
@@ -152,7 +152,7 @@ module EbookReader
           return unless chapter
 
           _, content_height = layout_metrics(bounds.width, bounds.height, :split)
-          adjust_for_line_spacing(content_height, context.config.line_spacing)
+          adjust_for_line_spacing(content_height, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
 
           # For absolute mode, we need access to wrap_lines method - fall back to legacy for now
           # This is a limitation of the current architecture
@@ -165,7 +165,7 @@ module EbookReader
         end
 
         def render_chapter_header_with_context(surface, bounds, context, chapter)
-          chapter_info = "[#{context.state.current_chapter + 1}] #{chapter.title || 'Unknown'}"
+          chapter_info = "[#{context.state.get([:reader, :current_chapter]) + 1}] #{chapter.title || 'Unknown'}"
           surface.write(bounds, 1, 1,
                         Terminal::ANSI::BLUE + chapter_info[0, bounds.width - 2].to_s + Terminal::ANSI::RESET)
         end

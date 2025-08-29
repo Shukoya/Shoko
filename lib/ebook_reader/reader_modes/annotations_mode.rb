@@ -9,6 +9,9 @@ module EbookReader
   module ReaderModes
     # Mode for displaying annotations for the current book
     class AnnotationsMode < BaseMode
+      attr_reader :annotations
+      attr_accessor :selected_annotation
+      
       def initialize(reader)
         super
         @annotations = Annotations::AnnotationStore.get(reader.path)
@@ -75,13 +78,11 @@ module EbookReader
         end
       end
 
-      private
-
       def jump_to_annotation
         annotation = @annotations[@selected_annotation]
         return unless annotation
 
-        reader.current_chapter = annotation['chapter_index']
+        reader.instance_variable_get(:@state).dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(annotation['chapter_index']))
         # For now, we just go to the chapter. Line-specific jumping is more complex.
         reader.send(:reset_pages)
         reader.switch_mode(:read)

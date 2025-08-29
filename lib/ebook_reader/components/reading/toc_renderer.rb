@@ -10,7 +10,7 @@ module EbookReader
         def view_render(surface, bounds, controller)
           doc = controller.doc
           state = controller.state
-          selected_index = state.toc_selected || 0
+          selected_index = state.get([:reader, :toc_selected]) || 0
 
           render_header(surface, bounds)
           render_chapters_list(surface, bounds, doc.chapters, selected_index)

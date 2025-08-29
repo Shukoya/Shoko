@@ -2,21 +2,28 @@
 
 module EbookReader
   module Services
-    # DEPRECATED: Legacy compatibility layer - delegates to Domain::Services::ClipboardService
-    # This file will be deleted in Phase 2. Use Domain::Services::ClipboardService directly.
+    # TEMPORARY: Compatibility wrapper for Services::ClipboardService
+    # This delegates to the domain service until all references are migrated
     class ClipboardService
       # Error raised when clipboard operations fail
       class ClipboardError < Domain::Services::ClipboardService::ClipboardError; end
 
-      # Delegate all calls to the domain service
-      def self.method_missing(method, *, **)
-        domain_service = Domain::ContainerFactory.create_default_container.resolve(:clipboard_service)
-        domain_service.send(method, *, **)
+      def self.copy(text)
+        container = Domain::ContainerFactory.create_default_container
+        clipboard_service = container.resolve(:clipboard_service)
+        clipboard_service.copy(text)
       end
 
-      def self.respond_to_missing?(method, include_private = false)
-        domain_service = Domain::ContainerFactory.create_default_container.resolve(:clipboard_service)
-        domain_service.respond_to?(method, include_private) || super
+      def self.copy_with_feedback(text, &block)
+        container = Domain::ContainerFactory.create_default_container
+        clipboard_service = container.resolve(:clipboard_service)
+        clipboard_service.copy_with_feedback(text, &block)
+      end
+
+      def self.available?
+        container = Domain::ContainerFactory.create_default_container
+        clipboard_service = container.resolve(:clipboard_service)
+        clipboard_service.available?
       end
     end
   end

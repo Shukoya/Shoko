@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 require_relative 'base_component'
-require_relative '../services/coordinate_service'
-require_relative '../services/clipboard_service'
+require_relative '../domain/services/coordinate_service'
+require_relative '../domain/services/clipboard_service'
 
 module EbookReader
   module Components
@@ -12,14 +12,10 @@ module EbookReader
       attr_reader :visible, :selected_index, :x, :y, :width, :height
 
       def initialize(selection_range, available_actions = nil, coordinate_service = nil)
-        @coordinate_service = coordinate_service
-
-        @selection_range = if @coordinate_service
-                             @coordinate_service.normalize_selection_range(selection_range)
-                           else
-                             # Fallback to legacy service during migration
-                             Services::CoordinateService.normalize_selection_range(selection_range)
-                           end
+        @coordinate_service = coordinate_service || Domain::ContainerFactory.create_default_container.resolve(:coordinate_service)
+        @clipboard_service = Domain::ContainerFactory.create_default_container.resolve(:clipboard_service)
+        
+        @selection_range = @coordinate_service.normalize_selection_range(selection_range)
 
         unless @selection_range
           @visible = false
@@ -40,13 +36,7 @@ module EbookReader
         end
 
         # Calculate optimal position using coordinate service
-        if @coordinate_service
-          position = @coordinate_service.calculate_popup_position(@selection_range[:end], @width,
-                                                                  @height)
-        else
-          position = Services::CoordinateService.calculate_popup_position(@selection_range[:end],
-                                                                          @width, @height)
-        end
+        position = @coordinate_service.calculate_popup_position(@selection_range[:end], @width, @height)
         @x = position[:x]
         @y = position[:y]
       end
@@ -97,11 +87,7 @@ module EbookReader
 
       def contains?(x, y)
         bounds = Components::Rect.new(x: @x, y: @y, width: @width, height: @height)
-        if @coordinate_service
-          @coordinate_service.within_bounds?(x, y, bounds)
-        else
-          Services::CoordinateService.within_bounds?(x, y, bounds)
-        end
+        @coordinate_service.within_bounds?(x, y, bounds)
       end
 
       private
@@ -117,7 +103,7 @@ module EbookReader
         }
 
         # Only offer clipboard if available
-        if Services::ClipboardService.available?
+        if @clipboard_service.available?
           actions << {
             label: 'Copy to Clipboard',
             action: :copy_to_clipboard,

@@ -27,7 +27,7 @@ module EbookReader
         ].freeze
 
         def do_render(surface, bounds)
-          selected = @state.selected || 0
+          selected = EbookReader::Domain::Selectors::MenuSelectors.selected(@state) || 0
 
           render_header(surface, bounds)
           render_menu_items(surface, bounds, selected)

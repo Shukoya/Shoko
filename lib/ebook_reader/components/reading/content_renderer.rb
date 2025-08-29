@@ -13,48 +13,48 @@ module EbookReader
         end
 
         def render_split(surface, bounds)
-          chapter = @doc.get_chapter(@state.current_chapter)
+          chapter = @doc.get_chapter(@state.get([:reader, :current_chapter]))
           return unless chapter
 
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :split)
           display_height = adjust_for_line_spacing(content_height,
-                                                   @app_state.config_state.line_spacing)
+                                                   @app_state.config_state.get([:config, :line_spacing]))
           wrapped = wrap_lines(chapter.lines || [], col_width)
 
-          chapter_info = "[#{@state.current_chapter + 1}] #{chapter.title || 'Unknown'}"
+          chapter_info = "[#{@state.get([:reader, :current_chapter]) + 1}] #{chapter.title || 'Unknown'}"
           surface.write_chapter_info(bounds, 1, 1, chapter_info[0, bounds.width - 2].to_s)
 
           draw_column(surface, bounds,
                       lines: wrapped,
-                      offset: @state.left_page || 0,
+                      offset: @state.get([:reader, :left_page]) || 0,
                       col_width: col_width,
                       height: display_height,
                       row: 3, col: 1,
-                      line_spacing: @app_state.config_state.line_spacing)
+                      line_spacing: @app_state.config_state.get([:config, :line_spacing]))
 
           draw_divider(surface, bounds, col_width)
 
           draw_column(surface, bounds,
                       lines: wrapped,
-                      offset: @state.right_page || 0,
+                      offset: @state.get([:reader, :right_page]) || 0,
                       col_width: col_width,
                       height: display_height,
                       row: 3, col: col_width + 5,
-                      line_spacing: @app_state.config_state.line_spacing)
+                      line_spacing: @app_state.config_state.get([:config, :line_spacing]))
         end
 
         def render_single_absolute(surface, bounds)
-          chapter = @doc.get_chapter(@state.current_chapter)
+          chapter = @doc.get_chapter(@state.get([:reader, :current_chapter]))
           return unless chapter
 
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :single)
           col_start = [(bounds.width - col_width) / 2, 1].max
           displayable = adjust_for_line_spacing(content_height,
-                                                @app_state.config_state.line_spacing)
+                                                @app_state.config_state.get([:config, :line_spacing]))
           wrapped = wrap_lines(chapter.lines || [], col_width)
-          lines = wrapped.slice(@state.single_page || 0, displayable) || []
+          lines = wrapped.slice(@state.get([:reader, :single_page]) || 0, displayable) || []
 
-          actual_lines = if @app_state.config_state.line_spacing == :relaxed
+          actual_lines = if @app_state.config_state.get([:config, :line_spacing]) == :relaxed
                            [(lines.size * 2) - 1,
                             0].max
                          else
@@ -64,7 +64,7 @@ module EbookReader
           start_row = [3 + (padding / 2), 3].max
 
           lines.each_with_index do |line, idx|
-            row = start_row + (@app_state.config_state.line_spacing == :relaxed ? idx * 2 : idx)
+            row = start_row + (@app_state.config_state.get([:config, :line_spacing]) == :relaxed ? idx * 2 : idx)
             break if row >= (3 + displayable)
 
             draw_line(surface, bounds, line: line, row: row, col: col_start, width: col_width)

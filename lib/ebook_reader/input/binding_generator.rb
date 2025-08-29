@@ -61,7 +61,7 @@ module EbookReader
 
         when :up, :down
           lambda do |ctx, _|
-            current = ctx.state.selected
+            current = EbookReader::Domain::Selectors::MenuSelectors.selected(ctx.state)
             max_val = ctx.respond_to?(:max_selection) ? ctx.max_selection : 5
 
             new_val = case action
@@ -69,7 +69,7 @@ module EbookReader
                       when :down then [current + 1, max_val].min
                       end
 
-            ctx.state.selected = new_val
+            ctx.state.update(%i[menu selected], new_val)
             :handled
           end
 

@@ -5,7 +5,7 @@ require 'ostruct'
 require_relative 'reader_controller'
 require_relative 'annotations/mouse_handler'
 require_relative 'annotations/annotation_store'
-require_relative 'ui/components/popup_menu'
+# Removed unused: ui/components/popup_menu
 require_relative 'components/enhanced_popup_menu'
 require_relative 'components/tooltip_overlay_component'
 require_relative 'reader_modes/annotation_editor_mode'
@@ -21,41 +21,44 @@ module EbookReader
 
       # Resolve coordinate service (clipboard already resolved in parent)
       @coordinate_service = @dependencies.resolve(:coordinate_service)
+      @terminal_service = @dependencies.resolve(:terminal_service)
 
       @mouse_handler = Annotations::MouseHandler.new
-      @state.popup_menu = nil
+      @state.dispatch(Domain::Actions::ClearPopupMenuAction.new)
       @selected_text = nil
-      @state.selection = nil
-      @state.rendered_lines = {}
+      @state.dispatch(Domain::Actions::ClearSelectionAction.new)
+      @state.dispatch(Domain::Actions::ClearRenderedLinesAction.new)
       @tooltip_overlay = Components::TooltipOverlayComponent.new(self)
       refresh_annotations
     end
 
     def run
-      Terminal.enable_mouse
+      @terminal_service.enable_mouse
       super
     ensure
-      Terminal.disable_mouse
+      @terminal_service.disable_mouse
     end
 
     def draw_screen
       # Render the base UI via components
-      @state.rendered_lines.clear
+      rendered_lines = @state.get([:reader, :rendered_lines])
+      rendered_lines.clear
+      @state.dispatch(Domain::Actions::UpdateRenderedLinesAction.new(rendered_lines))
       super
 
       # Use consolidated tooltip overlay component for all highlighting
-      if %i[read popup_menu].include?(@state.mode)
-        height, width = Terminal.size
+      if %i[read popup_menu].include?(@state.get([:reader, :mode]))
+        height, width = @terminal_service.size
         bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
-        surface = Components::Surface.new(Terminal)
+        surface = @terminal_service.create_surface
         @tooltip_overlay.render(surface, bounds)
       end
 
-      Terminal.end_frame
+      @terminal_service.end_frame
     end
 
     def read_input_keys
-      key = Terminal.read_input_with_mouse
+      key = @terminal_service.read_input_with_mouse
       return [] unless key
 
       if key.start_with?("\e[<")
@@ -64,7 +67,7 @@ module EbookReader
       end
 
       keys = [key]
-      while (extra = Terminal.read_key)
+      while (extra = @terminal_service.read_key)
         keys << extra
         break if keys.size > 10
       end
@@ -75,7 +78,8 @@ module EbookReader
       event = @mouse_handler.parse_mouse_event(input)
       return unless event
 
-      if @state.popup_menu&.visible && event[:released]
+      popup_menu = EbookReader::Domain::Selectors::ReaderSelectors.popup_menu(@state)
+      if popup_menu&.visible && event[:released]
         handle_popup_click(event)
         return
       end
@@ -100,51 +104,53 @@ module EbookReader
       # Use coordinate service for consistent mouse-to-terminal conversion
       terminal_coords = @coordinate_service.mouse_to_terminal(event[:x], event[:y])
 
-      item = @state.popup_menu.handle_click(terminal_coords[:x], terminal_coords[:y])
+      popup_menu = EbookReader::Domain::Selectors::ReaderSelectors.popup_menu(@state)
+      item = popup_menu.handle_click(terminal_coords[:x], terminal_coords[:y])
 
       if item
         handle_popup_action(item)
       else
-        @state.popup_menu = nil
+        @state.dispatch(Domain::Actions::ClearPopupMenuAction.new)
         @mouse_handler.reset
-        @state.selection = nil
+        @state.dispatch(Domain::Actions::ClearSelectionAction.new)
       end
       draw_screen
     end
 
     def refresh_highlighting
-      Terminal.size
+      @terminal_service.size
       # Re-render content area only
       super
       # Use consolidated tooltip overlay for all highlighting
-      height, width = Terminal.size
+      height, width = @terminal_service.size
       bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
-      surface = Components::Surface.new(Terminal)
+      surface = @terminal_service.create_surface
       @tooltip_overlay.render(surface, bounds)
-      Terminal.end_frame
+      @terminal_service.end_frame
     end
 
     def handle_selection_end
-      @state.selection = @mouse_handler.selection_range
-      return unless @state.selection
+      @state.dispatch(Domain::Actions::UpdateSelectionAction.new(@mouse_handler.selection_range))
+      return unless @state.get([:reader, :selection])
 
-      @selected_text = extract_selected_text(@state.selection)
+      @selected_text = extract_selected_text(@state.get([:reader, :selection]))
 
       if @selected_text && !@selected_text.strip.empty?
         show_popup_menu
       else
         @mouse_handler.reset
-        @state.selection = nil
+        @state.dispatch(Domain::Actions::ClearSelectionAction.new)
       end
     end
 
     def show_popup_menu
-      return unless @state.selection
+      selection = EbookReader::Domain::Selectors::ReaderSelectors.selection(@state)
+      return unless selection
 
       # Use enhanced popup menu with coordinate service
-      @state.popup_menu = Components::EnhancedPopupMenu.new(@state.selection, nil,
-                                                            @coordinate_service)
-      return unless @state.popup_menu&.visible # Only proceed if menu was created successfully
+      popup_menu = Components::EnhancedPopupMenu.new(selection, nil, @coordinate_service)
+      @state.dispatch(Domain::Actions::UpdatePopupMenuAction.new(popup_menu))
+      return unless popup_menu&.visible # Only proceed if menu was created successfully
 
       # Ensure popup menu has proper focus and state
       switch_mode(:popup_menu)
@@ -155,20 +161,21 @@ module EbookReader
 
     # Clear any active text selection and hide popup
     def clear_selection!
-      @state.popup_menu = nil
+      @state.dispatch(Domain::Actions::ClearPopupMenuAction.new)
       @mouse_handler&.reset
-      @state.selection = nil if @state
+      @state.dispatch(Domain::Actions::ClearSelectionAction.new) if @state
     end
 
     # Old highlighting methods removed - now handled by TooltipOverlayComponent
     # This eliminates the direct terminal writes that bypassed the component system
 
     def refresh_annotations
-      @state.annotations = Annotations::AnnotationStore.get(@path)
+      annotations = Annotations::AnnotationStore.get(@path)
+      @state.dispatch(Domain::Actions::UpdateAnnotationsAction.new(annotations))
     end
 
     def extract_selected_text(range)
-      return '' unless range && @state.rendered_lines
+      return '' unless range && @state.get([:reader, :rendered_lines])
 
       # Use coordinate service for consistent normalization
       normalized_range = @coordinate_service.normalize_selection_range(range)
@@ -191,7 +198,7 @@ module EbookReader
         # Find line segments for this row that belong to the target column
         selected_text_parts = []
 
-        @state.rendered_lines.each_value do |line_info|
+        @state.get([:reader, :rendered_lines]).each_value do |line_info|
           next unless line_info[:row] == terminal_row
 
           line_start_col = line_info[:col]
@@ -245,7 +252,7 @@ module EbookReader
       terminal_coords = @coordinate_service.mouse_to_terminal(0, click_pos[:y])
       terminal_row = terminal_coords[:y]
 
-      @state.rendered_lines.each_value do |line_info|
+      @state.get([:reader, :rendered_lines]).each_value do |line_info|
         next unless line_info[:row] == terminal_row
 
         line_start_col = line_info[:col]

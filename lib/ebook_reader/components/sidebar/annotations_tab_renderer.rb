@@ -8,9 +8,14 @@ module EbookReader
     module Sidebar
       # Annotations tab renderer for sidebar
       class AnnotationsTabRenderer < BaseComponent
-        def render(surface, bounds, controller)
-          annotations = Annotations::AnnotationStore.get(controller.path)
-          state = controller.state
+        def initialize(controller)
+          super()
+          @controller = controller
+        end
+
+        def do_render(surface, bounds)
+          annotations = Annotations::AnnotationStore.get(@controller.path)
+          state = @controller.state
           selected_index = state.sidebar_annotations_selected || 0
 
           return render_empty_message(surface, bounds) if annotations.empty?

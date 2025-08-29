@@ -2,7 +2,6 @@
 
 require_relative '../base_component'
 require_relative '../../models/rendering_context'
-require_relative '../../services/layout_service'
 
 module EbookReader
   module Components
@@ -10,7 +9,8 @@ module EbookReader
       # Base class for all view renderers
       class BaseViewRenderer < BaseComponent
         def initialize(services = nil)
-          super
+          super()
+          @layout_service = Domain::ContainerFactory.create_default_container.resolve(:layout_service)
         end
 
         # Override the base render method to maintain legacy interface
@@ -42,16 +42,15 @@ module EbookReader
         protected
 
         def layout_metrics(width, height, view_mode)
-          Services::LayoutService.calculate_metrics(width, height, view_mode)
+          @layout_service.calculate_metrics(width, height, view_mode)
         end
 
         def adjust_for_line_spacing(height, line_spacing = :normal)
-          Services::LayoutService.adjust_for_line_spacing(height, line_spacing)
+          @layout_service.adjust_for_line_spacing(height, line_spacing)
         end
 
         def calculate_center_start_row(content_height, lines_count, line_spacing)
-          Services::LayoutService.calculate_center_start_row(content_height, lines_count,
-                                                             line_spacing)
+          @layout_service.calculate_center_start_row(content_height, lines_count, line_spacing)
         end
 
         private
@@ -70,10 +69,10 @@ module EbookReader
           text = line.to_s[0, width]
           config = context ? context.config : controller&.config
 
-          if config.respond_to?(:highlight_keywords) && config.highlight_keywords
+          if config.get([:config, :highlight_keywords])
             text = highlight_keywords(text)
           end
-          text = highlight_quotes(text) if config.highlight_quotes
+          text = highlight_quotes(text) if config.get([:config, :highlight_quotes])
 
           abs_row = bounds.y + row - 1
           abs_col = bounds.x + col - 1
@@ -82,15 +81,16 @@ module EbookReader
           # Use a key that includes both row and column range to distinguish columns
           state = context ? context.state : controller&.state
           if state
-            state.rendered_lines ||= {}
+            rendered_lines = state.get([:reader, :rendered_lines]) || {}
             line_key = "#{abs_row}_#{abs_col}_#{abs_col + width - 1}"
-            state.rendered_lines[line_key] = {
+            rendered_lines[line_key] = {
               row: abs_row,
               col: abs_col,
               col_end: abs_col + width - 1,
               text: text,
               width: width,
             }
+            state.update([:reader, :rendered_lines], rendered_lines)
           end
 
           surface.write(bounds, row, col, Terminal::ANSI::WHITE + text + Terminal::ANSI::RESET)

@@ -33,13 +33,13 @@ module EbookReader
         end
 
         def selected
-          @state.browse_selected
+          EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state)
         end
 
         def navigate(key)
           return unless @filtered_epubs.any?
 
-          current = @state.browse_selected
+          current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state)
           max_index = @filtered_epubs.length - 1
 
           new_selected = case key
@@ -48,11 +48,12 @@ module EbookReader
                          else current
                          end
 
-          @state.browse_selected = new_selected
+          @state.update(%i[menu browse_selected], new_selected)
         end
 
         def selected_book
-          @filtered_epubs[@state.browse_selected]
+          browse_selected = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state)
+          @filtered_epubs[browse_selected]
         end
 
         def do_render(surface, bounds)
@@ -67,9 +68,9 @@ module EbookReader
 
           # Search bar
           surface.write(bounds, 3, 2, "#{COLOR_TEXT_PRIMARY}Search: #{Terminal::ANSI::RESET}")
-          search_query = @state.search_query || ''
+          search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
           search_display = search_query.dup
-          cursor_pos = @state.search_cursor.to_i.clamp(0, search_display.length)
+          cursor_pos = EbookReader::Domain::Selectors::MenuSelectors.search_cursor(@state).to_i.clamp(0, search_display.length)
           search_display.insert(cursor_pos, '_')
           surface.write(bounds, 3, 10, SELECTION_HIGHLIGHT + search_display + Terminal::ANSI::RESET)
 
@@ -97,7 +98,7 @@ module EbookReader
         private
 
         def filter_books
-          query = @state.search_query
+          query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
           return @filtered_epubs = @scanner.epubs || [] if query.nil? || query.empty?
 
           all_books = @scanner.epubs || []
@@ -135,7 +136,7 @@ module EbookReader
           list_height = height - list_start_row - 2
           return if list_height <= 0
 
-          selected = @state.browse_selected
+          selected = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state)
           start_index, visible_books = calculate_visible_range(list_height, selected)
 
           visible_books.each_with_index do |book, index|

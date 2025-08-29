@@ -73,30 +73,54 @@ require_relative 'ebook_reader/domain/services/page_calculator_service'
 require_relative 'ebook_reader/domain/services/coordinate_service'
 require_relative 'ebook_reader/domain/services/layout_service'
 require_relative 'ebook_reader/domain/services/clipboard_service'
+require_relative 'ebook_reader/domain/services/terminal_service'
 require_relative 'ebook_reader/domain/commands/base_command'
 require_relative 'ebook_reader/domain/commands/navigation_commands'
 require_relative 'ebook_reader/domain/commands/application_commands'
 require_relative 'ebook_reader/domain/commands/bookmark_commands'
+require_relative 'ebook_reader/domain/actions/base_action'
+require_relative 'ebook_reader/domain/actions/toggle_view_mode_action'
+require_relative 'ebook_reader/domain/actions/switch_reader_mode_action'
+require_relative 'ebook_reader/domain/actions/quit_to_menu_action'
+require_relative 'ebook_reader/domain/actions/update_reader_mode_action'
+require_relative 'ebook_reader/domain/actions/update_page_action'
+require_relative 'ebook_reader/domain/actions/update_selection_action'
+require_relative 'ebook_reader/domain/actions/update_message_action'
+require_relative 'ebook_reader/domain/actions/update_chapter_action'
+require_relative 'ebook_reader/domain/actions/update_config_action'
+require_relative 'ebook_reader/domain/actions/update_bookmarks_action'
+require_relative 'ebook_reader/domain/actions/update_mode_action'
+require_relative 'ebook_reader/domain/actions/update_sidebar_action'
+require_relative 'ebook_reader/domain/actions/update_selections_action'
+require_relative 'ebook_reader/domain/actions/update_popup_menu_action'
+require_relative 'ebook_reader/domain/actions/update_rendered_lines_action'
+require_relative 'ebook_reader/domain/actions/update_annotations_action'
+require_relative 'ebook_reader/domain/actions/action_creators'
+
+# Domain selectors for state access
+require_relative 'ebook_reader/domain/selectors/reader_selectors'
+require_relative 'ebook_reader/domain/selectors/menu_selectors'
+require_relative 'ebook_reader/domain/selectors/config_selectors'
 
 # Input system bridge (load after domain commands)
 require_relative 'ebook_reader/input/domain_command_bridge'
 
 # UI layer - new architecture
 require_relative 'ebook_reader/ui/view_models/reader_view_model'
-require_relative 'ebook_reader/ui/components/pure_content_component'
+# Removed unused: pure_content_component, pure_footer_component
 
-# Application layer - new architecture
-require_relative 'ebook_reader/application/reader_application'
+# Application layer - new architecture  
 require_relative 'ebook_reader/application/unified_application'
-require_relative 'ebook_reader/application/menu_application'
+# Removed unused: reader_application, menu_application
 
 # Core reader components (legacy - will be phased out)
 require_relative 'ebook_reader/core/global_state'
+# Removed state_accessor - no longer needed with direct state.get() and selectors
 # Removed: state_service (replaced with direct state management)
 # Removed: page_manager (merged into PageCalculatorService)
-require_relative 'ebook_reader/services/main_menu_input_handler'
-require_relative 'ebook_reader/services/coordinate_service'
-require_relative 'ebook_reader/services/clipboard_service'
+# Removed: services/main_menu_input_handler (replaced by dispatcher bindings)
+
+# Legacy service wrappers removed - now using domain services directly
 
 # Reading components
 require_relative 'ebook_reader/components/reading/base_view_renderer'

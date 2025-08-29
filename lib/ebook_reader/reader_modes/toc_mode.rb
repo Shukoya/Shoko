@@ -8,7 +8,7 @@ module EbookReader
     class TocMode < BaseMode
       def initialize(reader)
         super
-        @selected = reader.current_chapter
+        @selected = reader.state.get([:reader, :current_chapter])
       end
 
       ChapterItemContext = Struct.new(:chapter, :index, :row, :width, :selected)

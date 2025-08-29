@@ -6,9 +6,10 @@ module EbookReader
       # A module to handle file-related actions in the main menu.
       module FileActions
         def open_selected_book
-          return unless @filtered_epubs[@state.browse_selected]
+          browse_selected = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state)
+          return unless @filtered_epubs[browse_selected]
 
-          path = @filtered_epubs[@state.browse_selected]['path']
+          path = @filtered_epubs[browse_selected]['path']
           if path && File.exist?(path)
             open_book(path)
           else
@@ -22,7 +23,7 @@ module EbookReader
           items = RecentFiles.load.select { |r| r && r['path'] && File.exist?(r['path']) }
           return unless items && !items.empty?
 
-          index = @state.browse_selected || 0
+          index = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
           index = [[index, 0].max, items.length - 1].min
           path = items[index]['path']
           if path && File.exist?(path)
@@ -41,16 +42,8 @@ module EbookReader
           handle_reader_error(path, e)
         ensure
           Terminal.setup
-          # Reset menu mode to browse after returning from reader
-          @state.menu_mode = :browse if @state
-          # Reactivate main menu input dispatcher after returning from reader
-          if respond_to?(:setup_input_dispatcher)
-            setup_input_dispatcher
-          elsif @dispatcher && respond_to?(:setup_consolidated_input_bindings)
-            # Alternative: reinitialize dispatcher and bindings manually
-            setup_consolidated_input_bindings
-            @dispatcher.activate(:browse)
-          end
+          # Return cleanly to the browse screen with active bindings
+          switch_to_mode(:browse) if respond_to?(:switch_to_mode)
         end
 
         def run_reader(path)

@@ -18,29 +18,34 @@ module EbookReader
         end
 
         def move_search_cursor(delta)
-          @state.search_cursor = (@state.search_cursor + delta).clamp(0, @state.search_query.length)
+          search_cursor = EbookReader::Domain::Selectors::MenuSelectors.search_cursor(@state)
+          search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
+          @state.update(%i[menu search_cursor], (search_cursor + delta).clamp(0, search_query.length))
         end
 
         def handle_delete
-          return if @state.search_cursor >= @state.search_query.length
+          search_cursor = EbookReader::Domain::Selectors::MenuSelectors.search_cursor(@state)
+          search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
+          return if search_cursor >= search_query.length
 
-          query = @state.search_query.dup
-          query.slice!(@state.search_cursor)
-          @state.search_query = query
+          query = search_query.dup
+          query.slice!(search_cursor)
+          @state.update(%i[menu search_query], query)
           filter_books
         end
 
         def filter_books
-          @filtered_epubs = if @state.search_query.empty?
+          search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
+          @filtered_epubs = if search_query.empty?
                               @scanner.epubs
                             else
                               filter_by_query
                             end
-          @state.browse_selected = 0
+          @state.update(%i[menu browse_selected], 0)
         end
 
         def filter_by_query
-          query = @state.search_query.downcase
+          query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state).downcase
           @scanner.epubs.select do |book|
             name = book['name'] || ''
             path = book['path'] || ''

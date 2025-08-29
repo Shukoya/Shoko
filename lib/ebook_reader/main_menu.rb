@@ -18,13 +18,14 @@ module EbookReader
     include Actions::SettingsActions
     include Input::KeyDefinitions::Helpers
 
-    attr_reader :state, :input_handler, :filtered_epubs, :main_menu_component
+    attr_reader :state, :filtered_epubs, :main_menu_component
 
     def config
       @state
     end
 
-    def initialize
+    def initialize(dependencies = nil)
+      @dependencies = dependencies || Domain::ContainerFactory.create_default_container
       setup_state
       setup_services
       setup_components
@@ -47,7 +48,7 @@ module EbookReader
     end
 
     def handle_menu_selection
-      case @state.selected
+      case EbookReader::Domain::Selectors::MenuSelectors.selected(@state)
       when 0 then switch_to_browse
       when 1 then switch_to_mode(:recent)
       when 2 then switch_to_mode(:annotations)
@@ -58,41 +59,42 @@ module EbookReader
     end
 
     def handle_navigation(direction)
-      current = @state.selected
+      current = EbookReader::Domain::Selectors::MenuSelectors.selected(@state)
       max_val = 5 # 6 menu items (0-5)
 
-      @state.selected = case direction
+      new_selected = case direction
                         when :up then [current - 1, 0].max
                         when :down then [current + 1, max_val].min
                         else current
                         end
+      @state.update(%i[menu selected], new_selected)
     end
 
     def switch_to_browse
-      @state.menu_mode = :browse
-      @state.search_active = false
+      @state.update(%i[menu mode], :browse)
+      @state.update(%i[menu search_active], false)
       # Search active state is now managed in GlobalState
-      @dispatcher.activate(@state.menu_mode)
+      @dispatcher.activate(EbookReader::Domain::Selectors::MenuSelectors.mode(@state))
     end
 
     def switch_to_search
-      @state.menu_mode = :search
-      @state.search_active = true
+      @state.update(%i[menu mode], :search)
+      @state.update(%i[menu search_active], true)
       # Search active state is now managed in GlobalState
-      @dispatcher.activate(@state.menu_mode)
+      @dispatcher.activate(EbookReader::Domain::Selectors::MenuSelectors.mode(@state))
     end
 
     def switch_to_mode(mode)
-      @state.menu_mode = mode
-      @state.browse_selected = 0 # Reset selection for all submenu modes
-      @dispatcher.activate(@state.menu_mode)
+      @state.update(%i[menu mode], mode)
+      @state.update(%i[menu browse_selected], 0) # Reset selection for all submenu modes
+      @dispatcher.activate(EbookReader::Domain::Selectors::MenuSelectors.mode(@state))
     end
 
     def open_file_dialog
-      @state.file_input = ''
+      @state.update(%i[menu file_input], '')
       @open_file_screen.input = ''
-      @state.menu_mode = :open_file
-      @dispatcher.activate(@state.menu_mode)
+      @state.update(%i[menu mode], :open_file)
+      @dispatcher.activate(EbookReader::Domain::Selectors::MenuSelectors.mode(@state))
     end
 
     def cleanup_and_exit(code, message, error = nil)
@@ -110,28 +112,27 @@ module EbookReader
       @main_menu_component.browse_screen.navigate(direction) if direction
     end
 
-    def handle_recent_input(key)
-      @input_handler.handle_recent_input(key)
-    end
-
     def handle_backspace_input
-      if @state.search_active
-        if @state.search_query.length.positive?
-          @state.search_query = @state.search_query[0...-1]
+      if EbookReader::Domain::Selectors::MenuSelectors.search_active?(@state)
+        search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
+        if search_query.length.positive?
+          @state.update(%i[menu search_query], search_query[0...-1])
           # Filtering is now handled automatically by the component through state observation
         end
-      elsif @state.file_input.length.positive?
-        @state.file_input = @state.file_input[0...-1]
+      elsif @state.get([:menu, :file_input]).length.positive?
+        file_input = EbookReader::Domain::Selectors::MenuSelectors.file_input(@state)
+        @state.update(%i[menu file_input], file_input[0...-1])
       end
-      @main_menu_component.open_file_screen.input = @state.file_input
+      @main_menu_component.open_file_screen.input = @state.get([:menu, :file_input])
     end
 
     def handle_character_input(key)
       char = key.to_s
       return unless char.length == 1 && char.ord >= 32
 
-      @state.file_input = (@state.file_input + char)
-      @main_menu_component.open_file_screen.input = @state.file_input
+      file_input = EbookReader::Domain::Selectors::MenuSelectors.file_input(@state)
+      @state.update(%i[menu file_input], file_input + char)
+      @main_menu_component.open_file_screen.input = @state.get([:menu, :file_input])
     end
 
     def switch_to_edit_annotation(_annotation, _book_path)
@@ -150,7 +151,7 @@ module EbookReader
     end
 
     def handle_cancel
-      case @state.menu_mode
+      case EbookReader::Domain::Selectors::MenuSelectors.mode(@state)
       when :menu
         cleanup_and_exit(0, '')
       when :browse, :recent, :settings, :annotations, :annotation_editor, :open_file
@@ -166,7 +167,7 @@ module EbookReader
 
     def delete_selected_item
       # This would be context-dependent, but for now just pass
-      case @state.menu_mode
+      case EbookReader::Domain::Selectors::MenuSelectors.mode(@state)
       when :browse
         handle_delete if respond_to?(:handle_delete)
       else
@@ -174,22 +175,18 @@ module EbookReader
       end
     end
 
-    def handle_settings_input(key)
-      @input_handler.handle_setting_change(key)
-    end
+    # Settings are handled directly via dispatcher bindings
 
     private
 
     def setup_state
-      @state = Core::GlobalState.new
+      @state = @dependencies.resolve(:global_state)
       @filtered_epubs = []
     end
 
     def setup_services
-      # Use legacy services temporarily during migration
-      @scanner = Services::LibraryScanner.new
-      # Remove input_handler - replace with command system (TODO: Phase 2)
-      @input_handler = Services::MainMenuInputHandler.new(self)
+      # Use dependency injection for services
+      @scanner = @dependencies.resolve(:library_scanner)
       setup_input_dispatcher
     end
 
@@ -287,7 +284,7 @@ module EbookReader
     def setup_input_dispatcher
       @dispatcher = Input::Dispatcher.new(self)
       setup_consolidated_input_bindings
-      @dispatcher.activate(@state.menu_mode)
+      @dispatcher.activate(EbookReader::Domain::Selectors::MenuSelectors.mode(@state))
     end
 
     def setup_consolidated_input_bindings
@@ -304,10 +301,51 @@ module EbookReader
 
     private
 
+    def create_menu_navigation_commands(max_value)
+      commands = {}
+      # Up navigation
+      Input::KeyDefinitions::NAVIGATION[:up].each do |key|
+        commands[key] = lambda do |ctx, _|
+          current = EbookReader::Domain::Selectors::MenuSelectors.selected(ctx.state)
+          ctx.state.update(%i[menu selected], [current - 1, 0].max)
+          :handled
+        end
+      end
+      # Down navigation
+      Input::KeyDefinitions::NAVIGATION[:down].each do |key|
+        commands[key] = lambda do |ctx, _|
+          current = EbookReader::Domain::Selectors::MenuSelectors.selected(ctx.state)
+          ctx.state.update(%i[menu selected], [current + 1, max_value].min)
+          :handled
+        end
+      end
+      commands
+    end
+
+    def create_browse_navigation_commands(max_value_proc)
+      commands = {}
+      # Up navigation
+      Input::KeyDefinitions::NAVIGATION[:up].each do |key|
+        commands[key] = lambda do |ctx, _|
+          current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
+          ctx.state.update(%i[menu browse_selected], [current - 1, 0].max)
+          :handled
+        end
+      end
+      # Down navigation
+      Input::KeyDefinitions::NAVIGATION[:down].each do |key|
+        commands[key] = lambda do |ctx, _|
+          current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
+          max_val = max_value_proc.call(ctx)
+          ctx.state.update(%i[menu browse_selected], [current + 1, max_val].min)
+          :handled
+        end
+      end
+      commands
+    end
+
     def register_menu_bindings
-      bindings = Input::CommandFactory.navigation_commands(nil, :selected, lambda { |_ctx|
-        5 # 6 menu items (0-5)
-      })
+      bindings = create_menu_navigation_commands(5)
       bindings.merge!(Input::CommandFactory.menu_selection_commands)
 
       # Main menu quit (quit entire application)
@@ -327,17 +365,17 @@ module EbookReader
       # Simple browse navigation
       Input::KeyDefinitions::NAVIGATION[:up].each do |key|
         bindings[key] = lambda do |ctx, _|
-          current = ctx.state.browse_selected
-          ctx.state.browse_selected = [current - 1, 0].max
+          current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
+          ctx.state.update(%i[menu browse_selected], [current - 1, 0].max)
           :handled
         end
       end
       Input::KeyDefinitions::NAVIGATION[:down].each do |key|
         bindings[key] = lambda do |ctx, _|
-          current = ctx.state.browse_selected
+          current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
           epubs = ctx.instance_variable_defined?(:@filtered_epubs) ? ctx.instance_variable_get(:@filtered_epubs) : []
           max_val = [(epubs&.length&.- 1), 0].max
-          ctx.state.browse_selected = [current + 1, max_val].min
+          ctx.state.update(%i[menu browse_selected], [current + 1, max_val].min)
           :handled
         end
       end
@@ -390,8 +428,8 @@ module EbookReader
     end
 
     def register_recent_bindings
-      # Use Input::CommandFactory with browse_selected for recent mode navigation
-      bindings = Input::CommandFactory.navigation_commands(nil, :browse_selected, lambda { |ctx|
+      # Use custom navigation commands for recent mode 
+      bindings = create_browse_navigation_commands(lambda { |ctx|
         # Recent list comes from RecentFiles, not @filtered_epubs
         items = ctx.load_recent_books rescue []
         [(items&.length || 1) - 1, 0].max
@@ -423,18 +461,15 @@ module EbookReader
     end
 
     def register_settings_bindings
-      # Use Input::CommandFactory with browse_selected for settings mode navigation
-      bindings = Input::CommandFactory.navigation_commands(nil, :browse_selected, lambda { |_ctx|
-        10 # Estimated settings options
-      })
+      bindings = {}
 
-      # Settings-specific selection: handle setting change
-      Input::KeyDefinitions::ACTIONS[:confirm].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.handle_settings_input(key)
-          :handled
-        }
-      end
+      # Number keys for settings toggles
+      bindings['1'] = :toggle_view_mode
+      bindings['2'] = :toggle_page_numbers
+      bindings['3'] = :cycle_line_spacing
+      bindings['4'] = :toggle_highlight_quotes
+      bindings['5'] = :clear_cache
+      bindings['6'] = :toggle_page_numbering_mode
 
       # Go back to main menu
       Input::KeyDefinitions::ACTIONS[:quit].each do |key|
@@ -474,9 +509,10 @@ module EbookReader
     end
 
     def register_annotations_bindings
-      # Use Input::CommandFactory with browse_selected for annotations mode navigation
-      bindings = Input::CommandFactory.navigation_commands(nil, :browse_selected, lambda { |ctx|
-        (ctx.state.annotations&.length || 1) - 1
+      # Use custom navigation commands for annotations mode
+      bindings = create_browse_navigation_commands(lambda { |ctx|
+        annotations = EbookReader::Domain::Selectors::ReaderSelectors.annotations(ctx.state)
+        (annotations&.length || 1) - 1
       })
 
       # Annotations-specific selection: open/edit annotation
@@ -521,13 +557,7 @@ module EbookReader
       @dispatcher.register_mode(:annotation_editor, bindings)
     end
 
-    def handle_input(key)
-      @input_handler.handle_input(key)
-    end
-
-    def handle_menu_input(key)
-      @input_handler.handle_menu_input(key)
-    end
+    # Legacy input handler removed; dispatcher handles all input
 
     def open_book(path)
       return file_not_found unless File.exist?(path)

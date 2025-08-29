@@ -2,18 +2,25 @@
 
 module EbookReader
   module Services
-    # DEPRECATED: Legacy compatibility layer - delegates to Domain::Services::LayoutService
-    # This file will be deleted in Phase 2. Use Domain::Services::LayoutService directly.
+    # TEMPORARY: Compatibility wrapper for Services::LayoutService
+    # This delegates to the domain service until all references are migrated
     class LayoutService
-      # Delegate all calls to the domain service
-      def self.method_missing(method, *, **)
-        domain_service = Domain::ContainerFactory.create_default_container.resolve(:layout_service)
-        domain_service.send(method, *, **)
+      def self.calculate_metrics(width, height, view_mode)
+        container = Domain::ContainerFactory.create_default_container
+        layout_service = container.resolve(:layout_service)
+        layout_service.calculate_metrics(width, height, view_mode)
       end
 
-      def self.respond_to_missing?(method, include_private = false)
-        domain_service = Domain::ContainerFactory.create_default_container.resolve(:layout_service)
-        domain_service.respond_to?(method, include_private) || super
+      def self.adjust_for_line_spacing(height, line_spacing)
+        container = Domain::ContainerFactory.create_default_container
+        layout_service = container.resolve(:layout_service)
+        layout_service.adjust_for_line_spacing(height, line_spacing)
+      end
+
+      def self.calculate_center_start_row(content_height, lines_count, line_spacing)
+        container = Domain::ContainerFactory.create_default_container
+        layout_service = container.resolve(:layout_service)
+        layout_service.calculate_center_start_row(content_height, lines_count, line_spacing)
       end
     end
   end

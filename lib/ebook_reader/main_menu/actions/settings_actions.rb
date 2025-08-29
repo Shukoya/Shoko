@@ -5,46 +5,36 @@ module EbookReader
     module Actions
       # A module to handle settings-related actions in the main menu.
       module SettingsActions
-        def handle_setting_change(key)
-          @input_handler.handle_setting_change(key)
-        end
-
         def toggle_view_mode
-          return unless @config
-
-          current_mode = @config.view_mode
+          current_mode = @state.get(%i[config view_mode]) || :split
           new_mode = current_mode == :split ? :single : :split
-
-          # Validate new mode before setting
-          @config.view_mode = if %i[single split].include?(new_mode)
-                                new_mode
-                              else
-                                # Fallback to safe default
-                                :single
-                              end
-          @config.save
+          @state.update(%i[config view_mode], new_mode)
+          @state.save_config
         end
 
         def toggle_page_numbers
-          @config.show_page_numbers = !@config.show_page_numbers
-          @config.save
+          current = @state.get(%i[config show_page_numbers])
+          @state.update(%i[config show_page_numbers], !current)
+          @state.save_config
         end
 
         def cycle_line_spacing
           modes = %i[compact normal relaxed]
-          current = modes.index(@config.line_spacing) || 1
-          @config.line_spacing = modes[(current + 1) % 3]
-          @config.save
+          current = modes.index(@state.get(%i[config line_spacing])) || 1
+          @state.update(%i[config line_spacing], modes[(current + 1) % 3])
+          @state.save_config
         end
 
         def toggle_highlight_quotes
-          @config.highlight_quotes = !@config.highlight_quotes
-          @config.save
+          current = @state.get(%i[config highlight_quotes])
+          @state.update(%i[config highlight_quotes], !current)
+          @state.save_config
         end
 
         def toggle_page_numbering_mode
-          @config.page_numbering_mode = @config.page_numbering_mode == :absolute ? :dynamic : :absolute
-          @config.save
+          current = @state.get(%i[config page_numbering_mode])
+          @state.update(%i[config page_numbering_mode], current == :absolute ? :dynamic : :absolute)
+          @state.save_config
         end
 
         def clear_cache

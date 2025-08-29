@@ -7,11 +7,16 @@ module EbookReader
     module Sidebar
       # Bookmarks tab renderer for sidebar
       class BookmarksTabRenderer < BaseComponent
-        def render(surface, bounds, controller)
-          bookmarks = controller.state.bookmarks || []
-          doc = controller.doc
-          state = controller.state
-          selected_index = state.sidebar_bookmarks_selected || 0
+        def initialize(controller)
+          super()
+          @controller = controller
+        end
+
+        def do_render(surface, bounds)
+          bookmarks = @controller.state.get([:reader, :bookmarks]) || []
+          doc = @controller.doc
+          state = @controller.state
+          selected_index = state.get([:reader, :sidebar_bookmarks_selected]) || 0
 
           return render_empty_message(surface, bounds) if bookmarks.empty?
 

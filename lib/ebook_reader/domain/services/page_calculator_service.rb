@@ -36,7 +36,7 @@ module EbookReader
 
         # Build complete page map (PageManager compatibility)
         def build_page_map(terminal_width, terminal_height, doc, config)
-          return unless config.page_numbering_mode == :dynamic
+          return unless EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(config) == :dynamic
 
           @pages_data = []
           layout_metrics = prepare_layout_metrics(terminal_width, terminal_height, config)
@@ -276,7 +276,7 @@ module EbookReader
         end
 
         def calculate_layout_metrics(width, height, config)
-          col_width = if config.view_mode == :split
+          col_width = if EbookReader::Domain::Selectors::ConfigSelectors.view_mode(config) == :split
                         [(width - 3) / 2, 20].max
                       else
                         (width * 0.9).to_i.clamp(30, 120)
@@ -286,7 +286,7 @@ module EbookReader
         end
 
         def adjust_for_line_spacing(height, config)
-          case config.line_spacing
+          case EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config)
           when :relaxed
             [height / 2, 1].max
           when :compact

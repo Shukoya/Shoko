@@ -7,9 +7,14 @@ module EbookReader
     module Sidebar
       # TOC tab renderer for sidebar
       class TocTabRenderer < BaseComponent
-        def render(surface, bounds, controller)
-          doc = controller.doc
-          state = controller.state
+        def initialize(controller)
+          super()
+          @controller = controller
+        end
+
+        def do_render(surface, bounds)
+          doc = @controller.doc
+          state = @controller.state
 
           return render_empty_message(surface, bounds) if doc.chapters.empty?
 

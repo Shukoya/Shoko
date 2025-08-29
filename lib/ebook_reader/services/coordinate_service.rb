@@ -2,18 +2,37 @@
 
 module EbookReader
   module Services
-    # DEPRECATED: Legacy compatibility layer - delegates to Domain::Services::CoordinateService
-    # This file will be deleted in Phase 2. Use Domain::Services::CoordinateService directly.
+    # TEMPORARY: Compatibility wrapper for Services::CoordinateService
+    # This delegates to the domain service until all references are migrated
     class CoordinateService
-      # Delegate all calls to the domain service
-      def self.method_missing(method, *, **)
-        domain_service = Domain::ContainerFactory.create_default_container.resolve(:coordinate_service)
-        domain_service.send(method, *, **)
+      def self.mouse_to_terminal(x, y)
+        container = Domain::ContainerFactory.create_default_container
+        coordinate_service = container.resolve(:coordinate_service)
+        coordinate_service.mouse_to_terminal(x, y)
       end
 
-      def self.respond_to_missing?(method, include_private = false)
-        domain_service = Domain::ContainerFactory.create_default_container.resolve(:coordinate_service)
-        domain_service.respond_to?(method, include_private) || super
+      def self.terminal_to_mouse(x, y)
+        container = Domain::ContainerFactory.create_default_container
+        coordinate_service = container.resolve(:coordinate_service)
+        coordinate_service.terminal_to_mouse(x, y)
+      end
+
+      def self.normalize_selection_range(range)
+        container = Domain::ContainerFactory.create_default_container
+        coordinate_service = container.resolve(:coordinate_service)
+        coordinate_service.normalize_selection_range(range)
+      end
+
+      def self.calculate_popup_position(position, width, height)
+        container = Domain::ContainerFactory.create_default_container
+        coordinate_service = container.resolve(:coordinate_service)
+        coordinate_service.calculate_popup_position(position, width, height)
+      end
+
+      def self.within_bounds?(x, y, bounds)
+        container = Domain::ContainerFactory.create_default_container
+        coordinate_service = container.resolve(:coordinate_service)
+        coordinate_service.within_bounds?(x, y, bounds)
       end
     end
   end

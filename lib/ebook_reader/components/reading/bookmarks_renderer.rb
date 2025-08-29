@@ -8,7 +8,7 @@ module EbookReader
       # Renderer for bookmarks display
       class BookmarksRenderer < BaseViewRenderer
         def view_render(surface, bounds, controller)
-          bookmarks = controller.state.bookmarks || []
+          bookmarks = controller.state.get([:reader, :bookmarks]) || []
           doc = controller.doc
 
           render_header(surface, bounds)
@@ -37,7 +37,7 @@ module EbookReader
         def render_bookmarks_list(surface, bounds, bookmarks, doc, state)
           list_start = 4
           list_height = (bounds.height - 6) / 2
-          selected = state.bookmark_selected || 0
+          selected = state.get([:reader, :bookmark_selected]) || 0
 
           visible_start = [selected - (list_height / 2), 0].max
           visible_end = [visible_start + list_height, bookmarks.length].min

@@ -136,12 +136,22 @@ module EbookReader
         container.register_factory(:coordinate_service) { |c| Domain::Services::CoordinateService.new(c) }
         container.register_factory(:layout_service) { |c| Domain::Services::LayoutService.new(c) }
         container.register_factory(:clipboard_service) { |c| Domain::Services::ClipboardService.new(c) }
+        container.register_factory(:terminal_service) { |c| Domain::Services::TerminalService.new(c) }
 
         # Legacy services (to be migrated to domain)
         # TODO: Convert to domain service
         container.register_factory(:chapter_cache) do |_c|
           EbookReader::Services::ChapterCache.new
         end
+        
+        # Legacy state management (to be replaced with StateStore)
+        container.register_singleton(:global_state) { Core::GlobalState.new }
+        
+        # Library scanner service
+        container.register_factory(:library_scanner) do |_c|
+          EbookReader::Services::LibraryScanner.new
+        end
+        
         container
       end
 

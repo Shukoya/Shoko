@@ -14,11 +14,25 @@ module EbookReader
         def navigation_commands(_context, selection_field, max_value_proc)
           commands = {}
 
+          # Map selection fields to state paths
+          field_paths = {
+            selected: [:menu, :selected],
+            browse_selected: [:menu, :browse_selected],
+            toc_selected: [:reader, :toc_selected],
+            bookmark_selected: [:reader, :bookmark_selected],
+            sidebar_toc_selected: [:reader, :sidebar_toc_selected],
+            sidebar_bookmarks_selected: [:reader, :sidebar_bookmarks_selected],
+            sidebar_annotations_selected: [:reader, :sidebar_annotations_selected]
+          }
+
+          field_path = field_paths[selection_field.to_sym]
+          return commands unless field_path
+
           # Up navigation
           KeyDefinitions::NAVIGATION[:up].each do |key|
             commands[key] = lambda do |ctx, _|
-              current = ctx.state.send(selection_field)
-              ctx.state.send("#{selection_field}=", [current - 1, 0].max)
+              current = ctx.state.get(field_path)
+              ctx.state.update(field_path, [current - 1, 0].max)
               :handled
             end
           end
@@ -26,9 +40,9 @@ module EbookReader
           # Down navigation
           KeyDefinitions::NAVIGATION[:down].each do |key|
             commands[key] = lambda do |ctx, _|
-              current = ctx.state.send(selection_field)
+              current = ctx.state.get(field_path)
               max_val = max_value_proc.call(ctx)
-              ctx.state.send("#{selection_field}=", [current + 1, max_val].min)
+              ctx.state.update(field_path, [current + 1, max_val].min)
               :handled
             end
           end
@@ -139,6 +153,13 @@ module EbookReader
             commands[key] = :show_help
           end
 
+          # Annotations list
+          if KeyDefinitions::READER.key?(:show_annotations)
+            KeyDefinitions::READER[:show_annotations].each do |key|
+              commands[key] = :open_annotations
+            end
+          end
+
           KeyDefinitions::ACTIONS[:quit].each do |key|
             commands[key] = :quit_to_menu
           end
@@ -154,14 +175,22 @@ module EbookReader
         def text_input_commands(input_field, context_method = nil)
           commands = {}
 
+          # Map input fields to state paths
+          input_paths = {
+            search_query: [:menu, :search_query],
+            file_input: [:menu, :file_input]
+          }
+
+          input_path = input_paths[input_field.to_sym]
+
           # Backspace
           KeyDefinitions::ACTIONS[:backspace].each do |key|
             commands[key] = lambda do |ctx, _|
               if context_method
                 ctx.send(context_method, key)
-              else
-                current = ctx.state.send(input_field)
-                ctx.state.send("#{input_field}=", current.length.positive? ? current[0...-1] : current)
+              elsif input_path
+                current = ctx.state.get(input_path)
+                ctx.state.update(input_path, current.length.positive? ? current[0...-1] : current)
               end
               :handled
             end
@@ -173,9 +202,9 @@ module EbookReader
             if char.length == 1 && char.ord >= 32
               if context_method
                 ctx.send(context_method, key)
-              else
-                current = ctx.state.send(input_field)
-                ctx.state.send("#{input_field}=", current + char)
+              elsif input_path
+                current = ctx.state.get(input_path)
+                ctx.state.update(input_path, current + char)
               end
               :handled
             else

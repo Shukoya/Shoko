@@ -38,7 +38,7 @@ module EbookReader
       def line_spacing_setting
         {
           name: 'Line Spacing',
-          value: @config.line_spacing.to_s.capitalize,
+          value: EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(@config).to_s.capitalize,
           key: '3',
         }
       end
@@ -46,7 +46,7 @@ module EbookReader
       def highlight_quotes_setting
         {
           name: 'Highlight Quotes',
-          value: @config.highlight_quotes ? 'Yes' : 'No',
+          value: @config.get([:config, :highlight_quotes]) ? 'Yes' : 'No',
           key: '4',
         }
       end
@@ -63,13 +63,13 @@ module EbookReader
       def page_numbering_mode_setting
         {
           name: 'Page Numbering Mode',
-          value: @config.page_numbering_mode == :absolute ? 'Absolute' : 'Dynamic',
+          value: EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(@config) == :absolute ? 'Absolute' : 'Dynamic',
           key: '6',
         }
       end
 
       def view_mode_description
-        @config.view_mode == :split ? 'Duo Page (Side-by-Side)' : 'Single Page (Centered)'
+        EbookReader::Domain::Selectors::ConfigSelectors.view_mode(@config) == :split ? 'Duo Page (Side-by-Side)' : 'Single Page (Centered)'
       end
     end
   end

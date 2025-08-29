@@ -34,21 +34,21 @@ module EbookReader
           page_manager = controller.page_manager
           return unless page_manager
 
-          page_data = page_manager.get_page(controller.state.current_page_index)
+          page_data = page_manager.get_page(controller.state.get([:reader, :current_page_index]))
           return unless page_data
 
           config = controller.config
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :single)
           col_start = [(bounds.width - col_width) / 2, 1].max
           start_row = calculate_center_start_row(content_height, page_data[:lines].size,
-                                                 config.line_spacing)
+                                                 EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(controller.config))
 
           render_dynamic_lines(surface, bounds, page_data[:lines], start_row, col_start, col_width,
                                config, controller)
         end
 
         def render_absolute_mode(surface, bounds, controller)
-          chapter = controller.doc.get_chapter(controller.state.current_chapter)
+          chapter = controller.doc.get_chapter(controller.state.get([:reader, :current_chapter]))
           return unless chapter
 
           config = controller.config
@@ -56,11 +56,11 @@ module EbookReader
 
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :single)
           col_start = [(bounds.width - col_width) / 2, 1].max
-          displayable = adjust_for_line_spacing(content_height, config.line_spacing)
+          displayable = adjust_for_line_spacing(content_height, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(controller.config))
           wrapped = controller.wrap_lines(chapter.lines || [], col_width)
           lines = wrapped.slice(state.single_page || 0, displayable) || []
 
-          start_row = calculate_centered_start_row(content_height, lines.size, config.line_spacing)
+          start_row = calculate_centered_start_row(content_height, lines.size, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(controller.config))
 
           render_absolute_lines(surface, bounds, lines, start_row, col_start, col_width, config,
                                 controller, displayable)
@@ -69,7 +69,7 @@ module EbookReader
         def render_dynamic_lines(surface, bounds, lines, start_row, col_start, col_width, config,
                                  controller = nil, context = nil)
           lines.each_with_index do |line, idx|
-            row = start_row + (config.line_spacing == :relaxed ? idx * 2 : idx)
+            row = start_row + (EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(controller.config) == :relaxed ? idx * 2 : idx)
             break if row > bounds.height - 2
 
             draw_line(surface, bounds, line: line, row: row, col: col_start, width: col_width,
@@ -80,7 +80,7 @@ module EbookReader
         def render_absolute_lines(surface, bounds, lines, start_row, col_start, col_width, config,
                                   controller = nil, context = nil, displayable = nil)
           lines.each_with_index do |line, idx|
-            row = start_row + (config.line_spacing == :relaxed ? idx * 2 : idx)
+            row = start_row + (EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(controller.config) == :relaxed ? idx * 2 : idx)
             break if row >= (3 + (displayable || bounds.height))
 
             draw_line(surface, bounds, line: line, row: row, col: col_start, width: col_width,
@@ -105,7 +105,7 @@ module EbookReader
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :single)
           col_start = [(bounds.width - col_width) / 2, 1].max
           start_row = calculate_center_start_row(content_height, page_data[:lines].size,
-                                                 context.config.line_spacing)
+                                                 EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
 
           render_dynamic_lines(surface, bounds, page_data[:lines], start_row, col_start, col_width,
                                context.config, nil, context)
@@ -117,7 +117,7 @@ module EbookReader
 
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :single)
           [(bounds.width - col_width) / 2, 1].max
-          adjust_for_line_spacing(content_height, context.config.line_spacing)
+          adjust_for_line_spacing(content_height, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
 
           # For absolute mode, we need access to wrap_lines method - fall back to legacy for now
           # This is a limitation of the current architecture
