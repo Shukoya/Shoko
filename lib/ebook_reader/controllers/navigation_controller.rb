@@ -98,10 +98,26 @@ module EbookReader
 
       def jump_to_chapter(chapter_index)
         clear_selection!
-        @state.update({
-          [:reader, :current_chapter] => chapter_index,
-          [:reader, :current_page_index] => 0
-        })
+        if Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic && @page_manager
+          # Rebuild page map for current config and terminal size to ensure indices are correct
+          term = @dependencies.resolve(:terminal_service)
+          height, width = term.size
+          @page_manager.build_page_map(width, height, @doc, @state)
+          # In dynamic mode, current_page_index is global across the book
+          page_index = @page_manager.find_page_index(chapter_index, 0)
+          page_index = 0 if page_index.nil? || page_index.negative?
+          @state.update({
+            [:reader, :current_chapter] => chapter_index,
+            [:reader, :current_page_index] => page_index
+          })
+        else
+          # Absolute mode uses per-chapter offsets
+          @state.update({
+            [:reader, :current_chapter] => chapter_index,
+            [:reader, :single_page] => 0,
+            [:reader, :left_page] => 0
+          })
+        end
       end
 
       def scroll_down

@@ -152,8 +152,14 @@ module EbookReader
         case @state.get([:reader, :sidebar_active_tab])
         when :toc
           index = @state.get([:reader, :sidebar_toc_selected]) || 0
-          # Delegate to navigation controller
-          @dependencies.resolve(:navigation_controller).jump_to_chapter(index)
+          # Use domain navigation service to ensure dynamic indexing logic is applied consistently
+          begin
+            nav_service = @dependencies.resolve(:navigation_service)
+            nav_service.jump_to_chapter(index)
+          rescue StandardError
+            # Fallback to controller if service unavailable
+            @dependencies.resolve(:navigation_controller).jump_to_chapter(index)
+          end
 
           # Close the sidebar and restore previous view mode if it was stored
           prev_mode = @state.get([:reader, :sidebar_prev_view_mode])
