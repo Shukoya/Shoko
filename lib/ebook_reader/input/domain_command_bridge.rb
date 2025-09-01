@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative '../domain/commands/sidebar_commands'
+require_relative '../domain/commands/conditional_navigation_commands'
+
 module EbookReader
   module Input
     # Bridge to create Domain commands for Input system usage.
@@ -32,6 +35,28 @@ module EbookReader
           Domain::Commands::BookmarkCommand.new(action, params)
         end
 
+        # Create sidebar navigation commands
+        #
+        # @param action [Symbol] Sidebar action (:up, :down, :select)
+        # @return [Domain::Commands::SidebarCommand]
+        def sidebar_command(action)
+          Domain::Commands::SidebarCommand.new(action)
+        end
+
+        # Create conditional navigation commands
+        #
+        # @param type [Symbol] Type of conditional navigation
+        # @return [Domain::Commands::ConditionalNavigationCommand]
+        def conditional_navigation_command(type)
+          case type
+          when :up_or_sidebar then Domain::Commands::ConditionalNavigationCommand.up_or_sidebar
+          when :down_or_sidebar then Domain::Commands::ConditionalNavigationCommand.down_or_sidebar
+          when :select_or_sidebar then Domain::Commands::ConditionalNavigationCommand.select_or_sidebar
+          else
+            raise ArgumentError, "Unknown conditional navigation type: #{type}"
+          end
+        end
+
         # Create mode switching command (common application pattern)
         #
         # @param mode [Symbol] Target mode (:help, :toc, :bookmarks, etc.)
@@ -55,13 +80,30 @@ module EbookReader
         # @return [Domain::Commands::BaseCommand, nil] Command or nil if no mapping
         def symbol_to_command(symbol, _context = nil)
           case symbol
+          # Navigation commands - now use Domain commands
+          when :next_page then navigation_command(:next_page)
+          when :prev_page then navigation_command(:prev_page)
+          when :next_chapter then navigation_command(:next_chapter)
+          when :prev_chapter then navigation_command(:prev_chapter)
+          when :scroll_up then Domain::Commands::NavigationCommandFactory.scroll_up
+          when :scroll_down then Domain::Commands::NavigationCommandFactory.scroll_down
+          when :go_to_start then navigation_command(:go_to_start)
+          when :go_to_end then navigation_command(:go_to_end)
+          # Application commands
           when :toggle_view_mode then application_command(:toggle_view_mode)
           when :show_help then application_command(:show_help)
-          # Defer TOC toggle to controller to ensure sidebar behavior
-          # when :open_toc then application_command(:show_toc)
+          when :open_toc then application_command(:show_toc)
           when :open_bookmarks then application_command(:show_bookmarks)
           when :open_annotations then application_command(:show_annotations)
           when :quit_to_menu then application_command(:quit_to_menu)
+          # Conditional navigation commands
+          when :conditional_up then conditional_navigation_command(:up_or_sidebar)
+          when :conditional_down then conditional_navigation_command(:down_or_sidebar)
+          when :conditional_select then conditional_navigation_command(:select_or_sidebar)
+          # Direct sidebar commands
+          when :sidebar_up then sidebar_command(:up)
+          when :sidebar_down then sidebar_command(:down)
+          when :sidebar_select then sidebar_command(:select)
           else
             nil
           end

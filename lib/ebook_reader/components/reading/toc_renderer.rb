@@ -7,10 +7,14 @@ module EbookReader
     module Reading
       # Renderer for table of contents display
       class TocRenderer < BaseViewRenderer
-        def view_render(surface, bounds, controller)
-          doc = controller.doc
-          state = controller.state
-          selected_index = state.get([:reader, :toc_selected]) || 0
+        def initialize(dependencies = nil, controller = nil)
+          super(dependencies, controller)
+        end
+
+        def render_with_context(surface, bounds, context)
+          return unless context&.state && context&.document
+          doc = context.document
+          selected_index = context.state.get([:reader, :toc_selected]) || 0
 
           render_header(surface, bounds)
           render_chapters_list(surface, bounds, doc.chapters, selected_index)

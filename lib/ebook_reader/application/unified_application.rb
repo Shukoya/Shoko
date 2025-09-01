@@ -20,14 +20,13 @@ module EbookReader
       private
 
       def reader_mode
-        # Use original MouseableReader to ensure books open correctly
-        # ReaderApplication will be used after Phase 1 completion
-        MouseableReader.new(@epub_path).run
+        # Pass dependencies to MouseableReader
+        MouseableReader.new(@epub_path, nil, @dependencies).run
       end
 
       def menu_mode
-        # Keep original menu appearance - DO NOT CHANGE UI
-        MainMenu.new.run
+        # Pass dependencies to MainMenu
+        MainMenu.new(@dependencies).run
       end
     end
   end

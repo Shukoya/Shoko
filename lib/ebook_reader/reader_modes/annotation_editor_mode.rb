@@ -45,6 +45,8 @@ module EbookReader
         @input_handlers ||= begin
           h = {
             "\e" => lambda { |_|
+              # Cancel: clear any active selection/popup and return to read mode
+              reader.cleanup_popup_state if reader.respond_to?(:cleanup_popup_state)
               reader.switch_mode(:read)
               reader.draw_screen
             },
@@ -121,7 +123,19 @@ module EbookReader
       end
 
       def save_annotation
-        path = reader.instance_variable_get(:@path)
+        # Resolve current book path from UI controller/state rather than ivars
+        path = if reader.respond_to?(:current_book_path)
+                 reader.current_book_path
+               else
+                 # Fallback: attempt to read from state if exposed
+                 begin
+                   st = reader.instance_variable_get(:@state)
+                   st&.get(%i[reader book_path])
+                 rescue StandardError
+                   nil
+                 end
+               end
+        return unless path
 
         if @is_editing && @annotation
           Annotations::AnnotationStore.update(path, @annotation['id'], @note)
@@ -129,11 +143,11 @@ module EbookReader
           Annotations::AnnotationStore.add(path, @selected_text, @note, @range, @chapter_index)
         end
 
+        # Update UI/state and clear any active selection overlays
         reader.refresh_annotations if reader.respond_to?(:refresh_annotations)
+        reader.cleanup_popup_state if reader.respond_to?(:cleanup_popup_state)
         reader.send(:set_message, 'Annotation saved!')
         reader.switch_mode(:read)
-        # Redraw immediately so highlights and message appear without extra input
-        reader.draw_screen
       end
 
       def handle_backspace
@@ -162,6 +176,8 @@ module EbookReader
           line.empty? ? [''] : line.scan(/.{1,#{width}}/)
         end
       end
+
+      public :handle_character, :handle_backspace, :handle_enter, :save_annotation
     end
   end
 end

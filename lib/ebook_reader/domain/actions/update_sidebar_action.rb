@@ -11,20 +11,23 @@ module EbookReader
         end
 
         def apply(state)
+          # Build update hash for atomic state update
+          updates = {}
           payload.each do |field, value|
             case field
             when :visible
-              state.update([:reader, :sidebar_visible], value)
+              updates[[:reader, :sidebar_visible]] = value
             when :active_tab
-              state.update([:reader, :sidebar_active_tab], value)
+              updates[[:reader, :sidebar_active_tab]] = value
             when :toc_selected
-              state.update([:reader, :sidebar_toc_selected], value)
+              updates[[:reader, :sidebar_toc_selected]] = value
             when :annotations_selected
-              state.update([:reader, :sidebar_annotations_selected], value)
+              updates[[:reader, :sidebar_annotations_selected]] = value
             when :bookmarks_selected
-              state.update([:reader, :sidebar_bookmarks_selected], value)
+              updates[[:reader, :sidebar_bookmarks_selected]] = value
             end
           end
+          state.update(updates)
         end
       end
     end

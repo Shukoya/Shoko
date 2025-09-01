@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'fileutils'
+require 'json'
+
 module EbookReader
   module Infrastructure
     # Immutable state store with event-driven updates.
@@ -72,30 +75,137 @@ module EbookReader
         true # Base implementation allows all transitions
       end
 
+      # Convenience methods for compatibility with GlobalState
+      def terminal_size_changed?(width, height)
+        last_width = get([:reader, :last_width])
+        last_height = get([:reader, :last_height])
+        width != last_width || height != last_height
+      end
+
+      def update_terminal_size(width, height)
+        update({
+          [:reader, :last_width] => width,
+          [:reader, :last_height] => height,
+          [:ui, :terminal_width] => width,
+          [:ui, :terminal_height] => height
+        })
+      end
+
+      # State snapshot for persistence
+      def reader_snapshot
+        {
+          current_chapter: get([:reader, :current_chapter]),
+          page_offset: get([:reader, :single_page]),
+          mode: get([:reader, :mode]).to_s,
+          timestamp: Time.now.iso8601,
+        }
+      end
+
+      # Restore reader state from snapshot
+      def restore_reader_from(snapshot)
+        update({
+          [:reader, :current_chapter] => snapshot['current_chapter'] || 0,
+          [:reader, :single_page] => snapshot['page_offset'] || 0,
+          [:reader, :left_page] => snapshot['page_offset'] || 0,
+          [:reader, :mode] => (snapshot['mode'] || 'read').to_sym
+        })
+      end
+
+      # Configuration persistence methods
+      def save_config
+        ensure_config_dir
+        write_config_file
+      rescue StandardError
+        # Ignore save errors
+      end
+
+      def config_to_h
+        get([:config])
+      end
+
+      # Dispatch Domain::Actions to update state explicitly
+      def dispatch(action)
+        return unless action && action.respond_to?(:apply)
+
+        action.apply(self)
+      end
+
       private
 
       def build_initial_state
         {
           reader: {
+            # Position state
             current_chapter: 0,
-            current_page: 0,
-            view_mode: :split,
-            sidebar_visible: false,
+            left_page: 0,
+            right_page: 0,
+            single_page: 0,
+            current_page_index: 0,
+
+            # Mode and UI state
             mode: :read,
+            selection: nil,
+            message: nil,
             running: true,
+
+            # Lists and selections
+            toc_selected: 0,
+            bookmark_selected: 0,
+            bookmarks: [],
+            annotations: [],
+
+            # Pagination state
+            page_map: [],
+            total_pages: 0,
+            pages_per_chapter: [],
+
+            # Terminal sizing
+            last_width: 0,
+            last_height: 0,
+            page_offset: 0,
+
+            # Dynamic pagination
+            dynamic_page_map: nil,
+            dynamic_total_pages: 0,
+            dynamic_chapter_starts: [],
+            last_dynamic_width: 0,
+            last_dynamic_height: 0,
+
+            # UI state
+            rendered_lines: {},
+            popup_menu: nil,
+
+            # Sidebar state
+            sidebar_visible: false,
+            sidebar_active_tab: :toc,
+            sidebar_width_percent: 30,
+            sidebar_toc_selected: 0,
+            sidebar_annotations_selected: 0,
+            sidebar_bookmarks_selected: 0,
+            sidebar_toc_filter: nil,
+            sidebar_toc_filter_active: false,
           },
+
           menu: {
-            selected_index: 0,
-            mode: :main,
+            selected: 0,
+            mode: :menu,
+            browse_selected: 0,
             search_query: '',
+            search_cursor: 0,
+            file_input: '',
             search_active: false,
           },
+
           config: {
+            view_mode: :split,
             line_spacing: :normal,
             page_numbering_mode: :absolute,
             theme: :dark,
             show_page_numbers: true,
+            highlight_quotes: false,
+            highlight_keywords: false,
           },
+
           ui: {
             terminal_width: 80,
             terminal_height: 24,
@@ -178,6 +288,50 @@ module EbookReader
 
       def get_nested_value(hash, path)
         path.reduce(hash) { |h, key| h&.dig(key) }
+      end
+
+      # Configuration file management
+      CONFIG_DIR = File.expand_path('~/.config/reader')
+      CONFIG_FILE = File.join(CONFIG_DIR, 'config.json')
+      SYMBOL_KEYS = %i[view_mode line_spacing page_numbering_mode theme].freeze
+
+      def ensure_config_dir
+        FileUtils.mkdir_p(CONFIG_DIR)
+      rescue StandardError
+        nil
+      end
+
+      def write_config_file
+        File.write(CONFIG_FILE, JSON.pretty_generate(config_to_h))
+      rescue StandardError
+        nil
+      end
+
+      # Load config from file on initialization
+      def load_config_from_file
+        return unless File.exist?(CONFIG_FILE)
+
+        data = parse_config_file
+        apply_config_data(data) if data
+      rescue StandardError
+        # Use defaults on error
+      end
+
+      def parse_config_file
+        JSON.parse(File.read(CONFIG_FILE), symbolize_names: true)
+      rescue StandardError
+        nil
+      end
+
+      def apply_config_data(data)
+        config_updates = {}
+        data.each do |key, value|
+          next unless get([:config]).key?(key)
+
+          value = value.to_sym if SYMBOL_KEYS.include?(key)
+          config_updates[[:config, key]] = value
+        end
+        update(config_updates) unless config_updates.empty?
       end
     end
   end

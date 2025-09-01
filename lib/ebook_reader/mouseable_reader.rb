@@ -176,66 +176,8 @@ module EbookReader
 
     def extract_selected_text(range)
       return '' unless range && @state.get([:reader, :rendered_lines])
-
-      # Use coordinate service for consistent normalization
-      normalized_range = @coordinate_service.normalize_selection_range(range)
-      return '' unless normalized_range
-
-      start_pos = normalized_range[:start]
-      end_pos = normalized_range[:end]
-
-      # Determine which column the selection started in
-      target_column_bounds = determine_column_bounds(start_pos)
-      return '' unless target_column_bounds
-
-      text = []
-
-      (start_pos[:y]..end_pos[:y]).each do |y|
-        # Use coordinate service for terminal coordinate conversion
-        terminal_coords = @coordinate_service.mouse_to_terminal(0, y)
-        terminal_row = terminal_coords[:y]
-
-        # Find line segments for this row that belong to the target column
-        selected_text_parts = []
-
-        @state.get([:reader, :rendered_lines]).each_value do |line_info|
-          next unless line_info[:row] == terminal_row
-
-          line_start_col = line_info[:col]
-          line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
-
-          # Only include text from the same column as the initial click
-          next unless column_overlaps?(line_start_col, line_end_col, target_column_bounds)
-
-          line_text = line_info[:text]
-
-          # Check if selection intersects with this line segment
-          row_start_x = y == start_pos[:y] ? start_pos[:x] : target_column_bounds[:start]
-          row_end_x = y == end_pos[:y] ? end_pos[:x] : target_column_bounds[:end]
-
-          # Skip if selection doesn't overlap with this line segment
-          next if row_end_x < line_start_col || row_start_x > line_end_col
-
-          # Calculate character indices within this line segment
-          start_char_index = [row_start_x - line_start_col, 0].max
-          end_char_index = [row_end_x - line_start_col, line_text.length - 1].min
-
-          next unless end_char_index >= start_char_index && start_char_index < line_text.length
-
-          selected_text_parts << {
-            col: line_start_col,
-            text: line_text[start_char_index..end_char_index],
-          }
-        end
-
-        # Sort by column position and join
-        unless selected_text_parts.empty?
-          sorted_parts = selected_text_parts.sort_by { |part| part[:col] }
-          text << sorted_parts.map { |part| part[:text] }.join(' ')
-        end
-      end
-
-      text.join("\n")
+      selection_service = @dependencies.resolve(:selection_service)
+      selection_service.extract_text(range, @state.get([:reader, :rendered_lines]))
     end
 
     def copy_to_clipboard(text)

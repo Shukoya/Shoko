@@ -5,12 +5,12 @@ module EbookReader
     module Reading
       # Factory for creating appropriate view renderers based on configuration
       class ViewRendererFactory
-        def self.create(state)
+        def self.create(state, controller = nil)
           case Domain::Selectors::ConfigSelectors.view_mode(state)
           when :split
-            SplitViewRenderer.new
+            SplitViewRenderer.new(nil, controller)
           else
-            SingleViewRenderer.new(Domain::Selectors::ConfigSelectors.page_numbering_mode(state))
+            SingleViewRenderer.new(Domain::Selectors::ConfigSelectors.page_numbering_mode(state), nil, controller)
           end
         end
       end

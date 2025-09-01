@@ -46,10 +46,11 @@ module EbookReader
           tab_width = (bounds.width - 2) / TABS.length
           start_y = bounds.y + 1
 
+          active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
           TABS.each_with_index do |tab, index|
             x_pos = bounds.x + 1 + (index * tab_width)
             render_tab_button(surface, bounds, tab, x_pos, start_y, tab_width,
-                              state.sidebar_active_tab == tab)
+                              active_tab == tab)
           end
         end
 

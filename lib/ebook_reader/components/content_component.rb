@@ -2,7 +2,6 @@
 
 require_relative 'base_component'
 require_relative 'surface'
-require_relative '../services/layout_service'
 require_relative 'reading/view_renderer_factory'
 require_relative 'reading/help_renderer'
 require_relative 'reading/toc_renderer'
@@ -12,11 +11,12 @@ module EbookReader
   module Components
     class ContentComponent < BaseComponent
       def initialize(controller)
+        super(controller&.dependencies) # Initialize BaseComponent with dependencies
         @controller = controller
         @view_renderer = nil
-        @help_renderer = Reading::HelpRenderer.new
-        @toc_renderer = Reading::TocRenderer.new
-        @bookmarks_renderer = Reading::BookmarksRenderer.new
+        @help_renderer = Reading::HelpRenderer.new(nil, controller)
+        @toc_renderer = Reading::TocRenderer.new(nil, controller)
+        @bookmarks_renderer = Reading::BookmarksRenderer.new(nil, controller)
 
         state = @controller.state
         # Observe core fields that affect content rendering with GlobalState paths
@@ -25,11 +25,16 @@ module EbookReader
         @needs_redraw = true
       end
 
-      # Observer callback triggered by GlobalState
-      def state_changed(path, _old_value, _new_value)
-        @needs_redraw = true
+      # Observer callback triggered by ObserverStateStore
+      def state_changed(path, old_value, new_value)
         # Reset renderer for mode changes or view mode changes
         @view_renderer = nil if [%i[reader mode], %i[config view_mode]].include?(path)
+        
+        # Call parent invalidate to properly trigger re-rendering
+        super(path, old_value, new_value)
+        
+        # Keep legacy @needs_redraw for backward compatibility
+        @needs_redraw = true
       end
 
       # Fill remaining space after fixed components
@@ -45,13 +50,13 @@ module EbookReader
 
         case state.get([:reader, :mode])
         when :help
-          @help_renderer.render(surface, bounds, @controller)
+          @help_renderer.render(surface, bounds)
         when :toc
-          @toc_renderer.render(surface, bounds, @controller)
+          @toc_renderer.render(surface, bounds)
         when :bookmarks
-          @bookmarks_renderer.render(surface, bounds, @controller)
+          @bookmarks_renderer.render(surface, bounds)
         else
-          view_renderer.render(surface, bounds, @controller)
+          view_renderer.render(surface, bounds)
         end
         @needs_redraw = false
       end
@@ -61,7 +66,7 @@ module EbookReader
       def view_renderer
         return @view_renderer if @view_renderer
 
-        @view_renderer = Reading::ViewRendererFactory.create(@controller.config)
+        @view_renderer = Reading::ViewRendererFactory.create(@controller.state, @controller)
       end
     end
   end

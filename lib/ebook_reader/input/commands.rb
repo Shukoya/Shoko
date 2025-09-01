@@ -26,8 +26,9 @@ module EbookReader
             return execute(domain_command, context, key)
           end
 
-          # Fall back to direct method call
+          # Fall back to direct method call (only for non-navigation commands)
           return :pass unless context.respond_to?(command)
+          
           return context.public_send(command, key) if method_accepts_arg?(context, command)
 
           context.public_send(command)

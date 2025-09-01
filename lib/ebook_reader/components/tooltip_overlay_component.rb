@@ -12,11 +12,13 @@ module EbookReader
       def initialize(controller)
         @controller = controller
         @coordinate_service = Domain::ContainerFactory.create_default_container.resolve(:coordinate_service)
+        @last_selection_segments = []
       end
 
       # Render all overlay elements: highlights, popups, tooltips
       def render(surface, bounds)
         # Render in specific order to ensure proper layering
+        clear_previous_selection_artifacts(surface, bounds)
         render_saved_annotations(surface, bounds)
         render_active_selection(surface, bounds)
         render_popup_menu(surface, bounds)
@@ -36,11 +38,17 @@ module EbookReader
 
       def render_active_selection(surface, bounds)
         # Render current selection highlight
-        selection_range = @controller.instance_variable_get(:@mouse_handler)&.selection_range ||
-                          @controller.state.get([:reader, :selection])
+        selection_range = @controller.state.get([:reader, :selection]) ||
+                          @controller.instance_variable_get(:@mouse_handler)&.selection_range
 
-        return unless selection_range
+        unless selection_range
+          # No active selection; keep any previously rendered segments for one clear pass
+          @pending_clear = true if @last_selection_segments.any?
+          return
+        end
 
+        # Reset tracking for this frame
+        @last_selection_segments.clear
         render_text_highlight(surface, bounds, selection_range, Terminal::ANSI::BG_BLUE)
       end
 
@@ -127,6 +135,12 @@ module EbookReader
 
         # Render the highlighted line using surface
         surface.write(bounds, terminal_row, line_start_col, highlighted_text)
+
+        # Track segments for cleanup when selection disappears
+        seg_start = line_start_col + highlight_bounds[:start]
+        seg_len = highlight_bounds[:end] - highlight_bounds[:start] + 1
+        original_text = line_text[highlight_bounds[:start]..highlight_bounds[:end]]
+        @last_selection_segments << { row: terminal_row, col: seg_start, len: seg_len, text: original_text }
       end
 
       def calculate_line_highlight_bounds(line_text, line_start_col, current_y, start_pos, end_pos)
@@ -160,6 +174,21 @@ module EbookReader
         result += line_text[(bounds[:end] + 1)..] if bounds[:end] < line_text.length - 1
 
         result
+      end
+
+      # If selection was present on previous frame but not this one, explicitly repaint
+      # the previously highlighted character cells to clear any lingering background color
+      def clear_previous_selection_artifacts(surface, bounds)
+        return unless @pending_clear && @last_selection_segments.any?
+
+        @last_selection_segments.each do |seg|
+          safe_text = seg[:text] || ''
+          repaint = "#{Terminal::ANSI::RESET}#{Terminal::ANSI::WHITE}#{safe_text}#{Terminal::ANSI::RESET}"
+          surface.write(bounds, seg[:row], seg[:col], repaint)
+        end
+
+        @last_selection_segments.clear
+        @pending_clear = false
       end
 
       def determine_highlight_column_bounds(click_pos, rendered_lines)

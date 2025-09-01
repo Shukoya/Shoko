@@ -126,17 +126,25 @@ module EbookReader
 
         # Infrastructure services
         container.register_singleton(:event_bus) { Infrastructure::EventBus.new }
-        container.register_singleton(:state_store) { |c| Infrastructure::StateStore.new(c.resolve(:event_bus)) }
         container.register_singleton(:logger) { Infrastructure::Logger }
 
         # Domain services with dependency injection
         container.register_factory(:navigation_service) { |c| Domain::Services::NavigationService.new(c) }
         container.register_factory(:bookmark_service) { |c| Domain::Services::BookmarkService.new(c) }
-        container.register_factory(:page_calculator) { |c| Domain::Services::PageCalculatorService.new(c) }
+        container.register_singleton(:page_calculator) { |c| Domain::Services::PageCalculatorService.new(c) }
         container.register_factory(:coordinate_service) { |c| Domain::Services::CoordinateService.new(c) }
+        container.register_factory(:selection_service) { |c| Domain::Services::SelectionService.new(c) }
         container.register_factory(:layout_service) { |c| Domain::Services::LayoutService.new(c) }
         container.register_factory(:clipboard_service) { |c| Domain::Services::ClipboardService.new(c) }
         container.register_factory(:terminal_service) { |c| Domain::Services::TerminalService.new(c) }
+
+        # Infrastructure services
+        container.register_factory(:document_service) do |c|
+          # DocumentService will be created per book - requires epub_path parameter
+          nil # Placeholder - will be created with path parameter when needed
+        end
+
+        # Focused controllers replacing god class
 
         # Legacy services (to be migrated to domain)
         # TODO: Convert to domain service
@@ -144,8 +152,11 @@ module EbookReader
           EbookReader::Services::ChapterCache.new
         end
         
-        # Legacy state management (to be replaced with StateStore)
-        container.register_singleton(:global_state) { Core::GlobalState.new }
+        # Unified state management
+        container.register_singleton(:global_state) { |c| Infrastructure::ObserverStateStore.new(c.resolve(:event_bus)) }
+
+        # IMPORTANT: state_store must resolve to the same instance as global_state
+        container.register_factory(:state_store) { |c| c.resolve(:global_state) }
         
         # Library scanner service
         container.register_factory(:library_scanner) do |_c|

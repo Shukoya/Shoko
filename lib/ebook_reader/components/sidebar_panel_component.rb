@@ -27,19 +27,26 @@ module EbookReader
 
         # Observe sidebar state changes
         state = @controller.state
-        state.add_observer(self, %i[sidebar visible], %i[sidebar active_tab],
-                           %i[sidebar toc_selected], %i[sidebar annotations_selected],
-                           %i[sidebar bookmarks_selected])
+        state.add_observer(self,
+                           %i[reader sidebar_visible],
+                           %i[reader sidebar_active_tab],
+                           %i[reader sidebar_toc_selected],
+                           %i[reader sidebar_annotations_selected],
+                           %i[reader sidebar_bookmarks_selected])
         @needs_redraw = true
       end
 
-      def state_changed(_path, _old_value, _new_value)
+      def state_changed(path, old_value, new_value)
+        # Call parent invalidate to properly trigger re-rendering
+        super(path, old_value, new_value)
+        
+        # Keep legacy @needs_redraw for backward compatibility
         @needs_redraw = true
       end
 
       def preferred_width(total_width)
         state = @controller.state
-        return :hidden unless state.sidebar_visible
+        return :hidden unless state.get([:reader, :sidebar_visible])
 
         # Calculate width as percentage of total, with minimum
         preferred = (total_width * DEFAULT_WIDTH_PERCENT / 100.0).round
@@ -48,7 +55,7 @@ module EbookReader
 
       def do_render(surface, bounds)
         state = @controller.state
-        return unless state.sidebar_visible && bounds.width >= MIN_WIDTH
+        return unless state.get([:reader, :sidebar_visible]) && bounds.width >= MIN_WIDTH
 
         # Draw modern border
         draw_border(surface, bounds)
@@ -97,7 +104,8 @@ module EbookReader
         state = @controller.state
 
         # Simple clean title
-        title = get_clean_title(state.sidebar_active_tab)
+        active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
+        title = get_clean_title(active_tab)
         surface.write(bounds, 1, 2, "#{Terminal::ANSI::BRIGHT_WHITE}#{title}#{Terminal::ANSI::RESET}")
 
         # Close indicator
@@ -121,7 +129,8 @@ module EbookReader
       def render_help(surface, bounds)
         state = @controller.state
 
-        help_text = case state.sidebar_active_tab
+        active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
+        help_text = case active_tab
                     when :toc
                       "#{Terminal::ANSI::DIM}↑↓ Navigate • ⏎ Jump • / Filter#{Terminal::ANSI::RESET}"
                     when :annotations
@@ -144,7 +153,8 @@ module EbookReader
       def render_active_tab(surface, bounds)
         state = @controller.state
 
-        case state.sidebar_active_tab
+        active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
+        case active_tab
         when :toc
           @toc_renderer.render(surface, bounds)
         when :annotations

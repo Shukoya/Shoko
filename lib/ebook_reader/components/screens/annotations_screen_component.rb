@@ -42,15 +42,53 @@ module EbookReader
         end
 
         def refresh_data
-          # Load annotations from store - would need to implement proper loading
           @annotations_by_book = {}
-
-          # For now, use empty state - this would be populated from actual annotation store
           @selected = 0
+
+          # Determine current book from global state (persisted by reader)
+          @current_book_path = @state.get(%i[reader book_path])
+          if @current_book_path
+            raw = EbookReader::Annotations::AnnotationStore.get(@current_book_path)
+            # Fallback to state if store is empty but state has recent annotations
+            if (!raw || raw.empty?)
+              state_ann = @state.get(%i[reader annotations]) || []
+              raw = state_ann.map do |a|
+                # State may already have symbol keys
+                if a.is_a?(Hash)
+                  {
+                    'text' => a[:text] || a['text'],
+                    'note' => a[:note] || a['note'],
+                    'id' => a[:id] || a['id'],
+                    'chapter_index' => a[:chapter_index] || a['chapter_index'],
+                    'created_at' => a[:created_at] || a['created_at'],
+                    'updated_at' => a[:updated_at] || a['updated_at'],
+                  }
+                else
+                  nil
+                end
+              end.compact
+            end
+
+            # Normalize keys to symbols expected by renderer
+            normalized = (raw || []).map do |a|
+              {
+                text: a['text'],
+                note: a['note'],
+                id: a['id'],
+                chapter_index: a['chapter_index'],
+                created_at: a['created_at'],
+                updated_at: a['updated_at'],
+              }
+            end
+            @annotations_by_book[@current_book_path] = normalized
+          end
+
           update_current_annotation
         end
 
         def do_render(surface, bounds)
+          # Ensure data is fresh each render
+          refresh_data
           height = bounds.height
           width = bounds.width
 

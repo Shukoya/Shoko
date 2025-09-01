@@ -20,11 +20,11 @@ module EbookReader
 
           # Handle filtering if active
           chapters = get_filtered_chapters(doc.chapters, state)
-          selected_index = state.sidebar_toc_selected || 0
+          selected_index = state.get([:reader, :sidebar_toc_selected]) || 0
 
           # Render filter input if active
           content_start_y = bounds.y
-          if state.sidebar_toc_filter_active
+          if state.get([:reader, :sidebar_toc_filter_active])
             render_filter_input(surface, bounds, state)
             content_start_y += 2
           end
@@ -53,15 +53,15 @@ module EbookReader
         end
 
         def get_filtered_chapters(chapters, state)
-          filter = state.sidebar_toc_filter
+          filter = state.get([:reader, :sidebar_toc_filter])
           return chapters if filter.nil? || filter.strip.empty?
 
           chapters.select { |chapter| chapter.title&.downcase&.include?(filter.downcase) }
         end
 
         def render_filter_input(surface, bounds, state)
-          filter_text = state.sidebar_toc_filter || ''
-          cursor_visible = state.sidebar_toc_filter_active
+          filter_text = state.get([:reader, :sidebar_toc_filter]) || ''
+          cursor_visible = state.get([:reader, :sidebar_toc_filter_active])
 
           # Filter input line with modern styling
           prompt = "#{Terminal::ANSI::BRIGHT_CYAN}Search:#{Terminal::ANSI::RESET} "

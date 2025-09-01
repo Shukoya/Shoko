@@ -10,7 +10,7 @@ module EbookReader
         end
 
         def apply(state)
-          state.update([:reader, :annotations], payload[:annotations])
+          state.update({[:reader, :annotations] => payload[:annotations]})
         end
       end
     end

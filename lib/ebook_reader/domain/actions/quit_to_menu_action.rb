@@ -8,7 +8,7 @@ module EbookReader
       # Stop the reader loop (used to return to menu)
       class QuitToMenuAction < BaseAction
         def apply(state)
-          state.update(%i[reader running], false)
+          state.update({[:reader, :running] => false})
           false
         end
       end

@@ -13,7 +13,7 @@ module EbookReader
           mode = (payload[:mode] || :read).to_sym
           return state.get(%i[reader mode]) unless VALID.include?(mode)
 
-          state.update(%i[reader mode], mode)
+          state.update({[:reader, :mode] => mode})
           mode
         end
       end

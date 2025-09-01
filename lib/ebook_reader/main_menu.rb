@@ -32,7 +32,7 @@ module EbookReader
     end
 
     def run
-      Terminal.setup
+      @terminal_service.setup
       @scanner.load_cached
       @filtered_epubs = @scanner.epubs || []
       @main_menu_component.browse_screen.filtered_epubs = @filtered_epubs
@@ -98,7 +98,7 @@ module EbookReader
     end
 
     def cleanup_and_exit(code, message, error = nil)
-      Terminal.cleanup
+      @terminal_service.cleanup
       puts message
       puts error.backtrace if error && EPUBFinder::DEBUG_MODE
       exit code
@@ -187,6 +187,7 @@ module EbookReader
     def setup_services
       # Use dependency injection for services
       @scanner = @dependencies.resolve(:library_scanner)
+      @terminal_service = @dependencies.resolve(:terminal_service)
       setup_input_dispatcher
     end
 
@@ -245,14 +246,14 @@ module EbookReader
     end
 
     def read_input_keys
-      key = Terminal.read_key_blocking
+      key = @terminal_service.read_key_blocking
       keys = [key]
       collect_additional_keys(keys)
       keys
     end
 
     def collect_additional_keys(keys)
-      while (extra = Terminal.read_key)
+      while (extra = @terminal_service.read_key)
         keys << extra
         break if keys.size > 10
       end
@@ -271,14 +272,14 @@ module EbookReader
     end
 
     def draw_screen
-      height, width = Terminal.size
-      Terminal.start_frame
+      height, width = @terminal_service.size
+      @terminal_service.start_frame
 
       surface = Components::Surface.new(Terminal)
       bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
       @main_menu_component.render(surface, bounds)
 
-      Terminal.end_frame
+      @terminal_service.end_frame
     end
 
     def setup_input_dispatcher
@@ -374,7 +375,7 @@ module EbookReader
         bindings[key] = lambda do |ctx, _|
           current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
           epubs = ctx.instance_variable_defined?(:@filtered_epubs) ? ctx.instance_variable_get(:@filtered_epubs) : []
-          max_val = [(epubs&.length&.- 1), 0].max
+          max_val = [(epubs&.length || 0) - 1, 0].max
           ctx.state.update(%i[menu browse_selected], [current + 1, max_val].min)
           :handled
         end
@@ -566,13 +567,17 @@ module EbookReader
     rescue StandardError => e
       handle_reader_error(path, e)
     ensure
-      Terminal.setup
+      @terminal_service.setup
     end
 
     def run_reader(path)
-      Terminal.cleanup
+      @terminal_service.cleanup
       RecentFiles.add(path)
-      MouseableReader.new(path).run
+      # Share the same state across menu and reader for annotations/book path
+      @state.update(%i[reader book_path], path)
+      # Ensure reader loop runs even if a previous session set running=false
+      @state.update({[:reader, :running] => true, [:reader, :mode] => :read})
+      MouseableReader.new(path, nil, @dependencies).run
     end
 
     def file_not_found
@@ -601,7 +606,8 @@ module EbookReader
     def handle_file_path(path)
       if File.exist?(path) && path.downcase.end_with?('.epub')
         RecentFiles.add(path)
-        reader = MouseableReader.new(path)
+        @state.update(%i[reader book_path], path)
+        reader = MouseableReader.new(path, nil, @dependencies)
         reader.run
       else
         @scanner.scan_message = 'Invalid file path'
@@ -616,7 +622,7 @@ module EbookReader
     def handle_dialog_error(error)
       puts "Error: #{error.message}"
       sleep 2
-      Terminal.setup
+      @terminal_service.setup
     end
 
     def time_ago_in_words(time)

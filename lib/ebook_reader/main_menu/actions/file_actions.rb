@@ -41,15 +41,21 @@ module EbookReader
         rescue StandardError => e
           handle_reader_error(path, e)
         ensure
-          Terminal.setup
+          @terminal_service.setup
           # Return cleanly to the browse screen with active bindings
           switch_to_mode(:browse) if respond_to?(:switch_to_mode)
         end
 
         def run_reader(path)
-          Terminal.cleanup
+          @terminal_service.cleanup
           RecentFiles.add(path)
-          MouseableReader.new(path).run
+          # Ensure reader loop runs even if a previous session set running=false
+          if instance_variable_defined?(:@state) && @state
+            @state.update({[:reader, :book_path] => path, [:reader, :running] => true, [:reader, :mode] => :read})
+          end
+          # Pass dependencies to MouseableReader
+          dependencies = @dependencies || Domain::ContainerFactory.create_default_container
+          MouseableReader.new(path, nil, dependencies).run
         end
 
         def file_not_found
@@ -85,7 +91,9 @@ module EbookReader
         def handle_file_path(path)
           if File.exist?(path) && path.downcase.end_with?('.epub')
             RecentFiles.add(path)
-            MouseableReader.new(path).run
+            # Pass dependencies to MouseableReader
+            dependencies = @dependencies || Domain::ContainerFactory.create_default_container
+            MouseableReader.new(path, nil, dependencies).run
           else
             @scanner.scan_message = 'Invalid file path'
             @scanner.scan_status = :error

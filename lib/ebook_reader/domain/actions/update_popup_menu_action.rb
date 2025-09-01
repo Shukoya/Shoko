@@ -10,7 +10,7 @@ module EbookReader
         end
 
         def apply(state)
-          state.update(%i[reader popup_menu], payload[:popup_menu])
+          state.update({[:reader, :popup_menu] => payload[:popup_menu]})
         end
       end
 

@@ -11,9 +11,12 @@ module EbookReader
         end
 
         def apply(state)
+          # Build update hash for atomic state update
+          updates = {}
           payload.each do |config_field, value|
-            state.update([:config, config_field], value)
+            updates[[:config, config_field]] = value
           end
+          state.update(updates)
         end
       end
     end

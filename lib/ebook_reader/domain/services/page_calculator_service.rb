@@ -138,12 +138,22 @@ module EbookReader
 
         def perform_page_calculation(chapter_index, state)
           lines_per_page = calculate_lines_per_page
+          
+          File.open('/tmp/nav_debug.log', 'a') do |f|
+            f.puts "      perform_calc: ch=#{chapter_index}, lines_per_page=#{lines_per_page}"
+          end
+          
           return 0 if lines_per_page <= 0
 
           chapter_lines = get_chapter_lines(chapter_index, state)
           wrapped_lines = @text_wrapper.wrap_chapter_lines(chapter_lines, calculate_column_width)
+          result = (wrapped_lines.size.to_f / lines_per_page).ceil
+          
+          File.open('/tmp/nav_debug.log', 'a') do |f|
+            f.puts "      ch_lines=#{chapter_lines&.size || 'nil'}, wrapped=#{wrapped_lines.size}, result=#{result}"
+          end
 
-          (wrapped_lines.size.to_f / lines_per_page).ceil
+          result
         end
 
         def calculate_lines_per_page
@@ -178,10 +188,28 @@ module EbookReader
           end
         end
 
-        def get_chapter_lines(_chapter_index, _state)
-          # This would interface with the document/EPUB system
-          # For now, return empty array as placeholder
-          []
+        def get_chapter_lines(chapter_index, state)
+          # Access document through state or dependency container
+          doc = @dependencies&.resolve(:document) rescue nil
+          return [] unless doc
+          
+          begin
+            chapter = doc.get_chapter(chapter_index)
+            chapter_lines = chapter&.dig(:lines) || chapter&.lines || []
+            
+            File.open('/tmp/nav_debug.log', 'a') do |f|
+              f.puts "        get_chapter_lines: ch=#{chapter_index}, doc_exists=#{!!doc}, lines_count=#{chapter_lines.size}"
+              f.puts "        first_few_lines: #{chapter_lines.first(3).inspect}" if chapter_lines.any?
+              f.puts "        total_chapters: #{doc.chapters.size}" if doc.respond_to?(:chapters)
+            end
+            
+            chapter_lines
+          rescue => e
+            File.open('/tmp/nav_debug.log', 'a') do |f|
+              f.puts "        ERROR in get_chapter_lines: #{e.class}: #{e.message}"
+            end
+            []
+          end
         end
 
         def build_cache_key(chapter_index, state)
@@ -362,7 +390,11 @@ module EbookReader
         protected
 
         def required_dependencies
-          [] # No required dependencies for calculations
+          [:state_store]
+        end
+
+        def setup_service_dependencies
+          @state_store = resolve(:state_store) if @dependencies
         end
       end
 

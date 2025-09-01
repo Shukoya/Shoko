@@ -8,29 +8,20 @@ module EbookReader
     module Reading
       # Base class for all view renderers
       class BaseViewRenderer < BaseComponent
-        def initialize(services = nil)
+        def initialize(dependencies = nil, controller = nil)
           super()
-          @layout_service = Domain::ContainerFactory.create_default_container.resolve(:layout_service)
+          @dependencies = dependencies || Domain::ContainerFactory.create_default_container
+          @layout_service = @dependencies.resolve(:layout_service)
+          @controller = controller
         end
 
-        # Override the base render method to maintain legacy interface
-        # @param surface [Surface] The rendering surface
-        # @param bounds [Rect] The rendering bounds
-        # @param controller [ReaderController] The controller instance
-        def render(surface, bounds, controller = nil)
-          if controller
-            # Legacy interface - delegate to view_render
-            view_render(surface, bounds, controller)
-          else
-            # New component interface
-            super(surface, bounds)
-          end
-        end
+        # Standard ComponentInterface implementation
+        def do_render(surface, bounds)
+          return unless @controller
 
-        # Legacy rendering interface for backwards compatibility
-        def view_render(surface, bounds, controller)
-          # Create rendering context and delegate to new interface
-          context = create_rendering_context(controller)
+          context = create_rendering_context(@controller)
+          return unless context
+          
           render_with_context(surface, bounds, context)
         end
 
@@ -56,23 +47,25 @@ module EbookReader
         private
 
         def create_rendering_context(controller)
+          return nil unless controller
+          
           Models::RenderingContext.new(
             document: controller.doc,
-            page_manager: controller.page_manager,
+            page_manager: controller.page_calculator,
             state: controller.state,
-            config: controller.config,
+            config: controller.state,
             view_model: controller.create_view_model
           )
         end
 
         def draw_line(surface, bounds, line:, row:, col:, width:, controller: nil, context: nil)
           text = line.to_s[0, width]
-          config = context ? context.config : controller&.config
+          config = context ? context.config : controller&.state
 
-          if config.get([:config, :highlight_keywords])
+          if config&.get([:config, :highlight_keywords])
             text = highlight_keywords(text)
           end
-          text = highlight_quotes(text) if config.get([:config, :highlight_quotes])
+          text = highlight_quotes(text) if config&.get([:config, :highlight_quotes])
 
           abs_row = bounds.y + row - 1
           abs_col = bounds.x + col - 1

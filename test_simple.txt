@@ -1,0 +1,15 @@
+Chapter 1
+
+This is the first chapter of the test book.
+It has multiple lines to test navigation.
+
+Chapter 2  
+
+This is the second chapter.
+More content to navigate through.
+
+Chapter 3
+
+The final chapter with more text
+to ensure we have enough content
+for proper navigation testing.

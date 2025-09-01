@@ -62,14 +62,33 @@ module EbookReader
 
         def render_recent_list(surface, bounds, items, selected, menu)
           list_start = 4
-          max_items = [(bounds.height - 6) / 2, 10].min
+          # Number of item rows (each item takes 2 rows)
+          visible_rows = bounds.height - list_start - 2
+          items_per_page = [visible_rows / 2, 1].max
 
-          items.take(max_items).each_with_index do |book, i|
+          start_index, visible_items = calculate_visible_range(items.length, items_per_page, selected)
+
+          visible_items.each_with_index do |book, i|
             row_base = list_start + (i * 2)
             next if row_base >= bounds.height - 2
 
-            render_recent_item(surface, bounds, row_base, bounds.width, book, i, selected, menu)
+            render_recent_item(surface, bounds, row_base, bounds.width, book, start_index + i, selected, menu)
           end
+        end
+
+        def calculate_visible_range(total_items, per_page, selected)
+          start_index = 0
+
+          if selected >= per_page
+            start_index = selected - per_page + 1
+          end
+
+          if total_items > per_page
+            start_index = [start_index, total_items - per_page].min
+          end
+
+          end_index = [start_index + per_page - 1, total_items - 1].min
+          [start_index, (load_recent_books[start_index..end_index] || [])]
         end
 
         def render_recent_item(surface, bounds, row, width, book, index, selected, menu)

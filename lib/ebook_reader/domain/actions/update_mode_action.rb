@@ -10,7 +10,7 @@ module EbookReader
         end
 
         def apply(state)
-          state.update(%i[reader mode], payload[:mode])
+          state.update({[:reader, :mode] => payload[:mode]})
         end
       end
     end

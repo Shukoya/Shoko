@@ -20,6 +20,7 @@ require_relative 'ebook_reader/infrastructure/validator'
 require_relative 'ebook_reader/infrastructure/performance_monitor'
 require_relative 'ebook_reader/infrastructure/event_bus'
 require_relative 'ebook_reader/infrastructure/state_store'
+require_relative 'ebook_reader/infrastructure/observer_state_store'
 require_relative 'ebook_reader/infrastructure/document_service'
 require_relative 'ebook_reader/infrastructure/input_dispatcher'
 
@@ -74,10 +75,13 @@ require_relative 'ebook_reader/domain/services/coordinate_service'
 require_relative 'ebook_reader/domain/services/layout_service'
 require_relative 'ebook_reader/domain/services/clipboard_service'
 require_relative 'ebook_reader/domain/services/terminal_service'
+require_relative 'ebook_reader/domain/services/selection_service'
 require_relative 'ebook_reader/domain/commands/base_command'
 require_relative 'ebook_reader/domain/commands/navigation_commands'
 require_relative 'ebook_reader/domain/commands/application_commands'
 require_relative 'ebook_reader/domain/commands/bookmark_commands'
+require_relative 'ebook_reader/domain/commands/sidebar_commands'
+require_relative 'ebook_reader/domain/commands/conditional_navigation_commands'
 require_relative 'ebook_reader/domain/actions/base_action'
 require_relative 'ebook_reader/domain/actions/toggle_view_mode_action'
 require_relative 'ebook_reader/domain/actions/switch_reader_mode_action'
@@ -113,9 +117,15 @@ require_relative 'ebook_reader/ui/view_models/reader_view_model'
 require_relative 'ebook_reader/application/unified_application'
 # Removed unused: reader_application, menu_application
 
-# Core reader components (legacy - will be phased out)
-require_relative 'ebook_reader/core/global_state'
-# Removed state_accessor - no longer needed with direct state.get() and selectors
+# Controller layer - focused controllers replacing god class
+require_relative 'ebook_reader/controllers/navigation_controller'
+require_relative 'ebook_reader/controllers/ui_controller'
+require_relative 'ebook_reader/controllers/state_controller'
+require_relative 'ebook_reader/controllers/input_controller'
+
+# Core reader components updated to use new state management
+# Removed: core/global_state (replaced with Infrastructure::ObserverStateStore)
+# Removed: state_accessor - no longer needed with direct state.get() and selectors
 # Removed: state_service (replaced with direct state management)
 # Removed: page_manager (merged into PageCalculatorService)
 # Removed: services/main_menu_input_handler (replaced by dispatcher bindings)
@@ -169,9 +179,9 @@ module EbookReader
 
   # Module-level configuration
   #
-  # @return [Core::GlobalState] Global state instance
+  # @return [Infrastructure::ObserverStateStore] Global state instance
   def self.config
-    @config ||= Core::GlobalState.new
+    @config ||= Domain::ContainerFactory.create_default_container.resolve(:global_state)
   end
 
   # Module-level logger

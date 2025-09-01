@@ -10,7 +10,7 @@ module EbookReader
         end
 
         def apply(state)
-          state.update(%i[reader bookmarks], payload[:bookmarks])
+          state.update({[:reader, :bookmarks] => payload[:bookmarks]})
         end
       end
     end

@@ -31,6 +31,22 @@ module EbookReader
           Terminal.end_frame
         end
 
+        def setup
+          Terminal.setup
+        end
+
+        def cleanup
+          Terminal.cleanup
+        end
+
+        def start_frame
+          Terminal.start_frame
+        end
+
+        def read_key_blocking
+          Terminal.read_key_blocking
+        end
+
         # Create a surface for component rendering
         def create_surface
           Components::Surface.new(Terminal)

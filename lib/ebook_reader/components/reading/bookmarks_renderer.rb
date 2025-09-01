@@ -7,16 +7,21 @@ module EbookReader
     module Reading
       # Renderer for bookmarks display
       class BookmarksRenderer < BaseViewRenderer
-        def view_render(surface, bounds, controller)
-          bookmarks = controller.state.get([:reader, :bookmarks]) || []
-          doc = controller.doc
+        def initialize(dependencies = nil, controller = nil)
+          super(dependencies, controller)
+        end
+
+        def render_with_context(surface, bounds, context)
+          return unless context&.state
+          bookmarks = context.state.get([:reader, :bookmarks]) || []
+          doc = context.document
 
           render_header(surface, bounds)
 
           if bookmarks.empty?
             render_empty_message(surface, bounds)
           else
-            render_bookmarks_list(surface, bounds, bookmarks, doc, controller.state)
+            render_bookmarks_list(surface, bounds, bookmarks, doc, context.state)
           end
         end
 
@@ -35,6 +40,7 @@ module EbookReader
         end
 
         def render_bookmarks_list(surface, bounds, bookmarks, doc, state)
+          return unless state
           list_start = 4
           list_height = (bounds.height - 6) / 2
           selected = state.get([:reader, :bookmark_selected]) || 0
