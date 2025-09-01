@@ -67,33 +67,33 @@ module EbookReader
                         when :down then [current + 1, max_val].min
                         else current
                         end
-      @state.update(%i[menu selected], new_selected)
+      @state.set(%i[menu selected], new_selected)
     end
 
     def switch_to_browse
-      @state.update(%i[menu mode], :browse)
-      @state.update(%i[menu search_active], false)
+      @state.set(%i[menu mode], :browse)
+      @state.set(%i[menu search_active], false)
       # Search active state is now managed in GlobalState
       @dispatcher.activate(EbookReader::Domain::Selectors::MenuSelectors.mode(@state))
     end
 
     def switch_to_search
-      @state.update(%i[menu mode], :search)
-      @state.update(%i[menu search_active], true)
+      @state.set(%i[menu mode], :search)
+      @state.set(%i[menu search_active], true)
       # Search active state is now managed in GlobalState
       @dispatcher.activate(EbookReader::Domain::Selectors::MenuSelectors.mode(@state))
     end
 
     def switch_to_mode(mode)
-      @state.update(%i[menu mode], mode)
-      @state.update(%i[menu browse_selected], 0) # Reset selection for all submenu modes
+      @state.set(%i[menu mode], mode)
+      @state.set(%i[menu browse_selected], 0) # Reset selection for all submenu modes
       @dispatcher.activate(EbookReader::Domain::Selectors::MenuSelectors.mode(@state))
     end
 
     def open_file_dialog
-      @state.update(%i[menu file_input], '')
+      @state.set(%i[menu file_input], '')
       @open_file_screen.input = ''
-      @state.update(%i[menu mode], :open_file)
+      @state.set(%i[menu mode], :open_file)
       @dispatcher.activate(EbookReader::Domain::Selectors::MenuSelectors.mode(@state))
     end
 
@@ -116,12 +116,12 @@ module EbookReader
       if EbookReader::Domain::Selectors::MenuSelectors.search_active?(@state)
         search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
         if search_query.length.positive?
-          @state.update(%i[menu search_query], search_query[0...-1])
+        @state.set(%i[menu search_query], search_query[0...-1])
           # Filtering is now handled automatically by the component through state observation
         end
       elsif @state.get([:menu, :file_input]).length.positive?
         file_input = EbookReader::Domain::Selectors::MenuSelectors.file_input(@state)
-        @state.update(%i[menu file_input], file_input[0...-1])
+        @state.set(%i[menu file_input], file_input[0...-1])
       end
       @main_menu_component.open_file_screen.input = @state.get([:menu, :file_input])
     end
@@ -131,7 +131,7 @@ module EbookReader
       return unless char.length == 1 && char.ord >= 32
 
       file_input = EbookReader::Domain::Selectors::MenuSelectors.file_input(@state)
-      @state.update(%i[menu file_input], file_input + char)
+      @state.set(%i[menu file_input], file_input + char)
       @main_menu_component.open_file_screen.input = @state.get([:menu, :file_input])
     end
 
@@ -308,7 +308,7 @@ module EbookReader
       Input::KeyDefinitions::NAVIGATION[:up].each do |key|
         commands[key] = lambda do |ctx, _|
           current = EbookReader::Domain::Selectors::MenuSelectors.selected(ctx.state)
-          ctx.state.update(%i[menu selected], [current - 1, 0].max)
+          ctx.state.set(%i[menu selected], [current - 1, 0].max)
           :handled
         end
       end
@@ -316,7 +316,7 @@ module EbookReader
       Input::KeyDefinitions::NAVIGATION[:down].each do |key|
         commands[key] = lambda do |ctx, _|
           current = EbookReader::Domain::Selectors::MenuSelectors.selected(ctx.state)
-          ctx.state.update(%i[menu selected], [current + 1, max_value].min)
+          ctx.state.set(%i[menu selected], [current + 1, max_value].min)
           :handled
         end
       end
@@ -329,7 +329,7 @@ module EbookReader
       Input::KeyDefinitions::NAVIGATION[:up].each do |key|
         commands[key] = lambda do |ctx, _|
           current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
-          ctx.state.update(%i[menu browse_selected], [current - 1, 0].max)
+          ctx.state.set(%i[menu browse_selected], [current - 1, 0].max)
           :handled
         end
       end
@@ -338,7 +338,7 @@ module EbookReader
         commands[key] = lambda do |ctx, _|
           current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
           max_val = max_value_proc.call(ctx)
-          ctx.state.update(%i[menu browse_selected], [current + 1, max_val].min)
+          ctx.state.set(%i[menu browse_selected], [current + 1, max_val].min)
           :handled
         end
       end
@@ -367,7 +367,7 @@ module EbookReader
       Input::KeyDefinitions::NAVIGATION[:up].each do |key|
         bindings[key] = lambda do |ctx, _|
           current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
-          ctx.state.update(%i[menu browse_selected], [current - 1, 0].max)
+          ctx.state.set(%i[menu browse_selected], [current - 1, 0].max)
           :handled
         end
       end
@@ -376,7 +376,7 @@ module EbookReader
           current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
           epubs = ctx.instance_variable_defined?(:@filtered_epubs) ? ctx.instance_variable_get(:@filtered_epubs) : []
           max_val = [(epubs&.length || 0) - 1, 0].max
-          ctx.state.update(%i[menu browse_selected], [current + 1, max_val].min)
+          ctx.state.set(%i[menu browse_selected], [current + 1, max_val].min)
           :handled
         end
       end
@@ -574,7 +574,7 @@ module EbookReader
       @terminal_service.cleanup
       RecentFiles.add(path)
       # Share the same state across menu and reader for annotations/book path
-      @state.update(%i[reader book_path], path)
+      @state.set(%i[reader book_path], path)
       # Ensure reader loop runs even if a previous session set running=false
       @state.update({[:reader, :running] => true, [:reader, :mode] => :read})
       MouseableReader.new(path, nil, @dependencies).run
@@ -606,7 +606,7 @@ module EbookReader
     def handle_file_path(path)
       if File.exist?(path) && path.downcase.end_with?('.epub')
         RecentFiles.add(path)
-        @state.update(%i[reader book_path], path)
+        @state.set(%i[reader book_path], path)
         reader = MouseableReader.new(path, nil, @dependencies)
         reader.run
       else

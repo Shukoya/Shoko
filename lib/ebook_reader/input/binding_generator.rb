@@ -69,7 +69,7 @@ module EbookReader
                       when :down then [current + 1, max_val].min
                       end
 
-            ctx.state.update(%i[menu selected], new_val)
+            ctx.state.set(%i[menu selected], new_val)
             :handled
           end
 

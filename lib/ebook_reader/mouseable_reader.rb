@@ -148,7 +148,7 @@ module EbookReader
       return unless selection
 
       # Use enhanced popup menu with coordinate service
-      popup_menu = Components::EnhancedPopupMenu.new(selection, nil, @coordinate_service)
+      popup_menu = Components::EnhancedPopupMenu.new(selection, nil, @coordinate_service, @clipboard_service)
       @state.dispatch(Domain::Actions::UpdatePopupMenuAction.new(popup_menu))
       return unless popup_menu&.visible # Only proceed if menu was created successfully
 

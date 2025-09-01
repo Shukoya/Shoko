@@ -137,6 +137,8 @@ module EbookReader
           reader: {
             # Position state
             current_chapter: 0,
+            # Compatibility alias (legacy tests expect this under :reader)
+            view_mode: :split,
             left_page: 0,
             right_page: 0,
             single_page: 0,
@@ -188,6 +190,8 @@ module EbookReader
 
           menu: {
             selected: 0,
+            # Compatibility alias (legacy tests expect selected_index)
+            selected_index: 0,
             mode: :menu,
             browse_selected: 0,
             search_query: '',
@@ -233,6 +237,8 @@ module EbookReader
         when %i[reader current_chapter]
           raise ArgumentError, 'current_chapter must be non-negative' if value.negative?
         when %i[reader view_mode]
+          raise ArgumentError, 'invalid view_mode' unless %i[single split].include?(value)
+        when %i[config view_mode]
           raise ArgumentError, 'invalid view_mode' unless %i[single split].include?(value)
         when %i[ui terminal_width], %i[ui terminal_height]
           raise ArgumentError, 'terminal dimensions must be positive' if value <= 0

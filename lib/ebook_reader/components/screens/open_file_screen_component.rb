@@ -16,7 +16,7 @@ module EbookReader
         end
 
         def input=(value)
-          @state.update([:menu, :file_input], value || '')
+          @state.set([:menu, :file_input], value || '')
         end
 
         def input

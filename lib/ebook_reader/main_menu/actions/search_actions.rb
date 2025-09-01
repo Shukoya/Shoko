@@ -20,7 +20,7 @@ module EbookReader
         def move_search_cursor(delta)
           search_cursor = EbookReader::Domain::Selectors::MenuSelectors.search_cursor(@state)
           search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
-          @state.update(%i[menu search_cursor], (search_cursor + delta).clamp(0, search_query.length))
+          @state.set(%i[menu search_cursor], (search_cursor + delta).clamp(0, search_query.length))
         end
 
         def handle_delete
@@ -30,7 +30,7 @@ module EbookReader
 
           query = search_query.dup
           query.slice!(search_cursor)
-          @state.update(%i[menu search_query], query)
+          @state.set(%i[menu search_query], query)
           filter_books
         end
 
@@ -41,7 +41,7 @@ module EbookReader
                             else
                               filter_by_query
                             end
-          @state.update(%i[menu browse_selected], 0)
+          @state.set(%i[menu browse_selected], 0)
         end
 
         def filter_by_query

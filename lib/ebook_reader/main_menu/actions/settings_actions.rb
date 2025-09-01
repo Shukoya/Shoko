@@ -8,32 +8,32 @@ module EbookReader
         def toggle_view_mode
           current_mode = @state.get(%i[config view_mode]) || :split
           new_mode = current_mode == :split ? :single : :split
-          @state.update(%i[config view_mode], new_mode)
+          @state.set(%i[config view_mode], new_mode)
           @state.save_config
         end
 
         def toggle_page_numbers
           current = @state.get(%i[config show_page_numbers])
-          @state.update(%i[config show_page_numbers], !current)
+          @state.set(%i[config show_page_numbers], !current)
           @state.save_config
         end
 
         def cycle_line_spacing
           modes = %i[compact normal relaxed]
           current = modes.index(@state.get(%i[config line_spacing])) || 1
-          @state.update(%i[config line_spacing], modes[(current + 1) % 3])
+          @state.set(%i[config line_spacing], modes[(current + 1) % 3])
           @state.save_config
         end
 
         def toggle_highlight_quotes
           current = @state.get(%i[config highlight_quotes])
-          @state.update(%i[config highlight_quotes], !current)
+          @state.set(%i[config highlight_quotes], !current)
           @state.save_config
         end
 
         def toggle_page_numbering_mode
           current = @state.get(%i[config page_numbering_mode])
-          @state.update(%i[config page_numbering_mode], current == :absolute ? :dynamic : :absolute)
+          @state.set(%i[config page_numbering_mode], current == :absolute ? :dynamic : :absolute)
           @state.save_config
         end
 

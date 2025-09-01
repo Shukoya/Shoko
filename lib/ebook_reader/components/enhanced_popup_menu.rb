@@ -11,10 +11,10 @@ module EbookReader
     class EnhancedPopupMenu < BaseComponent
       attr_reader :visible, :selected_index, :x, :y, :width, :height
 
-      def initialize(selection_range, available_actions = nil, coordinate_service = nil)
-        @coordinate_service = coordinate_service || Domain::ContainerFactory.create_default_container.resolve(:coordinate_service)
-        @clipboard_service = Domain::ContainerFactory.create_default_container.resolve(:clipboard_service)
-        
+      def initialize(selection_range, available_actions = nil, coordinate_service = nil, clipboard_service = nil)
+        @coordinate_service = coordinate_service
+        @clipboard_service = clipboard_service
+
         @selection_range = @coordinate_service.normalize_selection_range(selection_range)
 
         unless @selection_range
@@ -103,7 +103,7 @@ module EbookReader
         }
 
         # Only offer clipboard if available
-        if @clipboard_service.available?
+        if @clipboard_service && @clipboard_service.available?
           actions << {
             label: 'Copy to Clipboard',
             action: :copy_to_clipboard,

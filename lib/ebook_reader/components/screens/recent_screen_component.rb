@@ -20,7 +20,7 @@ module EbookReader
 
         # Setter method for selection index (used by input handlers)
         def selected=(index)
-          @state.update(%i[menu browse_selected], index)
+          @state.set(%i[menu browse_selected], index)
           invalidate
         end
 

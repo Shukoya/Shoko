@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
 require 'forwardable'
-require_relative 'reader_modes/help_mode'
-require_relative 'reader_modes/toc_mode'
-require_relative 'reader_modes/bookmarks_mode'
+# Legacy reader modes removed (help/toc/bookmarks now rendered via components)
 require_relative 'constants/ui_constants'
 require_relative 'errors'
 require_relative 'constants/messages'

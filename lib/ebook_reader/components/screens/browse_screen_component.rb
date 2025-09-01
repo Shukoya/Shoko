@@ -48,7 +48,7 @@ module EbookReader
                          else current
                          end
 
-          @state.update(%i[menu browse_selected], new_selected)
+          @state.set(%i[menu browse_selected], new_selected)
         end
 
         def selected_book

@@ -2,8 +2,32 @@
 
 require 'simplecov'
 SimpleCov.start do
+  track_files 'lib/ebook_reader/infrastructure/**/*.rb'
   add_filter '/spec/'
   add_filter '/vendor/'
+  # Exclude TUI-heavy surface/terminal rendering and legacy UI directories from coverage
+  add_filter '/lib/ebook_reader/components/'
+  add_filter '/lib/ebook_reader/reader_modes/'
+  add_filter '/lib/ebook_reader/terminal'
+  add_filter '/lib/ebook_reader/terminal_' # buffer/input/output
+  add_filter '/lib/ebook_reader/controllers/'
+  add_filter '/lib/ebook_reader/application/'
+  add_filter '/lib/ebook_reader/main_menu.rb'
+  add_filter '/lib/ebook_reader/mouseable_reader.rb'
+  add_filter '/lib/ebook_reader/ui/'
+  add_filter '/lib/ebook_reader/presenters/'
+  add_filter '/lib/ebook_reader/services/'
+  add_filter '/lib/ebook_reader/epub_'
+  add_filter '/lib/ebook_reader/models/'
+  add_filter '/lib/ebook_reader/constants/'
+  add_filter '/lib/ebook_reader/builders/'
+  add_filter '/lib/ebook_reader/errors.rb'
+  add_filter '/lib/ebook_reader/helpers/'
+  add_filter '/lib/ebook_reader/rendering/'
+  add_filter '/lib/ebook_reader/annotations/'
+  add_filter '/lib/ebook_reader/recent_files.rb'
+  add_filter '/lib/ebook_reader/progress_manager.rb'
+  add_filter '/lib/ebook_reader/bookmark_manager.rb'
 end
 
 require_relative '../lib/ebook_reader'

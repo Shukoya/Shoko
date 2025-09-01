@@ -83,7 +83,7 @@ module EbookReader
               text: text,
               width: width,
             }
-            state.update([:reader, :rendered_lines], rendered_lines)
+            state.set([:reader, :rendered_lines], rendered_lines)
           end
 
           surface.write(bounds, row, col, Terminal::ANSI::WHITE + text + Terminal::ANSI::RESET)
