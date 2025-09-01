@@ -22,7 +22,8 @@ module EbookReader
       # @param width [Integer] Terminal width
       # @return [void]
       def draw(height, width)
-        surface = Components::Surface.new(Terminal)
+        terminal_service = resolve_terminal_service
+        surface = terminal_service ? terminal_service.create_surface : Components::Surface.new(Terminal)
         bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
         render_to_surface(surface, bounds)
       end
@@ -37,6 +38,23 @@ module EbookReader
       # Helper method to get terminal ANSI codes
       def ansi
         Terminal::ANSI
+      end
+
+      # Best-effort resolution to avoid hard-coding Terminal in UI
+      def resolve_terminal_service
+        # Prefer injected services/dependencies if present
+        if respond_to?(:services) && services
+          return services.resolve(:terminal_service) if services.respond_to?(:resolve)
+        end
+
+        if instance_variable_defined?(:@dependencies)
+          deps = instance_variable_get(:@dependencies)
+          return deps.resolve(:terminal_service) if deps && deps.respond_to?(:resolve)
+        end
+
+        nil
+      rescue StandardError
+        nil
       end
     end
   end

@@ -22,7 +22,6 @@ require_relative 'ebook_reader/infrastructure/event_bus'
 require_relative 'ebook_reader/infrastructure/state_store'
 require_relative 'ebook_reader/infrastructure/observer_state_store'
 require_relative 'ebook_reader/infrastructure/document_service'
-require_relative 'ebook_reader/infrastructure/input_dispatcher'
 
 # Error definitions
 require_relative 'ebook_reader/errors'

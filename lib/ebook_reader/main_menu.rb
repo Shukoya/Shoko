@@ -275,7 +275,7 @@ module EbookReader
       height, width = @terminal_service.size
       @terminal_service.start_frame
 
-      surface = Components::Surface.new(Terminal)
+      surface = @terminal_service.create_surface
       bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
       @main_menu_component.render(surface, bounds)
 
@@ -429,11 +429,11 @@ module EbookReader
     end
 
     def register_recent_bindings
-      # Use custom navigation commands for recent mode 
-      bindings = create_browse_navigation_commands(lambda { |ctx|
-        # Recent list comes from RecentFiles, not @filtered_epubs
-        items = ctx.load_recent_books rescue []
-        [(items&.length || 1) - 1, 0].max
+      # Use standardized navigation commands for recent mode
+      # Selection index is stored in [:menu, :browse_selected]
+      bindings = Input::CommandFactory.navigation_commands(nil, :browse_selected, lambda { |_ctx|
+        items = RecentFiles.load.select { |r| r && r['path'] && File.exist?(r['path']) } rescue []
+        [items.length - 1, 0].max
       })
 
       # Recent-specific selection: open selected recent book

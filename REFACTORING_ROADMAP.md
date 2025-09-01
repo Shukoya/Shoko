@@ -70,14 +70,18 @@
 - [x] Remove direct method call fallbacks for navigation commands in Input::Commands
 - [x] Navigation commands (:next_page, :prev_page, :next_chapter, :prev_chapter, :scroll_up, :scroll_down) now use NavigationService through Domain layer
 
-### 3.3 Terminal Access Elimination ✅ PARTIAL (corrected)
-**Verified Status**: Most rendering goes through `Surface`, but several direct `Terminal` accesses remain.
+### 3.3 Terminal Access Elimination ✅ PARTIAL (re‑verified)
+**Verified Status**: ReaderController and reading components use `Surface` with `TerminalService`; a few direct `Terminal` usages remain and should be unified.
 - [x] Remove direct Terminal writes from MouseableReader
-- [x] Remove direct Terminal writes from most components
-- [x] Channel rendering via Surface/Component system  
-- [x] `TerminalService` abstraction exists
-- [x] ReaderController uses `Components::Surface.new(Terminal)` — replace with `terminal_service.create_surface`
+- [x] Most component rendering goes through Surface/Component system
+- [x] `TerminalService` abstraction exists and is used in Reader loop
+- [x] ReaderController now uses `terminal_service.create_surface` (verified)
 - [x] Legacy `DynamicPageCalculator` removed (replaced by `Domain::Services::PageCalculatorService`)
+- [ ] Remaining direct `Terminal` usages to replace with `terminal_service.create_surface` and DI:
+  - `lib/ebook_reader/main_menu.rb` (`draw_screen` constructs `Components::Surface.new(Terminal)`).
+  - `lib/ebook_reader/ui/base_screen.rb` (`draw` constructs `Components::Surface.new(Terminal)`).
+  - `lib/ebook_reader/reader_modes/base_mode.rb` and `annotation_editor_mode.rb`/`annotations_mode.rb` legacy `draw` wrappers construct surfaces directly (render paths are OK). Replace wrappers to request a surface from `TerminalService` or remove the `draw` wrappers entirely and use `render(surface, bounds)` exclusively.
+  - Keep `Terminal::ANSI` constants allowed in UI for styling; only I/O should be through `Surface`/`TerminalService`.
 
 ## Phase 4: Clean Architecture Enforcement 📋 PLANNED
 
@@ -153,15 +157,53 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
    - Persisting blue highlight after cancel: cancel path in `AnnotationEditorMode` did not clear selection. Fix applied: ESC now calls `reader.cleanup_popup_state` before switching to `:read`.
    - Saved annotations use placeholder text: `UIController#extract_selected_text_from_selection` now extracts real text from `rendered_lines` using `CoordinateService` (replaces the "Selected text" stub).
    - Follow-up: unify text extraction into a single `Domain::Services::SelectionService` to remove duplication between `MouseableReader` and `UIController`.
-2. **HIGH: Terminal Access Cleanup** — Replace remaining direct `Terminal` usage.
-   - Replace `Components::Surface.new(Terminal)` usages in `ReaderController` special-mode branch with `@terminal_service.create_surface`.
-   - Evaluate `DynamicPageCalculator` for retirement in favor of `PageCalculatorService`.
+2. **HIGH: Terminal Access Cleanup** — Replace remaining direct `Terminal` usage (specific targets).
+   - Use `@terminal_service.create_surface` instead of `Components::Surface.new(Terminal)` in:
+     - `MainMenu#draw_screen` (lib/ebook_reader/main_menu.rb)
+     - `UI::BaseScreen#draw` (lib/ebook_reader/ui/base_screen.rb)
+     - Legacy Mode `draw` wrappers (reader_modes/*): either delete wrappers or fetch surface via `TerminalService` injected via controller.
+   - No action needed for `Terminal::ANSI` usage.
 3. **HIGH: Singleton PageCalculator** — Verified COMPLETE.
    - `:page_calculator` registered as a singleton in `ContainerFactory` (shared instance between navigation and rendering).
 4. **HIGH: Terminal Dimensions Consistency** — Verified COMPLETE.
    - `StateStore#update_terminal_size` updates both `[:reader, :last_width/height]` and `[:ui, :terminal_width/height]`.
 5. **MEDIUM: Layer Boundary Enforcement** — Continue removing cross-layer imports and any residual circular dependencies.
 6. **MEDIUM: Complete Event-Driven Architecture** — Make components fully reactive to state events.
+7. **MEDIUM: Dispatcher Unification** — Two dispatchers exist; standardize on one.
+   - Current runtime uses `Input::Dispatcher` (lib/ebook_reader/input/dispatcher.rb).
+   - `Infrastructure::InputDispatcher` is present but unused; delete it or re-home it under `Input/` and remove duplication.
+8. **MEDIUM: DI Consistency in UI Elements** — Ensure UI elements don’t construct new containers internally.
+   - `Components::EnhancedPopupMenu` resolves `clipboard_service` via a new container. Inject `clipboard_service` from controller instead (as done for `coordinate_service`).
+9. **LOW: Comment Accuracy / Naming** — Replace lingering “GlobalState” comments with “ObserverStateStore/StateStore” to avoid confusion.
+
+## Verification Notes (Claims Re‑checked)
+
+- Phase 2.1 Service Layer Consolidation: Verified no legacy wrappers under `lib/ebook_reader/services/` for coordinate/clipboard/layout; only `chapter_cache.rb` and `library_scanner.rb` remain by design.
+- Phase 2.2 State System Unification: No `GlobalState` class in codebase; `:global_state` DI key resolves to `ObserverStateStore`. Some comments still mention “GlobalState”; update docs/comments only.
+- Phase 3.1 ReaderController Decomposition: Done; controllers exist (`navigation/ui/state/input`), and `ReaderController` now orchestrates.
+- Phase 3.2 Input System Unification: Reader navigation keys route through `DomainCommandBridge` and domain commands (verified in `Input::CommandFactory`, `Input::Commands`).
+- Phase 3.3 Terminal Access Elimination: Partial; remaining direct `Terminal` usage enumerated above.
+- Annotation UX Fixes: ESC cancel clears selection (`UIController#cleanup_popup_state` used during cancel in editor bindings). Selected text now extracted via `Domain::Services::SelectionService` from `rendered_lines` in both `UIController` and `MouseableReader`.
+- Singleton `PageCalculatorService`: Registered as singleton in container; used by nav/render paths.
+- Terminal dimension sync: `StateStore#update_terminal_size` updates both `[:reader, :last_width/height]` and `[:ui, :terminal_width/height]`.
+
+## Proposed Focus (Single Best Path Forward)
+
+1) Finish TerminalService adoption end‑to‑end (IO through one abstraction only):
+   - Inject `terminal_service` wherever a surface is needed; forbid `Components::Surface.new(Terminal)` construction outside `TerminalService`.
+   - Convert `MainMenu`, `UI::BaseScreen`, and legacy reader mode `draw` methods to use `render(surface, bounds)` only. Remove or deprecate their `draw(height,width)` wrappers.
+
+2) Unify input dispatching on `Input::Dispatcher` and remove `Infrastructure::InputDispatcher` to avoid dual implementations.
+
+3) Enforce DI in UI utilities:
+   - Update `EnhancedPopupMenu` to accept both `coordinate_service` and `clipboard_service` via constructor; remove new container usage.
+
+4) Standardize state updates:
+   - Prefer `update({ [:path, :to, :leaf] => value, ... })` for multi‑field changes and `set(path, value)` for single‑field writes; avoid mixing `update(path, value)` style except where backward compatibility is required.
+
+5) Remove dead/legacy mode renderers if fully replaced by components (`reader_modes/toc_mode.rb`, `help_mode.rb`), or refactor them to thin component wrappers if still referenced.
+
+These steps tighten the architecture to one consistent pattern: Domain commands + DI container + one input dispatcher + one terminal IO abstraction, with all UI through components.
 
 ## Verified Findings: Dynamic Navigation (status)
 

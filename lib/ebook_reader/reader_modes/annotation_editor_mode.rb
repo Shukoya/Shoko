@@ -19,12 +19,7 @@ module EbookReader
         @is_editing = !annotation.nil?
       end
 
-      def draw(height, width)
-        # Legacy compatibility wrapper
-        surface = Components::Surface.new(Terminal)
-        bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
-        render(surface, bounds)
-      end
+      # draw is inherited from BaseMode and uses TerminalService when available
 
       def render(surface, bounds)
         draw_header(surface, bounds)
