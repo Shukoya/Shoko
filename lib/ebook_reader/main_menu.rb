@@ -18,7 +18,7 @@ module EbookReader
     include Actions::SettingsActions
     include Input::KeyDefinitions::Helpers
 
-    attr_reader :state, :filtered_epubs, :main_menu_component
+    attr_reader :state, :filtered_epubs, :main_menu_component, :scanner
 
     def config
       @state
@@ -124,14 +124,20 @@ module EbookReader
 
     def handle_backspace_input
       if EbookReader::Domain::Selectors::MenuSelectors.search_active?(@state)
-        search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
-        if search_query.length.positive?
-          @state.set(%i[menu search_query], search_query[0...-1])
-          # Filtering is now handled automatically by the component through state observation
+        current = (EbookReader::Domain::Selectors::MenuSelectors.search_query(@state) || '').to_s
+        cursor = (@state.get(%i[menu search_cursor]) || current.length).to_i
+        if cursor.positive?
+          before = current[0, cursor - 1] || ''
+          after  = current[cursor..] || ''
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
+            search_query: before + after,
+            search_cursor: cursor - 1
+          ))
         end
       elsif @state.get(%i[menu file_input]).length.positive?
-        file_input = EbookReader::Domain::Selectors::MenuSelectors.file_input(@state)
-        @state.set(%i[menu file_input], file_input[0...-1])
+        file_input = (EbookReader::Domain::Selectors::MenuSelectors.file_input(@state) || '').to_s
+        new_val = file_input.length.positive? ? file_input[0...-1] : file_input
+        @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(file_input: new_val))
       end
       @main_menu_component.open_file_screen.input = @state.get(%i[menu file_input])
     end
@@ -140,8 +146,8 @@ module EbookReader
       char = key.to_s
       return unless char.length == 1 && char.ord >= 32
 
-      file_input = EbookReader::Domain::Selectors::MenuSelectors.file_input(@state)
-      @state.set(%i[menu file_input], file_input + char)
+      file_input = (EbookReader::Domain::Selectors::MenuSelectors.file_input(@state) || '').to_s
+      @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(file_input: file_input + char))
       @main_menu_component.open_file_screen.input = @state.get(%i[menu file_input])
     end
 
@@ -202,7 +208,7 @@ module EbookReader
     end
 
     def setup_components
-      @main_menu_component = Components::MainMenuComponent.new(self)
+      @main_menu_component = Components::MainMenuComponent.new(self, @dependencies)
     end
 
     public
@@ -229,8 +235,7 @@ module EbookReader
     end
 
     def annotation_editor_screen
-      # This would need to be migrated to a component as well
-      nil
+      @main_menu_component.annotation_edit_screen
     end
 
     def menu_screen
@@ -641,65 +646,32 @@ module EbookReader
     def register_annotation_editor_bindings
       bindings = {}
 
-      # ESC / cancel → back to annotations
+      # Cancel
       Input::KeyDefinitions::ACTIONS[:cancel].each do |k|
-        bindings[k] = lambda { |ctx, _|
-          ctx.switch_to_mode(:annotations)
-          :handled
-        }
-      end
-      # Ctrl+S to save
-      if Input::KeyDefinitions::ACTIONS.key?(:save)
-        Input::KeyDefinitions::ACTIONS[:save].each do |k|
-          bindings[k] = lambda { |ctx, _|
-            ctx.save_current_annotation_edit
-            :handled
-          }
-        end
+        bindings[k] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.cancel
       end
 
-      # Backspace
+      # Save: Ctrl+S and 'S'
+      bindings["\x13"] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
+      bindings['S']     = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
+
+      # Backspace (both variants)
       Input::KeyDefinitions::ACTIONS[:backspace].each do |k|
-        bindings[k] = lambda { |ctx, _|
-          text = ctx.state.get(%i[menu annotation_edit_text]) || ''
-          cur = (ctx.state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
-          if cur.positive?
-            new_text = text.dup
-            new_text.slice!(cur - 1)
-            ctx.state.update({ %i[menu annotation_edit_text] => new_text, %i[menu annotation_edit_cursor] => cur - 1 })
-          end
-          :handled
-        }
+        bindings[k] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.backspace
       end
 
-      # Enter
+      # Enter (CR and LF)
       if Input::KeyDefinitions::ACTIONS.key?(:enter)
         Input::KeyDefinitions::ACTIONS[:enter].each do |k|
-          bindings[k] = lambda { |ctx, _|
-            text = ctx.state.get(%i[menu annotation_edit_text]) || ''
-            cur = (ctx.state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
-            new_text = text.dup
-            new_text.insert(cur, "\n")
-            ctx.state.update({ %i[menu annotation_edit_text] => new_text, %i[menu annotation_edit_cursor] => cur + 1 })
-            :handled
-          }
+          bindings[k] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.enter
         end
       end
+      EbookReader::Input::KeyDefinitions::ACTIONS[:confirm].each do |k|
+        bindings[k] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.enter
+      end
 
-      # Default char input
-      bindings[:__default__] = lambda { |ctx, key|
-        char = key.to_s
-        if char.length == 1 && char.ord >= 32
-          text = ctx.state.get(%i[menu annotation_edit_text]) || ''
-          cur = (ctx.state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
-          new_text = text.dup
-          new_text.insert(cur, char)
-          ctx.state.update({ %i[menu annotation_edit_text] => new_text, %i[menu annotation_edit_cursor] => cur + 1 })
-          :handled
-        else
-          :pass
-        end
-      }
+      # Default char input → insert
+      bindings[:__default__] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.insert_char
 
       @dispatcher.register_mode(:annotation_editor, bindings)
     end
@@ -724,6 +696,12 @@ module EbookReader
       # Ensure reader loop runs even if a previous session set running=false
       @state.update({ %i[reader running] => true, %i[reader mode] => :read })
       MouseableReader.new(path, nil, @dependencies).run
+    end
+
+    # Provide current editor component for domain commands in menu context
+    def current_editor_component
+      return nil unless EbookReader::Domain::Selectors::MenuSelectors.mode(@state) == :annotation_editor
+      @main_menu_component&.annotation_edit_screen
     end
 
     def file_not_found

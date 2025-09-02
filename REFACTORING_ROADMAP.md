@@ -1,9 +1,9 @@
 # EBook Reader Refactoring Roadmap
 
-**Current Status: Phase 4.5 - Documentation Alignment**  
-**Overall Progress: 92% Complete (re-verified and corrected)**  
-**Estimated Completion: Phase 4.5**  
-**Status Note:** Overlay, input, and annotations flows are unified; remaining work is cleanup, docs, DI consistency for renderers, and styling/state API touch-ups.
+**Current Status: Phase 4.5 - Documentation + Input Alignment**  
+**Overall Progress: ~85% Complete (audited 2025-09-02)**  
+**Estimated Completion: Phase 4.6**  
+**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Remaining work is documentation cleanup (Project Structure + DI examples), state API consistency in menu, removal of vestigial reader annotations mode paths, and small DI/style touch-ups.
 
 ## Phase 1: Infrastructure Foundation ✅ COMPLETE
 
@@ -26,7 +26,7 @@
 
 ## Phase 2: Legacy Elimination ❌ INCOMPLETE
 
-### 2.1 Service Layer Consolidation ✅ COMPLETE (corrected)
+### 2.1 Service Layer Consolidation ✅ COMPLETE (re-verified)
 **Verified Status**: Legacy wrappers for `coordinate_service`, `clipboard_service`, and `layout_service` do NOT exist under `lib/ebook_reader/services/` anymore. All active implementations live under `lib/ebook_reader/domain/services/`.
 - [x] Legacy wrappers removed (`coordinate_service.rb`, `clipboard_service.rb`, `layout_service.rb`) — verified absent
 - [x] All references use `domain/services/` versions only — verified
@@ -54,7 +54,7 @@
 
 ## Phase 3: Architecture Cleanup 📋 PLANNED
 
-### 3.1 ReaderController Decomposition ✅ COMPLETE
+### 3.1 ReaderController Decomposition ✅ COMPLETE (re-verified)
 **Issue Resolved**: God class decomposed into focused controllers
 - [x] Extract NavigationController (page/chapter navigation)
 - [x] Extract UIController (mode switching, overlays)  
@@ -164,10 +164,12 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
    - Implemented: deleted `lib/ebook_reader/ui/base_screen.rb` (no references remained).
 3. ✅ MEDIUM: Styling consistency
    - Implemented: replaced raw `Terminal::ANSI` color codes in components with `Constants::UIConstants` (kept italics and reset codes).
-4. ✅ LOW: State API consistency (initial pass)
-   - Implemented in controllers: standardized on `set` for single-path writes; `update` retained for multi-path updates.
+4. 🔶 LOW: State API consistency (menu)
+   - Remaining: menu-related code still mixes `set`/`update` with direct field edits; prefer dispatching `UpdateMenuAction` for single-field changes to match controllers (e.g., `MainMenu#handle_backspace_input`, `#handle_character_input`).
 5. ✅ LOW: Message timeout hygiene
    - Implemented debounced timers in `UIController#set_message` and `StateController#set_message` to avoid thread buildup.
+6. ✅ HIGH: Unify menu annotation editor input
+   - Verified: menu `:annotation_editor` bindings use `Domain::Commands::AnnotationEditorCommandFactory` (save/cancel/backspace/enter/insert). No inline lambdas remain for the editor.
 
 ## Verification Notes (Claims Re‑checked)
 
@@ -186,7 +188,8 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
  - UI boundary: No component requires domain/services directly — services are accessed via DI — VERIFIED.
  - MouseableReader: No lingering direct requires of `AnnotationStore` — VERIFIED.
  - Selection/overlay duplication: Eliminated — column-bounds logic now lives in `CoordinateService`; overlay and selection extraction use it — VERIFIED.
- - Annotation editor input: Routed via `Domain::Commands::AnnotationEditorCommandFactory` — VERIFIED; updated priorities accordingly.
+- Annotation editor input: Reader-context editor is routed via `Domain::Commands::AnnotationEditorCommandFactory` (InputController) — VERIFIED.  
+  Menu-context editor is also routed via `Domain::Commands::AnnotationEditorCommandFactory` in `MainMenu#register_annotation_editor_bindings` — VERIFIED.
 
 ## Phase 4: Annotations Unification 🚧 IN PROGRESS
 
@@ -216,10 +219,11 @@ Goal: One coherent annotations flow with strict layering (Domain Service + Actio
 
 ### 4.5 Documentation Alignment 📖 IN PROGRESS (updated)
 - [x] Update `ARCHITECTURE.md` and README Architecture section to reflect Clean Architecture layering (Infrastructure → Domain (services, actions, selectors, commands) → Application (controllers, UnifiedApplication) → Presentation (components)).
-- [ ] Remove or reframe references to `ReaderModes` in docs; the editor is now a screen component and overlays are components.  
-  - Remaining: `DEVELOPMENT.md` still mentions `ReaderModes::*` in the “Strategy Pattern” section.
+- [x] Remove or reframe references to `ReaderModes` in docs; the editor is now a screen component and overlays are components.  
+  - Verified: `DEVELOPMENT.md` already uses “Dispatcher + Screen Components”.
 - [x] Ensure configuration path casing in README is `~/.config/reader` (matches `Infrastructure::StateStore::CONFIG_DIR`).
-- [ ] Document DI patterns in more detail: clarify that a single `DependencyContainer` is created at app start and injected downward; components/renderers receive dependencies via constructor (no ad‑hoc containers). Expand examples in `ARCHITECTURE.md` and/or `DEVELOPMENT.md`.
+- [ ] Update `DEVELOPMENT.md` Project Structure to match actual layout (`domain`, `application`, `controllers`, `components`, `infrastructure`, `input`, etc.). Current tree references `core/concerns/renderers/services` which no longer exists.
+- [ ] Fix DI examples in docs: avoid creating an unused container in the sample (UnifiedApplication builds its own); add concrete examples for resolving services inside components via provided dependencies.
 
 Outcome: A single, predictable flow — UI reads from state; controllers invoke Domain services; services persist and dispatch actions; the overlay is a proper component; there is no mode/screen duplication for annotations.
 
@@ -244,3 +248,25 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
 **Verified Status**: Legacy ReaderController and dynamic pagination module removed.
 - [x] Remove `reader_controller_old.rb` — verified removed
 - [x] Remove `dynamic_page_calculator.rb` — verified removed
+
+---
+
+## Newly Identified Follow-ups (from deep scan)
+
+1) Reader annotations mode vestiges  
+   - `UIController#open_annotations` sets `:annotations` mode without a dedicated component; `ReaderController#draw_screen` special-cases `:annotations` even though `current_mode` is nil. Remove the reader `:annotations` mode entirely and instead toggle the sidebar to the annotations tab (mirroring `open_toc`). Drop `InputController#register_annotations_list_bindings_new` and route navigation via conditional sidebar commands.
+
+2) Input controller lambdas using `instance_variable_get`  
+   - Replace `instance_variable_get(:@dependencies)` lookups with explicit DI resolution in closures or route via domain commands to avoid closures touching controller internals.
+
+3) Consistent menu state updates  
+   - Prefer dispatching `UpdateMenuAction` for single-field changes in `MainMenu` to match controller patterns; reserve `set` for test helpers or scoped atomic updates.
+
+4) Architecture docs  
+   - Update `DEVELOPMENT.md` Project Structure + DI examples as noted above.
+
+5) MainMenuComponent DI hygiene  
+   - Stop reaching into `@main_menu.instance_variable_get(:@dependencies)`. Pass dependencies explicitly to `MainMenuComponent` and screen components via constructor to keep a single DI source.
+
+6) Component duplication  
+   - `Components::Screens::AnnotationsScreenComponent` defines `normalize_list` twice; deduplicate and keep a single implementation.

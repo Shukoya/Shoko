@@ -10,9 +10,10 @@ module EbookReader
       class AnnotationEditScreenComponent < BaseComponent
         include Constants::UIConstants
 
-        def initialize(state)
-          super()
+        def initialize(state, dependencies = nil)
+          super(dependencies)
           @state = state
+          @dependencies = dependencies
         end
 
         def do_render(surface, bounds)
@@ -70,6 +71,55 @@ module EbookReader
 
         def preferred_height(_available_height)
           :fill
+        end
+
+        # --- Unified editor API (used by Domain::Commands) ---
+        def save_annotation
+          ann = @state.get(%i[menu selected_annotation]) || {}
+          path = @state.get(%i[menu selected_annotation_book])
+          text = (@state.get(%i[menu annotation_edit_text]) || '').to_s
+          return unless path && (ann[:id] || ann['id'])
+
+          begin
+            svc = @dependencies&.resolve(:annotation_service)
+            svc&.update(path, ann[:id] || ann['id'], text)
+            # Refresh annotations mapping for list view if possible
+            if svc
+              @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(annotations_all: svc.list_all))
+            end
+          rescue StandardError
+            # ignore; best-effort
+          end
+
+          # Return to annotations list
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(mode: :annotations))
+        end
+
+        def handle_backspace
+          text = (@state.get(%i[menu annotation_edit_text]) || '').to_s
+          cur = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
+          if cur.positive?
+            new_text = text.dup
+            new_text.slice!(cur - 1)
+            @state.update({ %i[menu annotation_edit_text] => new_text, %i[menu annotation_edit_cursor] => cur - 1 })
+          end
+        end
+
+        def handle_enter
+          text = (@state.get(%i[menu annotation_edit_text]) || '').to_s
+          cur = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
+          new_text = text.dup
+          new_text.insert(cur, "\n")
+          @state.update({ %i[menu annotation_edit_text] => new_text, %i[menu annotation_edit_cursor] => cur + 1 })
+        end
+
+        def handle_character(char)
+          return unless char.to_s.length == 1 && char.ord >= 32
+          text = (@state.get(%i[menu annotation_edit_text]) || '').to_s
+          cur = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
+          new_text = text.dup
+          new_text.insert(cur, char)
+          @state.update({ %i[menu annotation_edit_text] => new_text, %i[menu annotation_edit_cursor] => cur + 1 })
         end
 
         private

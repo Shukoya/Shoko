@@ -42,8 +42,7 @@ module EbookReader
 
       def render_active_selection(surface, bounds)
         # Render current selection highlight
-        selection_range = @controller.state.get(%i[reader selection]) ||
-                          @controller.instance_variable_get(:@mouse_handler)&.selection_range
+        selection_range = @controller.state.get(%i[reader selection])
 
         unless selection_range
           # No active selection; keep any previously rendered segments for one clear pass

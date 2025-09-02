@@ -103,9 +103,33 @@ The application follows a layered architecture with clear separation of concerns
 
 ### Design Patterns
 
-- **Strategy Pattern**: Reader modes (`ReaderModes::*`)
-- **Observer Pattern**: Configuration changes
-- **Service Objects**: Complex operations
+- **Dispatcher + Screen Components**: Presentation uses a dispatcher with domain commands to route input into the application layer. “Modes” are implemented as screen components (e.g., Annotations, Annotation Editor, Browse) that implement `do_render(surface, bounds)`.
+- **Observer Pattern**: State changes notify components/controllers via `ObserverStateStore`.
+- **Service Objects (Domain Services)**: Core logic behind stable APIs, invoked by commands/controllers, mutating state via explicit domain actions.
+
+### Dependency Injection (DI)
+
+- A single `Domain::DependencyContainer` is created at app start and passed down.
+- Components and renderers receive dependencies via constructor; renderers use `ViewRendererFactory` to ensure a single DI source.
+
+Examples:
+
+```ruby
+# App entry
+container = EbookReader::Domain::ContainerFactory.create_default_container
+EbookReader::Application::UnifiedApplication.new(path).run
+
+# Reader renderers
+renderer = EbookReader::Components::Reading::ViewRendererFactory.create(state, controller)
+
+# Screen component with DI (menu)
+menu_component = EbookReader::Components::MainMenuComponent.new(main_menu)
+editor = menu_component.annotation_edit_screen
+
+# Resolving a service from a component
+svc = dependencies.resolve(:annotation_service)
+svc.update(path, id, note)
+```
 
 ## Coding Standards
 

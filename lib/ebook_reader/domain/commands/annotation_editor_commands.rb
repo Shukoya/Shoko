@@ -16,15 +16,38 @@ module EbookReader
         protected
 
         def perform(context, params = {})
-          ui = context.dependencies.resolve(:ui_controller)
-          mode = ui.current_mode
+          ui = context.dependencies.resolve(:ui_controller) if context.respond_to?(:dependencies)
+          # Prefer a context-provided editor component (menu or reader), else fall back to UI current_mode
+          mode = if context.respond_to?(:current_editor_component)
+                   context.current_editor_component
+                 else
+                   ui&.current_mode
+                 end
 
           case @action
           when :save
             mode&.save_annotation
           when :cancel
-            ui.cleanup_popup_state
-            ui.switch_mode(:read)
+            # Reader: cleanup + back to read; Menu: back to annotations
+            if ui
+              begin
+                ui.cleanup_popup_state
+              rescue StandardError
+                # no-op (menu has no popup state)
+              end
+              begin
+                ui.switch_mode(:read)
+              rescue StandardError
+                # fall through to menu path
+              end
+            else
+              # Menu context: switch to annotations screen
+              begin
+                context.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(mode: :annotations))
+              rescue StandardError
+                # best-effort
+              end
+            end
           when :backspace
             mode&.handle_backspace
           when :enter
@@ -65,4 +88,3 @@ module EbookReader
     end
   end
 end
-

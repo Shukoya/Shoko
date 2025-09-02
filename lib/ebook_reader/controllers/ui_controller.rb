@@ -74,7 +74,29 @@ module EbookReader
       end
 
       def open_annotations
-        switch_mode(:annotations)
+        # Toggle sidebar Annotations panel similar to TOC
+        if @state.get(%i[reader sidebar_visible]) && @state.get(%i[reader sidebar_active_tab]) == :annotations
+          # Closing Annotations sidebar – restore previous view mode if stored
+          prev_mode = @state.get(%i[reader sidebar_prev_view_mode])
+          if prev_mode
+            @state.dispatch(EbookReader::Domain::Actions::UpdateConfigAction.new(view_mode: prev_mode))
+            @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(sidebar_prev_view_mode: nil))
+          end
+          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(visible: false))
+          @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
+          set_message('Annotations closed', 1)
+        else
+          # Opening Annotations sidebar – store current view and force single-page view
+          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(sidebar_prev_view_mode: @state.get(%i[config view_mode])))
+          @state.dispatch(EbookReader::Domain::Actions::UpdateConfigAction.new(view_mode: :single))
+          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(
+            active_tab: :annotations,
+            annotations_selected: (@state.get(%i[reader sidebar_annotations_selected]) || 0),
+            visible: true
+          ))
+          @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
+          set_message('Annotations opened', 1)
+        end
       end
 
       def show_help

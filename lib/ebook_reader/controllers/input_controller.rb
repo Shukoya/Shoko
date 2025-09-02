@@ -96,7 +96,6 @@ module EbookReader
         register_toc_bindings_new(reader_controller)
         register_bookmarks_bindings_new(reader_controller)
         register_annotation_editor_bindings_new(reader_controller)
-        register_annotations_list_bindings_new(reader_controller)
       end
 
       def register_read_bindings(_reader_controller)
@@ -206,8 +205,6 @@ module EbookReader
         case mode
         when :annotation_editor
           @dispatcher.activate(:annotation_editor)
-        when :annotations
-          @dispatcher.activate(:annotations)
         when :help
           @dispatcher.activate(:help)
         when :toc
@@ -219,59 +216,7 @@ module EbookReader
         end
       end
 
-      def register_annotations_list_bindings_new(_reader_controller)
-        bindings = {}
-
-        # Exit keys
-        ['q', "\e", "\u0001"].each do |key|
-          bindings[key] = lambda { |ctx, _k|
-            ui_controller = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-            ui_controller.switch_mode(:read)
-            :handled
-          }
-        end
-
-        # Navigation down keys (j, down arrow variants)
-        ['j', "\e[B", "\eOB"].each do |key|
-          bindings[key] = lambda { |ctx, _k|
-            ui_controller = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-            mode = ui_controller.current_mode
-            if mode && mode.respond_to?(:selected_annotation) && mode.respond_to?(:annotations)
-              annotations = mode.annotations
-              if annotations.any?
-                current = mode.selected_annotation
-                mode.selected_annotation = [current + 1, annotations.length - 1].min
-              end
-            end
-            :handled
-          }
-        end
-
-        # Navigation up keys (k, up arrow variants)
-        ['k', "\e[A", "\eOA"].each do |key|
-          bindings[key] = lambda { |ctx, _k|
-            ui_controller = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-            mode = ui_controller.current_mode
-            if mode && mode.respond_to?(:selected_annotation)
-              current = mode.selected_annotation
-              mode.selected_annotation = [current - 1, 0].max
-            end
-            :handled
-          }
-        end
-
-        # Enter keys - jump to annotation
-        ["\r", "\n"].each do |key|
-          bindings[key] = lambda { |ctx, _k|
-            ui_controller = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-            mode = ui_controller.current_mode
-            mode&.jump_to_annotation if mode.respond_to?(:jump_to_annotation)
-            :handled
-          }
-        end
-
-        @dispatcher.register_mode(:annotations, bindings)
-      end
+      # Removed reader annotations list bindings; annotations are managed via the sidebar
     end
   end
 end

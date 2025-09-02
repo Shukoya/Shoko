@@ -150,7 +150,7 @@ module EbookReader
       @state.update_terminal_size(width, height)
 
       # Special-case full-screen modes that render their own UI
-      if %i[annotation_editor annotations].include?(@state.get(%i[reader mode])) && @ui_controller.current_mode
+      if %i[annotation_editor].include?(@state.get(%i[reader mode])) && @ui_controller.current_mode
         # Clear the frame area to avoid artifacts from reading view
         surface = @terminal_service.create_surface
         bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)

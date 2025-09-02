@@ -44,22 +44,7 @@ module EbookReader
 
         # Normalize raw annotations (string-keyed hashes) into symbol-keyed items
         # Includes page metadata when present
-        def normalize_list(raw)
-          (raw || []).map do |a|
-            {
-              text: a['text'],
-              note: a['note'],
-              id: a['id'],
-              range: a['range'],
-              chapter_index: a['chapter_index'],
-              created_at: a['created_at'],
-              updated_at: a['updated_at'],
-              page_current: a['page_current'],
-              page_total: a['page_total'],
-              page_mode: a['page_mode'],
-            }
-          end
-        end
+        # (duplicate normalize_list method removed)
 
         def refresh_data
           prev_selected = @selected

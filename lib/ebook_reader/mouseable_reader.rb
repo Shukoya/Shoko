@@ -77,6 +77,8 @@ module EbookReader
 
       case result[:type]
       when :selection_drag
+        # Keep selection in state while dragging so overlay can render purely from state
+        @state.dispatch(Domain::Actions::UpdateSelectionAction.new(@mouse_handler.selection_range))
         refresh_highlighting
       when :selection_end
         handle_selection_end

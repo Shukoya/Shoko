@@ -14,11 +14,12 @@ module EbookReader
   module Components
     # Root component for the main menu system
     class MainMenuComponent < BaseComponent
-      def initialize(main_menu)
+      def initialize(main_menu, dependencies)
         super()
         @main_menu = main_menu
         @state = main_menu.state
-        @scanner = main_menu.instance_variable_get(:@scanner)
+        @dependencies = dependencies
+        @scanner = @main_menu.scanner
 
         setup_screen_components
 
@@ -81,9 +82,15 @@ module EbookReader
           settings: Screens::SettingsScreenComponent.new(@state, @scanner),
           open_file: Screens::OpenFileScreenComponent.new(@state),
           annotations: Screens::AnnotationsScreenComponent.new(@state),
-          annotation_editor: Screens::AnnotationEditScreenComponent.new(@state),
+          annotation_editor: Screens::AnnotationEditScreenComponent.new(@state, @dependencies),
           annotation_detail: Screens::AnnotationDetailScreenComponent.new(@state),
         }
+      end
+
+      public
+
+      def annotation_edit_screen
+        @screen_components[:annotation_editor]
       end
     end
   end

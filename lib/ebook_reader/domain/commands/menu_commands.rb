@@ -63,14 +63,14 @@ module EbookReader
 
         def browse_nav(context, delta)
           state = context.state
-          # Prefer component's filtered list length if available
+          # Prefer component's filtered list length; fall back to public accessor
           max_idx = begin
             if context.respond_to?(:main_menu_component) && context.main_menu_component.respond_to?(:browse_screen)
               cnt = context.main_menu_component.browse_screen.filtered_count
               [(cnt || 0) - 1, 0].max
             else
-              epubs = context.instance_variable_defined?(:@filtered_epubs) ? context.instance_variable_get(:@filtered_epubs) : []
-              [(epubs&.length || 0) - 1, 0].max
+              epubs = (context.respond_to?(:filtered_epubs) && context.filtered_epubs) || []
+              [(epubs.length) - 1, 0].max
             end
           end
           current = state.get(%i[menu browse_selected]) || 0
