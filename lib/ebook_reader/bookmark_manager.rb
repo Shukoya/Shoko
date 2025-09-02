@@ -3,7 +3,7 @@
 require 'fileutils'
 require 'json'
 require 'time'
-require_relative 'models/bookmark'
+require_relative 'domain/models/bookmark'
 
 module EbookReader
   # Bookmark manager
@@ -20,7 +20,7 @@ module EbookReader
     end
 
     def self.get(path)
-      (load_all[path] || []).map { |h| Models::Bookmark.from_h(h) }
+      (load_all[path] || []).map { |h| Domain::Models::Bookmark.from_h(h) }
     end
 
     def self.delete(path, bookmark_to_delete)
@@ -34,7 +34,7 @@ module EbookReader
     end
 
     def self.build_entry(chapter, line_offset, text)
-      Models::Bookmark.new(
+      Domain::Models::Bookmark.new(
         chapter_index: chapter,
         line_offset: line_offset,
         text_snippet: text,
@@ -43,7 +43,7 @@ module EbookReader
     end
 
     private_class_method def self.update_bookmarks_for_path(bookmarks, path, new_bookmark)
-      list = (bookmarks[path] || []).map { |h| Models::Bookmark.from_h(h) }
+      list = (bookmarks[path] || []).map { |h| Domain::Models::Bookmark.from_h(h) }
       list = append_bookmark(list, new_bookmark)
       bookmarks[path] = list.map(&:to_h)
     end

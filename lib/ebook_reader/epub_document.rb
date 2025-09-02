@@ -7,7 +7,7 @@ require 'zip'
 require 'rexml/document'
 require_relative 'helpers/html_processor'
 require_relative 'helpers/opf_processor'
-require_relative 'models/chapter'
+require_relative 'domain/models/chapter'
 
 module EbookReader
   # EPUB document class
@@ -38,7 +38,7 @@ module EbookReader
 
       entry = @chapters[index]
 
-      return entry if entry.is_a?(Models::Chapter)
+      return entry if entry.is_a?(Domain::Models::Chapter)
 
       chapter = load_chapter(entry)
       @chapters[index] = chapter if chapter
@@ -67,7 +67,7 @@ module EbookReader
 
     def create_error_chapter(error)
       @chapters = [
-        Models::Chapter.new(
+        Domain::Models::Chapter.new(
           number: '1',
           title: 'Error Loading',
           lines: ["Error: #{error.message}"],
@@ -117,7 +117,7 @@ module EbookReader
     def ensure_chapters_exist
       return unless @chapters.empty?
 
-      @chapters << Models::Chapter.new(
+      @chapters << Domain::Models::Chapter.new(
         number: '1',
         title: 'Empty Book',
         lines: ['This EPUB appears to be empty.'],
@@ -144,7 +144,7 @@ module EbookReader
       title = extract_chapter_title(content, number, title_from_ncx)
       lines = extract_chapter_lines(content)
 
-      Models::Chapter.new(
+      Domain::Models::Chapter.new(
         number: number.to_s,
         title: title,
         lines: lines,

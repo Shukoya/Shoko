@@ -127,6 +127,17 @@ module EbookReader
         # Infrastructure services
         container.register_singleton(:event_bus) { Infrastructure::EventBus.new }
         container.register_singleton(:logger) { Infrastructure::Logger }
+        
+        # Domain event bus
+        container.register_singleton(:domain_event_bus) do |c|
+          Domain::Events::DomainEventBus.new(c.resolve(:event_bus))
+        end
+
+        # Domain repositories
+        container.register_factory(:bookmark_repository) { |c| Domain::Repositories::BookmarkRepository.new(c) }
+        container.register_factory(:annotation_repository) { |c| Domain::Repositories::AnnotationRepository.new(c) }
+        container.register_factory(:progress_repository) { |c| Domain::Repositories::ProgressRepository.new(c) }
+        container.register_factory(:config_repository) { |c| Domain::Repositories::ConfigRepository.new(c) }
 
         # Domain services with dependency injection
         container.register_factory(:navigation_service) { |c| Domain::Services::NavigationService.new(c) }

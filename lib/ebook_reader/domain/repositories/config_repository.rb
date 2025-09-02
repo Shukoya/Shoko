@@ -1,0 +1,234 @@
+# frozen_string_literal: true
+
+require_relative 'base_repository'
+
+module EbookReader
+  module Domain
+    module Repositories
+      # Repository for configuration persistence, abstracting the underlying storage mechanism.
+      #
+      # This repository provides a clean domain interface for configuration operations,
+      # using the StateStore as the single source of truth for all configuration data.
+      #
+      # @example Getting configuration
+      #   repo = ConfigRepository.new(dependencies)
+      #   view_mode = repo.get_view_mode
+      #   line_spacing = repo.get_line_spacing
+      #
+      # @example Updating configuration
+      #   repo.update_view_mode(:split)
+      #   repo.update_line_spacing(:wide)
+      class ConfigRepository < BaseRepository
+        # Default configuration values
+        DEFAULT_CONFIG = {
+          view_mode: :split,
+          page_numbering_mode: :absolute,
+          show_page_numbers: true,
+          line_spacing: :normal,
+          input_debounce_ms: 100,
+          search_highlight_timeout: 2000,
+          auto_save_interval: 30,
+          theme: :default
+        }.freeze
+
+        def initialize(dependencies)
+          super(dependencies)
+          @state_store = dependencies.resolve(:global_state)
+        end
+
+        # Get the current view mode
+        #
+        # @return [Symbol] Current view mode (:split or :single)
+        def get_view_mode
+          get_config_value(:view_mode, DEFAULT_CONFIG[:view_mode])
+        end
+
+        # Update the view mode
+        #
+        # @param mode [Symbol] New view mode (:split or :single)
+        # @return [Boolean] True if updated successfully
+        def update_view_mode(mode)
+          validate_enum_value(:view_mode, mode, %i[split single])
+          update_config_value(:view_mode, mode)
+        end
+
+        # Get the current page numbering mode
+        #
+        # @return [Symbol] Current page numbering mode (:absolute or :dynamic)
+        def get_page_numbering_mode
+          get_config_value(:page_numbering_mode, DEFAULT_CONFIG[:page_numbering_mode])
+        end
+
+        # Update the page numbering mode
+        #
+        # @param mode [Symbol] New page numbering mode (:absolute or :dynamic)
+        # @return [Boolean] True if updated successfully
+        def update_page_numbering_mode(mode)
+          validate_enum_value(:page_numbering_mode, mode, %i[absolute dynamic])
+          update_config_value(:page_numbering_mode, mode)
+        end
+
+        # Get whether page numbers are shown
+        #
+        # @return [Boolean] True if page numbers should be shown
+        def get_show_page_numbers
+          get_config_value(:show_page_numbers, DEFAULT_CONFIG[:show_page_numbers])
+        end
+
+        # Update whether to show page numbers
+        #
+        # @param show [Boolean] Whether to show page numbers
+        # @return [Boolean] True if updated successfully
+        def update_show_page_numbers(show)
+          validate_boolean_value(:show_page_numbers, show)
+          update_config_value(:show_page_numbers, show)
+        end
+
+        # Get the current line spacing
+        #
+        # @return [Symbol] Current line spacing (:tight, :normal, or :wide)
+        def get_line_spacing
+          get_config_value(:line_spacing, DEFAULT_CONFIG[:line_spacing])
+        end
+
+        # Update the line spacing
+        #
+        # @param spacing [Symbol] New line spacing (:tight, :normal, or :wide)
+        # @return [Boolean] True if updated successfully
+        def update_line_spacing(spacing)
+          validate_enum_value(:line_spacing, spacing, %i[tight normal wide])
+          update_config_value(:line_spacing, spacing)
+        end
+
+        # Get the input debounce time in milliseconds
+        #
+        # @return [Integer] Input debounce time in milliseconds
+        def get_input_debounce_ms
+          get_config_value(:input_debounce_ms, DEFAULT_CONFIG[:input_debounce_ms])
+        end
+
+        # Update the input debounce time
+        #
+        # @param ms [Integer] New debounce time in milliseconds
+        # @return [Boolean] True if updated successfully
+        def update_input_debounce_ms(ms)
+          validate_positive_integer(:input_debounce_ms, ms)
+          update_config_value(:input_debounce_ms, ms)
+        end
+
+        # Get all configuration as a hash
+        #
+        # @return [Hash] All configuration values
+        def get_all_config
+          config_state = @state_store.get(%i[config]) || {}
+          DEFAULT_CONFIG.merge(config_state)
+        end
+
+        # Update multiple configuration values at once
+        #
+        # @param config_hash [Hash] Hash of configuration key-value pairs
+        # @return [Boolean] True if updated successfully
+        def update_multiple(config_hash)
+          validate_required_params({ config_hash: config_hash }, [:config_hash])
+
+          begin
+            # Validate each value before applying any updates
+            config_hash.each do |key, value|
+              validate_config_key_value(key, value)
+            end
+
+            # Apply updates as a single state transaction
+            @state_store.update(config_hash.transform_keys { |k| [:config, k] })
+            true
+          rescue => e
+            handle_storage_error(e, "updating multiple config values")
+          end
+        end
+
+        # Reset configuration to defaults
+        #
+        # @return [Boolean] True if reset successfully
+        def reset_to_defaults
+          begin
+            @state_store.update(DEFAULT_CONFIG.transform_keys { |k| [:config, k] })
+            true
+          rescue => e
+            handle_storage_error(e, "resetting configuration to defaults")
+          end
+        end
+
+        # Check if a configuration key has been customized from default
+        #
+        # @param key [Symbol] Configuration key to check
+        # @return [Boolean] True if the value differs from default
+        def customized?(key)
+          current_value = get_config_value(key, nil)
+          default_value = DEFAULT_CONFIG[key]
+          current_value != default_value
+        end
+
+        private
+
+        # Get a configuration value with fallback to default
+        def get_config_value(key, default_value)
+          @state_store.get([:config, key]) || default_value
+        rescue => e
+          handle_storage_error(e, "getting config value #{key}")
+        end
+
+        # Update a single configuration value
+        def update_config_value(key, value)
+          begin
+            @state_store.update({ [:config, key] => value })
+            true
+          rescue => e
+            handle_storage_error(e, "updating config value #{key}")
+          end
+        end
+
+        # Validate that a value is one of the allowed enum values
+        def validate_enum_value(key, value, allowed_values)
+          return if allowed_values.include?(value)
+
+          raise ValidationError, "Invalid #{key}: #{value}. Must be one of: #{allowed_values.join(', ')}"
+        end
+
+        # Validate that a value is a boolean
+        def validate_boolean_value(key, value)
+          return if value.is_a?(TrueClass) || value.is_a?(FalseClass)
+
+          raise ValidationError, "Invalid #{key}: #{value}. Must be true or false"
+        end
+
+        # Validate that a value is a positive integer
+        def validate_positive_integer(key, value)
+          return if value.is_a?(Integer) && value > 0
+
+          raise ValidationError, "Invalid #{key}: #{value}. Must be a positive integer"
+        end
+
+        # Validate a specific config key-value pair
+        def validate_config_key_value(key, value)
+          case key
+          when :view_mode
+            validate_enum_value(key, value, %i[split single])
+          when :page_numbering_mode
+            validate_enum_value(key, value, %i[absolute dynamic])
+          when :line_spacing
+            validate_enum_value(key, value, %i[tight normal wide])
+          when :show_page_numbers
+            validate_boolean_value(key, value)
+          when :input_debounce_ms, :search_highlight_timeout, :auto_save_interval
+            validate_positive_integer(key, value)
+          when :theme
+            # Allow any symbol for theme for extensibility
+            raise ValidationError, "Invalid #{key}: #{value}. Must be a symbol" unless value.is_a?(Symbol)
+          else
+            # Unknown keys are allowed for forward compatibility
+            logger.debug("Unknown config key: #{key}")
+          end
+        end
+      end
+    end
+  end
+end

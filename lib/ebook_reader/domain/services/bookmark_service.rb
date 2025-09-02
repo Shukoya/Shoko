@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_service'
+require_relative '../events/bookmark_events'
 
 module EbookReader
   module Domain
@@ -8,29 +9,34 @@ module EbookReader
       # Pure business logic for bookmark management.
       # Replaces the tightly coupled BookmarkService with clean domain logic.
       class BookmarkService < BaseService
-        protected
-
-        def required_dependencies
-          %i[state_store event_bus]
-        end
-
-        def setup_service_dependencies
-          @state_store = resolve(:state_store)
-          @event_bus = resolve(:event_bus)
-          @persistence = resolve(:bookmark_persistence) if registered?(:bookmark_persistence)
-          @setup_service_dependencies ||= DefaultBookmarkPersistence.new
-        end
-
         # Add bookmark at current position
         #
         # @param text_snippet [String] Optional text snippet for the bookmark
         # @return [Bookmark] Created bookmark
         def add_bookmark(text_snippet = nil)
           current_state = @state_store.current_state
+          book_path = current_book_path
+          return nil unless book_path
 
-          bookmark = create_bookmark_from_state(current_state, text_snippet)
-          save_bookmark(bookmark)
+          chapter_index = current_state.dig(:reader, :current_chapter) || 0
+          line_offset = get_current_line_offset(current_state)
 
+          bookmark = @bookmark_repository.add_for_book(
+            book_path,
+            chapter_index: chapter_index,
+            line_offset: line_offset,
+            text_snippet: text_snippet || generate_text_snippet(current_state)
+          )
+
+          refresh_bookmarks
+          
+          # Publish domain event
+          @domain_event_bus.publish(Events::BookmarkAdded.new(
+            book_path: book_path,
+            bookmark: bookmark
+          ))
+          
+          # Legacy event bus for backward compatibility
           @event_bus.emit_event(:bookmark_added, { bookmark: bookmark })
           bookmark
         end
@@ -39,9 +45,19 @@ module EbookReader
         #
         # @param bookmark [Bookmark] Bookmark to remove
         def remove_bookmark(bookmark)
-          @persistence.delete_bookmark(current_book_path, bookmark)
+          book_path = current_book_path
+          return unless book_path
+
+          @bookmark_repository.delete_for_book(book_path, bookmark)
           refresh_bookmarks
 
+          # Publish domain event
+          @domain_event_bus.publish(Events::BookmarkRemoved.new(
+            book_path: book_path,
+            bookmark: bookmark
+          ))
+          
+          # Legacy event bus for backward compatibility
           @event_bus.emit_event(:bookmark_removed, { bookmark: bookmark })
         end
 
@@ -52,7 +68,7 @@ module EbookReader
           book_path = current_book_path
           return [] unless book_path
 
-          @persistence.load_bookmarks(book_path)
+          @bookmark_repository.find_by_book_path(book_path)
         end
 
         # Navigate to bookmark
@@ -64,6 +80,13 @@ module EbookReader
                                 %i[reader current_page] => bookmark.page_offset,
                               })
 
+          # Publish domain event
+          @domain_event_bus.publish(Events::BookmarkNavigated.new(
+            book_path: current_book_path,
+            bookmark: bookmark
+          ))
+          
+          # Legacy event bus for backward compatibility
           @event_bus.emit_event(:navigated_to_bookmark, { bookmark: bookmark })
         end
 
@@ -72,15 +95,13 @@ module EbookReader
         # @return [Boolean]
         def current_position_bookmarked?
           current_state = @state_store.current_state
-          bookmarks = get_bookmarks
+          book_path = current_book_path
+          return false unless book_path
 
           current_chapter = current_state.dig(:reader, :current_chapter) || 0
-          current_page = current_state.dig(:reader, :current_page) || 0
+          line_offset = get_current_line_offset(current_state)
 
-          bookmarks.any? do |bookmark|
-            bookmark.chapter_index == current_chapter &&
-              bookmark.page_offset == current_page
-          end
+          @bookmark_repository.exists_at_position?(book_path, current_chapter, line_offset)
         end
 
         # Get bookmark at current position (if any)
@@ -88,15 +109,13 @@ module EbookReader
         # @return [Bookmark, nil]
         def bookmark_at_current_position
           current_state = @state_store.current_state
-          bookmarks = get_bookmarks
+          book_path = current_book_path
+          return nil unless book_path
 
           current_chapter = current_state.dig(:reader, :current_chapter) || 0
-          current_page = current_state.dig(:reader, :current_page) || 0
+          line_offset = get_current_line_offset(current_state)
 
-          bookmarks.find do |bookmark|
-            bookmark.chapter_index == current_chapter &&
-              bookmark.page_offset == current_page
-          end
+          @bookmark_repository.find_at_position(book_path, current_chapter, line_offset)
         end
 
         # Toggle bookmark at current position
@@ -115,55 +134,46 @@ module EbookReader
           end
         end
 
+        protected
+
+        def required_dependencies
+          %i[state_store event_bus bookmark_repository domain_event_bus]
+        end
+
+        def setup_service_dependencies
+          @state_store = resolve(:state_store)
+          @event_bus = resolve(:event_bus)
+          @bookmark_repository = resolve(:bookmark_repository)
+          @domain_event_bus = resolve(:domain_event_bus)
+        end
+
         private
 
-        def create_bookmark_from_state(state, text_snippet)
-          Models::Bookmark.new(
-            chapter_index: state.dig(:reader, :current_chapter) || 0,
-            page_offset: state.dig(:reader, :current_page) || 0,
-            text_snippet: text_snippet || generate_text_snippet(state),
-            created_at: Time.now
-          )
+        def get_current_line_offset(state)
+          # Get the current line position depending on view mode
+          view_mode = state.dig(:config, :view_mode) || :split
+          if view_mode == :split
+            state.dig(:reader, :left_page) || 0
+          else
+            state.dig(:reader, :single_page) || 0
+          end
         end
 
         def generate_text_snippet(state)
           # This would be implemented based on the current document content
           # For now, return a placeholder
           chapter_index = state.dig(:reader, :current_chapter) || 0
-          page_offset = state.dig(:reader, :current_page) || 0
-          "Chapter #{chapter_index + 1}, Page #{page_offset + 1}"
+          line_offset = get_current_line_offset(state)
+          "Chapter #{chapter_index + 1}, Line #{line_offset + 1}"
         end
 
         def current_book_path
           @state_store.get(%i[reader book_path])
         end
 
-        def save_bookmark(bookmark)
-          book_path = current_book_path
-          return unless book_path
-
-          @persistence.save_bookmark(book_path, bookmark)
-          refresh_bookmarks
-        end
-
         def refresh_bookmarks
           bookmarks = get_bookmarks
-          @state_store.set(%i[reader bookmarks], bookmarks)
-        end
-      end
-
-      # Default persistence implementation using the existing BookmarkManager
-      class DefaultBookmarkPersistence
-        def load_bookmarks(book_path)
-          EbookReader::BookmarkManager.get(book_path)
-        end
-
-        def save_bookmark(book_path, bookmark)
-          EbookReader::BookmarkManager.add(book_path, bookmark)
-        end
-
-        def delete_bookmark(book_path, bookmark)
-          EbookReader::BookmarkManager.delete(book_path, bookmark)
+          @state_store.update({ %i[reader bookmarks] => bookmarks })
         end
       end
     end

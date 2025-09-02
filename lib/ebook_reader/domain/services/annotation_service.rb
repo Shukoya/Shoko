@@ -1,39 +1,76 @@
 # frozen_string_literal: true
 
 require_relative 'base_service'
+require_relative '../events/annotation_events'
 
 module EbookReader
   module Domain
     module Services
-      # Domain-level facade for annotation persistence and state updates.
-      # Centralizes access to the underlying store and ensures UI state is refreshed
-      # via UpdateAnnotationsAction after mutations.
+      # Domain-level service for annotation persistence and state updates.
+      # Uses AnnotationRepository for clean separation from infrastructure.
       class AnnotationService < BaseService
         def list_for_book(path)
           return [] unless path && !path.to_s.empty?
 
-          EbookReader::Annotations::AnnotationStore.get(path) || []
+          @annotation_repository.find_by_book_path(path)
         end
 
         def list_all
-          EbookReader::Annotations::AnnotationStore.all || {}
+          @annotation_repository.find_all
         end
 
         def add(path, text, note, range, chapter_index, page_meta = nil)
-          EbookReader::Annotations::AnnotationStore.add(path, text, note, range, chapter_index,
-                                                        page_meta)
+          annotation = @annotation_repository.add_for_book(
+            path,
+            text: text,
+            note: note,
+            range: range,
+            chapter_index: chapter_index,
+            page_meta: page_meta
+          )
+          
+          # Publish domain event
+          @domain_event_bus.publish(Events::AnnotationAdded.new(
+            book_path: path,
+            annotation: annotation
+          ))
+          
           notify_updated(path)
-          true
+          annotation
         end
 
         def update(path, id, note)
-          EbookReader::Annotations::AnnotationStore.update(path, id, note)
+          # Get old annotation for event
+          old_annotation = @annotation_repository.find_by_id(path, id)
+          old_note = old_annotation ? old_annotation['note'] : ''
+          
+          @annotation_repository.update_note(path, id, note)
+          
+          # Publish domain event
+          @domain_event_bus.publish(Events::AnnotationUpdated.new(
+            book_path: path,
+            annotation_id: id,
+            old_note: old_note,
+            new_note: note
+          ))
+          
           notify_updated(path)
           true
         end
 
         def delete(path, id)
-          EbookReader::Annotations::AnnotationStore.delete(path, id)
+          # Get annotation for event before deletion
+          annotation = @annotation_repository.find_by_id(path, id)
+          
+          @annotation_repository.delete_by_id(path, id)
+          
+          # Publish domain event
+          @domain_event_bus.publish(Events::AnnotationRemoved.new(
+            book_path: path,
+            annotation_id: id,
+            annotation: annotation
+          ))
+          
           notify_updated(path)
           true
         end
@@ -41,11 +78,13 @@ module EbookReader
         protected
 
         def required_dependencies
-          [:state_store]
+          %i[state_store annotation_repository domain_event_bus]
         end
 
         def setup_service_dependencies
           @state_store = resolve(:state_store)
+          @annotation_repository = resolve(:annotation_repository)
+          @domain_event_bus = resolve(:domain_event_bus)
         end
 
         private

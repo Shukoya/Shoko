@@ -3,7 +3,8 @@
 require 'time'
 
 module EbookReader
-  module Models
+  module Domain
+    module Models
     # Represents a bookmark within a document.
     Bookmark = Struct.new(:chapter_index, :line_offset, :text_snippet, :created_at,
                           keyword_init: true) do
@@ -29,6 +30,7 @@ module EbookReader
           'timestamp' => created_at.iso8601,
         }
       end
+    end
     end
   end
 end
