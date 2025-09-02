@@ -12,7 +12,12 @@ module EbookReader
       ANNOTATIONS_FILE = File.join(CONFIG_DIR, 'annotations.json')
 
       class << self
-        def add(epub_path, text, note, range, chapter_index)
+        # Return mapping { book_path => [annotations...] }
+        def all
+          load_all
+        end
+
+        def add(epub_path, text, note, range, chapter_index, page_meta = nil)
           annotations = load_all
           book_annotations = annotations[epub_path] || []
 
@@ -24,6 +29,12 @@ module EbookReader
             'chapter_index' => chapter_index,
             'created_at' => Time.now.iso8601,
           }
+
+          if page_meta.is_a?(Hash)
+            new_annotation['page_current'] = page_meta[:current] || page_meta['current']
+            new_annotation['page_total'] = page_meta[:total] || page_meta['total']
+            new_annotation['page_mode'] = page_meta[:type] || page_meta['type']
+          end
 
           book_annotations << new_annotation
           annotations[epub_path] = book_annotations

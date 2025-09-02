@@ -97,6 +97,39 @@ module EbookReader
           }
         end
 
+        # Determine the column bounds (start..end) for a given click/selection position
+        # by inspecting rendered_lines entries on the same terminal row.
+        #
+        # @param click_pos [Hash] selection or click position with 0-based {:x,:y}
+        # @param rendered_lines [Hash] map of line_id => {row:, col:, col_end:, width:, text:}
+        # @return [Hash, nil] {start:, end:} or nil if none found
+        def column_bounds_for(click_pos, rendered_lines)
+          return nil unless click_pos && rendered_lines && !rendered_lines.empty?
+
+          pos = normalize_position(click_pos)
+          return nil unless pos
+
+          terminal_row = pos[:y] + 1
+          rendered_lines.each_value do |line_info|
+            next unless line_info[:row] == terminal_row
+
+            line_start_col = line_info[:col]
+            line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
+            return { start: line_start_col, end: line_end_col } if pos[:x].between?(line_start_col, line_end_col)
+          end
+          nil
+        end
+
+        # Whether a line segment [line_start..line_end] overlaps the target column bounds
+        # @param line_start [Integer]
+        # @param line_end [Integer]
+        # @param bounds [Hash] {start:, end:}
+        # @return [Boolean]
+        def column_overlaps?(line_start, line_end, bounds)
+          return false unless bounds
+          !(line_end < bounds[:start] || line_start > bounds[:end])
+        end
+
         protected
 
         def required_dependencies

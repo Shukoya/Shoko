@@ -33,6 +33,16 @@ module EbookReader
       SELECTION_POINTER_COLOR = Terminal::ANSI::BRIGHT_GREEN
       SELECTION_HIGHLIGHT = Terminal::ANSI::BRIGHT_WHITE
 
+      # Overlay/Highlight backgrounds
+      HIGHLIGHT_BG_ACTIVE = Terminal::ANSI::BG_BLUE
+      HIGHLIGHT_BG_SAVED = Terminal::ANSI::BG_CYAN
+
+      # Popup menu colors
+      POPUP_BG_DEFAULT = BG_PRIMARY
+      POPUP_BG_SELECTED = BG_ACCENT
+      POPUP_FG_DEFAULT = COLOR_TEXT_PRIMARY
+      POPUP_FG_SELECTED = SELECTION_FG
+
       # Icons
       ICON_BOOK = '󰂺'
       ICON_RECENT = '󰁯'

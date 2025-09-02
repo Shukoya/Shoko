@@ -2,10 +2,12 @@
 
 require_relative 'base_component'
 require_relative 'surface'
+require_relative '../constants/ui_constants'
 
 module EbookReader
   module Components
     class HeaderComponent < BaseComponent
+      include Constants::UIConstants
       def initialize(view_model_provider = nil, theme = :dark)
         super()
         @view_model_provider = view_model_provider
@@ -38,14 +40,14 @@ module EbookReader
       def render_single_view_header(surface, bounds, view_model, width)
         title_text = view_model.document_title.to_s
         centered_col = [(width - title_text.length) / 2, 1].max
-        surface.write(bounds, 1, centered_col, "#{Terminal::ANSI::WHITE}#{title_text}#{Terminal::ANSI::RESET}")
+        surface.write(bounds, 1, centered_col, "#{COLOR_TEXT_PRIMARY}#{title_text}#{Terminal::ANSI::RESET}")
       end
 
       def render_default_header(surface, bounds, width)
-        surface.write(bounds, 1, 1, "#{Terminal::ANSI::WHITE}Reader#{Terminal::ANSI::RESET}")
+        surface.write(bounds, 1, 1, "#{COLOR_TEXT_PRIMARY}Reader#{Terminal::ANSI::RESET}")
         right_text = 'q:Quit ?:Help t:ToC B:Bookmarks'
         right_col = [width - right_text.length + 1, 1].max
-        surface.write(bounds, 1, right_col, "#{Terminal::ANSI::WHITE}#{right_text}#{Terminal::ANSI::RESET}")
+        surface.write(bounds, 1, right_col, "#{COLOR_TEXT_PRIMARY}#{right_text}#{Terminal::ANSI::RESET}")
       end
     end
   end

@@ -10,4 +10,3 @@ RSpec.describe EbookReader::Domain::Services::TerminalService do
     expect(surface).to respond_to(:write)
   end
 end
-

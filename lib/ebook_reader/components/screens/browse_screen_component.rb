@@ -56,21 +56,39 @@ module EbookReader
           @filtered_epubs[browse_selected]
         end
 
+        # Expose filtered list count for navigation logic integration
+        def filtered_count
+          (@filtered_epubs || []).length
+        end
+
+        # Expose random access by index (read-only)
+        def book_at(index)
+          (@filtered_epubs || [])[index]
+        end
+
         def do_render(surface, bounds)
           @filtered_epubs ||= []
           height = bounds.height
           width = bounds.width
 
-          # Header
-          surface.write(bounds, 1, 2, "#{COLOR_TEXT_ACCENT}📚 Browse Books#{Terminal::ANSI::RESET}")
-          right_text = "#{COLOR_TEXT_DIM}[r] Refresh [ESC] Back#{Terminal::ANSI::RESET}"
+          # Header (show visual indicator when search is active)
+          if @state.get(%i[menu mode]) == :search || @state.get(%i[menu search_active])
+            title = "#{COLOR_TEXT_ACCENT}📚 Browse Books  [SEARCH]#{Terminal::ANSI::RESET}"
+            right_text = "#{COLOR_TEXT_DIM}[/] Exit Search#{Terminal::ANSI::RESET}"
+          else
+            title = "#{COLOR_TEXT_ACCENT}📚 Browse Books#{Terminal::ANSI::RESET}"
+            right_text = "#{COLOR_TEXT_DIM}[r] Refresh [ESC] Back#{Terminal::ANSI::RESET}"
+          end
+          surface.write(bounds, 1, 2, title)
           surface.write(bounds, 1, [width - 30, 40].max, right_text)
 
           # Search bar
           surface.write(bounds, 3, 2, "#{COLOR_TEXT_PRIMARY}Search: #{Terminal::ANSI::RESET}")
           search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
           search_display = search_query.dup
-          cursor_pos = EbookReader::Domain::Selectors::MenuSelectors.search_cursor(@state).to_i.clamp(0, search_display.length)
+          cursor_pos = EbookReader::Domain::Selectors::MenuSelectors.search_cursor(@state).to_i.clamp(
+            0, search_display.length
+          )
           search_display.insert(cursor_pos, '_')
           surface.write(bounds, 3, 10, SELECTION_HIGHLIGHT + search_display + Terminal::ANSI::RESET)
 
@@ -86,7 +104,11 @@ module EbookReader
 
           # Footer
           book_count = @filtered_epubs&.length.to_i
-          hint = "#{book_count} books • ↑↓ Navigate • Enter Open • / Search • r Refresh • ESC Back"
+          if @state.get(%i[menu mode]) == :search || @state.get(%i[menu search_active])
+            hint = "#{book_count} books • ↑↓ Navigate • Enter Open • / Exit Search"
+          else
+            hint = "#{book_count} books • ↑↓ Navigate • Enter Open • / Search • r Refresh • ESC Back"
+          end
           surface.write(bounds, height - 1, [(width - hint.length) / 2, 1].max,
                         COLOR_TEXT_DIM + hint + Terminal::ANSI::RESET)
         end

@@ -46,7 +46,7 @@ module EbookReader
       def highlight_quotes_setting
         {
           name: 'Highlight Quotes',
-          value: @config.get([:config, :highlight_quotes]) ? 'Yes' : 'No',
+          value: @config.get(%i[config highlight_quotes]) ? 'Yes' : 'No',
           key: '4',
         }
       end

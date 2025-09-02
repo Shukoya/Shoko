@@ -36,4 +36,3 @@ RSpec.describe EbookReader::Domain::Services::CoordinateService do
     end
   end
 end
-

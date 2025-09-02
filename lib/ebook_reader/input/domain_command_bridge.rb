@@ -2,6 +2,7 @@
 
 require_relative '../domain/commands/sidebar_commands'
 require_relative '../domain/commands/conditional_navigation_commands'
+require_relative '../domain/commands/menu_commands'
 
 module EbookReader
   module Input
@@ -104,8 +105,20 @@ module EbookReader
           when :sidebar_up then sidebar_command(:up)
           when :sidebar_down then sidebar_command(:down)
           when :sidebar_select then sidebar_command(:select)
-          else
-            nil
+          # Menu commands
+          when :menu_up then Domain::Commands::MenuCommand.new(:menu_up)
+          when :menu_down then Domain::Commands::MenuCommand.new(:menu_down)
+          when :menu_select then Domain::Commands::MenuCommand.new(:menu_select)
+          when :menu_quit then Domain::Commands::MenuCommand.new(:menu_quit)
+          when :back_to_menu then Domain::Commands::MenuCommand.new(:back_to_menu)
+          when :browse_up then Domain::Commands::MenuCommand.new(:browse_up)
+          when :browse_down then Domain::Commands::MenuCommand.new(:browse_down)
+          when :browse_select then Domain::Commands::MenuCommand.new(:browse_select)
+          when :recent_up then Domain::Commands::MenuCommand.new(:recent_up)
+          when :recent_down then Domain::Commands::MenuCommand.new(:recent_down)
+          when :recent_select then Domain::Commands::MenuCommand.new(:recent_select)
+          when :start_search then Domain::Commands::MenuCommand.new(:start_search)
+          when :exit_search then Domain::Commands::MenuCommand.new(:exit_search)
           end
         end
 

@@ -19,7 +19,7 @@ module EbookReader
         @bookmarks_renderer = Reading::BookmarksRenderer.new(nil, controller)
 
         state = @controller.state
-        # Observe core fields that affect content rendering with GlobalState paths
+        # Observe core fields that affect content rendering via StateStore paths
         state.add_observer(self, %i[reader current_chapter], %i[reader left_page], %i[reader right_page],
                            %i[reader single_page], %i[reader current_page_index], %i[reader mode], %i[config view_mode])
         @needs_redraw = true
@@ -29,10 +29,10 @@ module EbookReader
       def state_changed(path, old_value, new_value)
         # Reset renderer for mode changes or view mode changes
         @view_renderer = nil if [%i[reader mode], %i[config view_mode]].include?(path)
-        
+
         # Call parent invalidate to properly trigger re-rendering
-        super(path, old_value, new_value)
-        
+        super
+
         # Keep legacy @needs_redraw for backward compatibility
         @needs_redraw = true
       end
@@ -46,9 +46,9 @@ module EbookReader
         state = @controller.state
 
         # Reset rendered lines registry for selection/highlighting
-        @controller.state.set([:reader, :rendered_lines], {})
+        @controller.state.set(%i[reader rendered_lines], {})
 
-        case state.get([:reader, :mode])
+        case state.get(%i[reader mode])
         when :help
           @help_renderer.render(surface, bounds)
         when :toc

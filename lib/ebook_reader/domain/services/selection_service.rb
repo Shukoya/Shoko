@@ -22,7 +22,7 @@ module EbookReader
           start_pos = normalized[:start]
           end_pos = normalized[:end]
 
-          column_bounds = determine_column_bounds(start_pos, rendered_lines)
+          column_bounds = coordinate_service.column_bounds_for(start_pos, rendered_lines)
           return '' unless column_bounds
 
           text_lines = []
@@ -37,11 +37,11 @@ module EbookReader
               line_start = line_info[:col]
               line_end = line_info[:col_end] || (line_start + line_info[:width] - 1)
 
-              next unless overlaps_column?(line_start, line_end, column_bounds)
+              next unless coordinate_service.column_overlaps?(line_start, line_end, column_bounds)
 
               line_text = line_info[:text]
-              row_start_x = (y == start_pos[:y]) ? start_pos[:x] : column_bounds[:start]
-              row_end_x   = (y == end_pos[:y])   ? end_pos[:x]   : column_bounds[:end]
+              row_start_x = y == start_pos[:y] ? start_pos[:x] : column_bounds[:start]
+              row_end_x   = y == end_pos[:y]   ? end_pos[:x]   : column_bounds[:end]
 
               next if row_end_x < line_start || row_start_x > line_end
 
@@ -69,23 +69,7 @@ module EbookReader
         end
 
         private
-
-        def determine_column_bounds(click_pos, rendered_lines)
-          terminal_row = click_pos[:y] + 1
-          rendered_lines.each_value do |line_info|
-            next unless line_info[:row] == terminal_row
-            line_start_col = line_info[:col]
-            line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
-            return({ start: line_start_col, end: line_end_col }) if click_pos[:x].between?(line_start_col, line_end_col)
-          end
-          nil
-        end
-
-        def overlaps_column?(line_start, line_end, bounds)
-          !(line_end < bounds[:start] || line_start > bounds[:end])
-        end
       end
     end
   end
 end
-

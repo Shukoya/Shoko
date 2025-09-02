@@ -87,6 +87,7 @@ module EbookReader
 
         def handle_show_toc(context)
           return context.open_toc if context.respond_to?(:open_toc)
+
           if context.respond_to?(:state)
             context.state.dispatch(EbookReader::Domain::Actions::SwitchReaderModeAction.new(mode: :toc))
           else
@@ -96,6 +97,7 @@ module EbookReader
 
         def handle_show_bookmarks(context)
           return context.open_bookmarks if context.respond_to?(:open_bookmarks)
+
           if context.respond_to?(:state)
             context.state.dispatch(EbookReader::Domain::Actions::SwitchReaderModeAction.new(mode: :bookmarks))
           else
@@ -105,6 +107,7 @@ module EbookReader
 
         def handle_show_annotations(context)
           return context.open_annotations if context.respond_to?(:open_annotations)
+
           if context.respond_to?(:state)
             context.state.dispatch(EbookReader::Domain::Actions::SwitchReaderModeAction.new(mode: :annotations))
           else

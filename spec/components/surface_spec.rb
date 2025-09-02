@@ -6,8 +6,9 @@ RSpec.describe EbookReader::Components::Surface do
   let(:output) do
     Class.new do
       attr_reader :writes
-      def initialize; @writes = []; end
-      def write(r, c, t); @writes << [r, c, t]; end
+
+      def initialize = @writes = []
+      def write(r, c, t) = @writes << [r, c, t]
     end.new
   end
   let(:surface) { described_class.new(output) }
@@ -26,4 +27,3 @@ RSpec.describe EbookReader::Components::Surface do
     expect(output.writes.size).to eq(3)
   end
 end
-

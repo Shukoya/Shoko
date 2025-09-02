@@ -18,11 +18,11 @@ module EbookReader
 
       # Convenience methods for common rendering needs
       def current_chapter
-        @document&.get_chapter(@state.get([:reader, :current_chapter]))
+        @document&.get_chapter(@state.get(%i[reader current_chapter]))
       end
 
       def current_page_index
-        @state.get([:reader, :current_page_index])
+        @state.get(%i[reader current_page_index])
       end
 
       def view_mode
@@ -44,7 +44,7 @@ module EbookReader
         if @page_manager && page_numbering_mode == :dynamic
           @page_manager.total_pages
         else
-          @state.get([:reader, :total_pages])
+          @state.get(%i[reader total_pages])
         end
       end
     end

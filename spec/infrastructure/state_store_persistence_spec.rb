@@ -24,4 +24,3 @@ RSpec.describe 'StateStore persistence', :fakefs do
     expect(store.get(%i[config view_mode])).to eq(:single)
   end
 end
-

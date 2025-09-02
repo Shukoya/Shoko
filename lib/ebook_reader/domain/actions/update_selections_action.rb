@@ -5,11 +5,6 @@ module EbookReader
     module Actions
       # Action for updating various selection states
       class UpdateSelectionsAction < BaseAction
-        def initialize(updates)
-          # Accepts hash like: { toc_selected: 2, bookmark_selected: 1 }
-          super(updates)
-        end
-
         def apply(state)
           # Build update hash for atomic state update
           updates = {}

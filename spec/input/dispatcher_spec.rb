@@ -20,4 +20,3 @@ RSpec.describe EbookReader::Input::Dispatcher do
     expect(dispatcher.handle_key('y')).to eq(:pass)
   end
 end
-

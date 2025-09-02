@@ -76,7 +76,7 @@ ebook_reader /path/to/book.epub  # Open specific book
 ### First Time Setup
 
 On first run, the application will:
-1. Create configuration directory at `~/.config/Reader/`
+1. Create configuration directory at `~/.config/reader/`
 2. Scan your system for EPUB files (this may take a moment)
 3. Cache the results for faster subsequent launches
 
@@ -120,7 +120,7 @@ Text selection is always available—simply highlight any text in your terminal 
 
 ## Configuration
 
-Configuration is stored in `~/.config/Reader/config.json`:
+Configuration is stored in `~/.config/reader/config.json`:
 
 ```json
 {
@@ -144,33 +144,18 @@ Configuration is stored in `~/.config/Reader/config.json`:
 
 ## Architecture
 
-The application follows a modular, layered architecture:
+Reader uses Clean Architecture with DI and component-driven rendering.
 
-### Core Components
+### Layers
 
-- **Terminal**: Low-level terminal manipulation using ANSI escape codes
-- **Config**: User preferences and settings management
-- **EPUBDocument**: EPUB parsing and content extraction
+- **Presentation**: UI components/screens implement `do_render(surface, bounds)` and render via `Components::Surface`. An overlay component unifies highlights and popup menus. The annotation editor is implemented as a screen component (no legacy modes).
+- **Application**: Controllers coordinate state and rendering (`ReaderController`, `UIController`, `NavigationController`, `StateController`, `InputController`). `Application::UnifiedApplication` selects menu vs reader mode.
+- **Domain**: Services (Navigation, PageCalculator, Layout, Selection, Coordinate, Clipboard, Annotation), Actions, Commands, Selectors. All mutations go through services which dispatch actions to the state store.
+- **Infrastructure**: `ObserverStateStore`, `EventBus`, `Terminal` (buffered I/O + mouse), `DocumentService`, Logger, and JSON-backed managers (bookmarks, progress, recent files).
 
-### UI Layer
+### Input
 
-- **MainMenu**: Application entry point and file selection
-- **Reader**: Main reading interface with mode management
-- **ReaderModes**: Specialized handlers for different view modes
-- **Renderers**: Component-based rendering system
-
-### Services Layer
-
-- **NavigationService**: Navigation logic and state management
-- **BookmarkManager**: Bookmark persistence and retrieval
-- **ProgressManager**: Reading position tracking
-- **RecentFiles**: Recent file history management
-
-### Infrastructure
-
-- **Logger**: Structured logging system
-- **Validator**: Input validation framework
-- **PerformanceMonitor**: Performance tracking and profiling
+Key bindings are centralized and routed through `Input::Dispatcher` using `DomainCommandBridge` to create domain command objects. This keeps input consistent and decoupled from UI/app code.
 
 For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 

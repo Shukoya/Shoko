@@ -10,7 +10,7 @@ module EbookReader
         end
 
         def apply(state)
-          state.update({[:reader, :selection] => payload[:selection]})
+          state.update({ %i[reader selection] => payload[:selection] })
         end
       end
 

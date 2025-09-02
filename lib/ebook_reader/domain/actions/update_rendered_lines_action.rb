@@ -10,7 +10,7 @@ module EbookReader
         end
 
         def apply(state)
-          state.update({[:reader, :rendered_lines] => payload[:rendered_lines]})
+          state.update({ %i[reader rendered_lines] => payload[:rendered_lines] })
         end
       end
 

@@ -36,7 +36,9 @@ module EbookReader
 
         # Build complete page map (PageManager compatibility)
         def build_page_map(terminal_width, terminal_height, doc, config)
-          return unless EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(config) == :dynamic
+          unless EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(config) == :dynamic
+            return
+          end
 
           @pages_data = []
           layout_metrics = prepare_layout_metrics(terminal_width, terminal_height, config)
@@ -138,20 +140,12 @@ module EbookReader
 
         def perform_page_calculation(chapter_index, state)
           lines_per_page = calculate_lines_per_page
-          
-          File.open('/tmp/nav_debug.log', 'a') do |f|
-            f.puts "      perform_calc: ch=#{chapter_index}, lines_per_page=#{lines_per_page}"
-          end
-          
+
           return 0 if lines_per_page <= 0
 
           chapter_lines = get_chapter_lines(chapter_index, state)
           wrapped_lines = @text_wrapper.wrap_chapter_lines(chapter_lines, calculate_column_width)
           result = (wrapped_lines.size.to_f / lines_per_page).ceil
-          
-          File.open('/tmp/nav_debug.log', 'a') do |f|
-            f.puts "      ch_lines=#{chapter_lines&.size || 'nil'}, wrapped=#{wrapped_lines.size}, result=#{result}"
-          end
 
           result
         end
@@ -188,26 +182,21 @@ module EbookReader
           end
         end
 
-        def get_chapter_lines(chapter_index, state)
+        def get_chapter_lines(chapter_index, _state)
           # Access document through state or dependency container
-          doc = @dependencies&.resolve(:document) rescue nil
+          doc = begin
+            @dependencies&.resolve(:document)
+          rescue StandardError
+            nil
+          end
           return [] unless doc
-          
+
           begin
             chapter = doc.get_chapter(chapter_index)
             chapter_lines = chapter&.dig(:lines) || chapter&.lines || []
-            
-            File.open('/tmp/nav_debug.log', 'a') do |f|
-              f.puts "        get_chapter_lines: ch=#{chapter_index}, doc_exists=#{!!doc}, lines_count=#{chapter_lines.size}"
-              f.puts "        first_few_lines: #{chapter_lines.first(3).inspect}" if chapter_lines.any?
-              f.puts "        total_chapters: #{doc.chapters.size}" if doc.respond_to?(:chapters)
-            end
-            
+
             chapter_lines
-          rescue => e
-            File.open('/tmp/nav_debug.log', 'a') do |f|
-              f.puts "        ERROR in get_chapter_lines: #{e.class}: #{e.message}"
-            end
+          rescue StandardError => e
             []
           end
         end

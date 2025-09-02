@@ -1,22 +1,22 @@
 # frozen_string_literal: true
 
 require_relative '../base_component'
-require_relative '../../annotations/annotation_store'
 
 module EbookReader
   module Components
     module Sidebar
       # Annotations tab renderer for sidebar
       class AnnotationsTabRenderer < BaseComponent
+        include Constants::UIConstants
         def initialize(controller)
           super()
           @controller = controller
         end
 
         def do_render(surface, bounds)
-          annotations = Annotations::AnnotationStore.get(@controller.path)
           state = @controller.state
-          selected_index = state.get([:reader, :sidebar_annotations_selected]) || 0
+          annotations = state.get(%i[reader annotations]) || []
+          selected_index = state.get(%i[reader sidebar_annotations_selected]) || 0
 
           return render_empty_message(surface, bounds) if annotations.empty?
 
@@ -37,7 +37,7 @@ module EbookReader
           messages.each_with_index do |message, i|
             x = bounds.x + [(bounds.width - message.length) / 2, 2].max
             y = start_y + i
-            surface.write(bounds, y, x, "#{Terminal::ANSI::DIM}#{message}#{Terminal::ANSI::RESET}")
+            surface.write(bounds, y, x, "#{COLOR_TEXT_DIM}#{message}#{Terminal::ANSI::RESET}")
           end
         end
 
@@ -73,7 +73,7 @@ module EbookReader
           excerpt = text.tr("\n", ' ').strip
           excerpt = "#{excerpt[0, max_width - 6]}..." if excerpt.length > max_width - 3
 
-          prefix = is_selected ? "#{Terminal::ANSI::BRIGHT_CYAN}▸ " : '  '
+          prefix = is_selected ? "#{COLOR_TEXT_ACCENT}#{SELECTION_POINTER}#{Terminal::ANSI::RESET}" : '  '
           text_line = "#{prefix}#{color_indicator}#{excerpt}#{Terminal::ANSI::RESET}"
 
           surface.write(bounds, y, bounds.x + 1, text_line)
@@ -84,14 +84,14 @@ module EbookReader
             note_text = note.tr("\n", ' ').strip
             note_text = "#{note_text[0, max_width - 5]}..." if note_text.length > max_width - 2
 
-            note_style = is_selected ? Terminal::ANSI::WHITE : Terminal::ANSI::DIM
+            note_style = is_selected ? COLOR_TEXT_PRIMARY : COLOR_TEXT_DIM
             note_line = "  #{Terminal::ANSI::ITALIC}#{note_style}✎ #{note_text}#{Terminal::ANSI::RESET}"
             surface.write(bounds, y + 1, bounds.x + 1, note_line)
           end
 
           # Location (third line)
           location = format_location(annotation)
-          location_style = is_selected ? Terminal::ANSI::GRAY : Terminal::ANSI::DIM
+          location_style = is_selected ? COLOR_TEXT_SECONDARY : COLOR_TEXT_DIM
           location_line = "  #{location_style}#{location}#{Terminal::ANSI::RESET}"
           surface.write(bounds, y + 2, bounds.x + 1, location_line)
         end
@@ -99,15 +99,15 @@ module EbookReader
         def get_color_indicator(color)
           case color&.downcase
           when 'yellow', 'highlight'
-            "#{Terminal::ANSI::YELLOW}●#{Terminal::ANSI::RESET} "
+            "#{COLOR_TEXT_WARNING}●#{Terminal::ANSI::RESET} "
           when 'red'
-            "#{Terminal::ANSI::RED}●#{Terminal::ANSI::RESET} "
+            "#{COLOR_TEXT_ERROR}●#{Terminal::ANSI::RESET} "
           when 'green'
-            "#{Terminal::ANSI::GREEN}●#{Terminal::ANSI::RESET} "
+            "#{COLOR_TEXT_SUCCESS}●#{Terminal::ANSI::RESET} "
           when 'blue'
-            "#{Terminal::ANSI::BLUE}●#{Terminal::ANSI::RESET} "
+            "#{COLOR_TEXT_ACCENT}●#{Terminal::ANSI::RESET} "
           else
-            "#{Terminal::ANSI::WHITE}●#{Terminal::ANSI::RESET} "
+            "#{COLOR_TEXT_PRIMARY}●#{Terminal::ANSI::RESET} "
           end
         end
 

@@ -12,6 +12,7 @@ module EbookReader
   module Components
     # Collapsible sidebar panel with tabbed interface for TOC, Annotations, and Bookmarks
     class SidebarPanelComponent < BaseComponent
+      include Constants::UIConstants
       TABS = %i[toc annotations bookmarks].freeze
       TAB_NAMES = { toc: 'TOC', annotations: 'Notes', bookmarks: 'Marks' }.freeze
       DEFAULT_WIDTH_PERCENT = 30
@@ -38,15 +39,15 @@ module EbookReader
 
       def state_changed(path, old_value, new_value)
         # Call parent invalidate to properly trigger re-rendering
-        super(path, old_value, new_value)
-        
+        super
+
         # Keep legacy @needs_redraw for backward compatibility
         @needs_redraw = true
       end
 
       def preferred_width(total_width)
         state = @controller.state
-        return :hidden unless state.get([:reader, :sidebar_visible])
+        return :hidden unless state.get(%i[reader sidebar_visible])
 
         # Calculate width as percentage of total, with minimum
         preferred = (total_width * DEFAULT_WIDTH_PERCENT / 100.0).round
@@ -55,7 +56,7 @@ module EbookReader
 
       def do_render(surface, bounds)
         state = @controller.state
-        return unless state.get([:reader, :sidebar_visible]) && bounds.width >= MIN_WIDTH
+        return unless state.get(%i[reader sidebar_visible]) && bounds.width >= MIN_WIDTH
 
         # Draw modern border
         draw_border(surface, bounds)
@@ -96,7 +97,7 @@ module EbookReader
       def draw_border(surface, bounds)
         # Draw modern vertical border on the right edge
         (1..bounds.height).each do |y|
-          surface.write(bounds, y, bounds.width, "#{Terminal::ANSI::DIM}│#{Terminal::ANSI::RESET}")
+          surface.write(bounds, y, bounds.width, "#{COLOR_TEXT_DIM}│#{Terminal::ANSI::RESET}")
         end
       end
 
@@ -106,10 +107,10 @@ module EbookReader
         # Simple clean title
         active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
         title = get_clean_title(active_tab)
-        surface.write(bounds, 1, 2, "#{Terminal::ANSI::BRIGHT_WHITE}#{title}#{Terminal::ANSI::RESET}")
+        surface.write(bounds, 1, 2, "#{SELECTION_HIGHLIGHT}#{title}#{Terminal::ANSI::RESET}")
 
         # Close indicator
-        close_text = "#{Terminal::ANSI::DIM}[t]#{Terminal::ANSI::RESET}"
+        close_text = "#{COLOR_TEXT_DIM}[t]#{Terminal::ANSI::RESET}"
         surface.write(bounds, 1, bounds.width - 5, close_text)
       end
 
@@ -132,11 +133,11 @@ module EbookReader
         active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
         help_text = case active_tab
                     when :toc
-                      "#{Terminal::ANSI::DIM}↑↓ Navigate • ⏎ Jump • / Filter#{Terminal::ANSI::RESET}"
+                      "#{COLOR_TEXT_DIM}↑↓ Navigate • ⏎ Jump • / Filter#{Terminal::ANSI::RESET}"
                     when :annotations
-                      "#{Terminal::ANSI::DIM}↑↓ Navigate • ⏎ Jump • e Edit • d Delete#{Terminal::ANSI::RESET}"
+                      "#{COLOR_TEXT_DIM}↑↓ Navigate • ⏎ Jump • e Edit • d Delete#{Terminal::ANSI::RESET}"
                     when :bookmarks
-                      "#{Terminal::ANSI::DIM}↑↓ Navigate • ⏎ Jump • d Delete#{Terminal::ANSI::RESET}"
+                      "#{COLOR_TEXT_DIM}↑↓ Navigate • ⏎ Jump • d Delete#{Terminal::ANSI::RESET}"
                     else
                       ''
                     end

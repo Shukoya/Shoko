@@ -8,13 +8,14 @@ module EbookReader
       # Renderer for table of contents display
       class TocRenderer < BaseViewRenderer
         def initialize(dependencies = nil, controller = nil)
-          super(dependencies, controller)
+          super
         end
 
         def render_with_context(surface, bounds, context)
-          return unless context&.state && context&.document
+          return unless context&.state && context.document
+
           doc = context.document
-          selected_index = context.state.get([:reader, :toc_selected]) || 0
+          selected_index = context.state.get(%i[reader toc_selected]) || 0
 
           render_header(surface, bounds)
           render_chapters_list(surface, bounds, doc.chapters, selected_index)
@@ -24,9 +25,9 @@ module EbookReader
         private
 
         def render_header(surface, bounds)
-          surface.write(bounds, 1, 2, "#{Terminal::ANSI::BRIGHT_CYAN}📖 Table of Contents#{Terminal::ANSI::RESET}")
+          surface.write(bounds, 1, 2, "#{EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT}📖 Table of Contents#{Terminal::ANSI::RESET}")
           surface.write(bounds, 1, [bounds.width - 30, 40].max,
-                        "#{Terminal::ANSI::DIM}[t/ESC] Back to Reading#{Terminal::ANSI::RESET}")
+                        "#{EbookReader::Constants::UIConstants::COLOR_TEXT_DIM}[t/ESC] Back to Reading#{Terminal::ANSI::RESET}")
         end
 
         def render_chapters_list(surface, bounds, chapters, selected_index)
@@ -48,16 +49,16 @@ module EbookReader
           line = (chapter.title || 'Untitled')[0, bounds.width - 6]
 
           if idx == selected_index
-            surface.write(bounds, y, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
-            surface.write(bounds, y, 4, Terminal::ANSI::BRIGHT_WHITE + line + Terminal::ANSI::RESET)
+            surface.write(bounds, y, 2, "#{EbookReader::Constants::UIConstants::SELECTION_POINTER_COLOR}#{EbookReader::Constants::UIConstants::SELECTION_POINTER}#{Terminal::ANSI::RESET}")
+            surface.write(bounds, y, 4, EbookReader::Constants::UIConstants::SELECTION_HIGHLIGHT + line + Terminal::ANSI::RESET)
           else
-            surface.write(bounds, y, 4, Terminal::ANSI::WHITE + line + Terminal::ANSI::RESET)
+            surface.write(bounds, y, 4, EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + line + Terminal::ANSI::RESET)
           end
         end
 
         def render_footer(surface, bounds)
           surface.write(bounds, bounds.height - 1, 2,
-                        "#{Terminal::ANSI::DIM}↑↓ Navigate • Enter Jump • t/ESC Back#{Terminal::ANSI::RESET}")
+                        "#{EbookReader::Constants::UIConstants::COLOR_TEXT_DIM}↑↓ Navigate • Enter Jump • t/ESC Back#{Terminal::ANSI::RESET}")
         end
       end
     end

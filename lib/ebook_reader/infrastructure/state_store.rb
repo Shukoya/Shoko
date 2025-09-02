@@ -6,7 +6,7 @@ require 'json'
 module EbookReader
   module Infrastructure
     # Immutable state store with event-driven updates.
-    # Replaces the problematic GlobalState with proper immutability and validation.
+    # Single source of truth for application state with validation.
     class StateStore
       attr_reader :event_bus
 
@@ -75,28 +75,28 @@ module EbookReader
         true # Base implementation allows all transitions
       end
 
-      # Convenience methods for compatibility with GlobalState
+      # Convenience methods for compatibility with legacy callers
       def terminal_size_changed?(width, height)
-        last_width = get([:reader, :last_width])
-        last_height = get([:reader, :last_height])
+        last_width = get(%i[reader last_width])
+        last_height = get(%i[reader last_height])
         width != last_width || height != last_height
       end
 
       def update_terminal_size(width, height)
         update({
-          [:reader, :last_width] => width,
-          [:reader, :last_height] => height,
-          [:ui, :terminal_width] => width,
-          [:ui, :terminal_height] => height
-        })
+                 %i[reader last_width] => width,
+                 %i[reader last_height] => height,
+                 %i[ui terminal_width] => width,
+                 %i[ui terminal_height] => height,
+               })
       end
 
       # State snapshot for persistence
       def reader_snapshot
         {
-          current_chapter: get([:reader, :current_chapter]),
-          page_offset: get([:reader, :single_page]),
-          mode: get([:reader, :mode]).to_s,
+          current_chapter: get(%i[reader current_chapter]),
+          page_offset: get(%i[reader single_page]),
+          mode: get(%i[reader mode]).to_s,
           timestamp: Time.now.iso8601,
         }
       end
@@ -104,11 +104,11 @@ module EbookReader
       # Restore reader state from snapshot
       def restore_reader_from(snapshot)
         update({
-          [:reader, :current_chapter] => snapshot['current_chapter'] || 0,
-          [:reader, :single_page] => snapshot['page_offset'] || 0,
-          [:reader, :left_page] => snapshot['page_offset'] || 0,
-          [:reader, :mode] => (snapshot['mode'] || 'read').to_sym
-        })
+                 %i[reader current_chapter] => snapshot['current_chapter'] || 0,
+                 %i[reader single_page] => snapshot['page_offset'] || 0,
+                 %i[reader left_page] => snapshot['page_offset'] || 0,
+                 %i[reader mode] => (snapshot['mode'] || 'read').to_sym,
+               })
       end
 
       # Configuration persistence methods
@@ -125,7 +125,7 @@ module EbookReader
 
       # Dispatch Domain::Actions to update state explicitly
       def dispatch(action)
-        return unless action && action.respond_to?(:apply)
+        return unless action.respond_to?(:apply)
 
         action.apply(self)
       end

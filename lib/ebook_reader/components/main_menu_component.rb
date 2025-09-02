@@ -8,6 +8,7 @@ require_relative 'screens/recent_screen_component'
 require_relative 'screens/settings_screen_component'
 require_relative 'screens/open_file_screen_component'
 require_relative 'screens/annotations_screen_component'
+require_relative 'screens/annotation_edit_screen_component'
 
 module EbookReader
   module Components
@@ -31,7 +32,8 @@ module EbookReader
       def state_changed(path, _old_value, new_value)
         return unless path == %i[menu mode]
 
-        @current_screen = @screen_components[new_value] || @screen_components[:menu]
+        mapped = (new_value == :search) ? :browse : new_value
+        @current_screen = @screen_components[mapped] || @screen_components[:menu]
       end
 
       def do_render(surface, bounds)
@@ -65,6 +67,10 @@ module EbookReader
         @screen_components[:annotations]
       end
 
+      def annotation_detail_screen
+        @screen_components[:annotation_detail]
+      end
+
       private
 
       def setup_screen_components
@@ -75,6 +81,8 @@ module EbookReader
           settings: Screens::SettingsScreenComponent.new(@state, @scanner),
           open_file: Screens::OpenFileScreenComponent.new(@state),
           annotations: Screens::AnnotationsScreenComponent.new(@state),
+          annotation_editor: Screens::AnnotationEditScreenComponent.new(@state),
+          annotation_detail: Screens::AnnotationDetailScreenComponent.new(@state),
         }
       end
     end

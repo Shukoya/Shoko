@@ -5,11 +5,6 @@ module EbookReader
     module Actions
       # Action for updating configuration values
       class UpdateConfigAction < BaseAction
-        def initialize(config_updates)
-          # Expects hash like: { view_mode: :split, line_spacing: :normal }
-          super(config_updates)
-        end
-
         def apply(state)
           # Build update hash for atomic state update
           updates = {}

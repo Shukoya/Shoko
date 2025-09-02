@@ -45,7 +45,7 @@ module EbookReader
         page_text = "#{view_model.page_info[:current]} / #{view_model.page_info[:total]}"
         centered_col = [(width - page_text.length) / 2, 1].max
         surface.write(bounds, height, centered_col,
-                      Terminal::ANSI::DIM + Terminal::ANSI::GRAY + page_text + Terminal::ANSI::RESET)
+                      EbookReader::Constants::UIConstants::COLOR_TEXT_DIM + EbookReader::Constants::UIConstants::COLOR_TEXT_SECONDARY + page_text + Terminal::ANSI::RESET)
       end
 
       def render_split_mode_footer(surface, bounds, view_model, width, height)
@@ -58,7 +58,7 @@ module EbookReader
         left_text = "#{page_info[:left][:current]} / #{page_info[:left][:total]}"
         left_col = [(width / 4) - (left_text.length / 2), 1].max
         surface.write(bounds, height, left_col,
-                      Terminal::ANSI::DIM + Terminal::ANSI::GRAY + left_text + Terminal::ANSI::RESET)
+                      EbookReader::Constants::UIConstants::COLOR_TEXT_DIM + EbookReader::Constants::UIConstants::COLOR_TEXT_SECONDARY + left_text + Terminal::ANSI::RESET)
 
         # Right page number
         return unless page_info[:right]
@@ -66,7 +66,7 @@ module EbookReader
         right_text = "#{page_info[:right][:current]} / #{page_info[:right][:total]}"
         right_col = [(3 * width / 4) - (right_text.length / 2), 1].max
         surface.write(bounds, height, right_col,
-                      Terminal::ANSI::DIM + Terminal::ANSI::GRAY + right_text + Terminal::ANSI::RESET)
+                      EbookReader::Constants::UIConstants::COLOR_TEXT_DIM + EbookReader::Constants::UIConstants::COLOR_TEXT_SECONDARY + right_text + Terminal::ANSI::RESET)
       end
 
       def render_default_footer(surface, bounds, view_model, width, height)
@@ -74,27 +74,27 @@ module EbookReader
 
         # Progress left
         left_prog = "[#{view_model.current_chapter + 1}/#{view_model.total_chapters}]"
-        surface.write(bounds, row1, 1, Terminal::ANSI::BLUE + left_prog + Terminal::ANSI::RESET)
+        surface.write(bounds, row1, 1, EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + left_prog + Terminal::ANSI::RESET)
 
         # Mode center
         mode_label = view_model.view_mode == :split ? '[SPLIT]' : '[SINGLE]'
         page_mode = view_model.page_numbering_mode.to_s.upcase
         mode_text = "#{mode_label} [#{page_mode}]"
         surface.write(bounds, row1, [(width / 2) - 10, 1].max,
-                      Terminal::ANSI::YELLOW + mode_text + Terminal::ANSI::RESET)
+                      EbookReader::Constants::UIConstants::COLOR_TEXT_WARNING + mode_text + Terminal::ANSI::RESET)
 
         # Status right
         right_prog = "L#{view_model.line_spacing.to_s[0]} B#{view_model.bookmarks.count}"
         surface.write(bounds, row1, [width - right_prog.length - 1, 1].max,
-                      Terminal::ANSI::BLUE + right_prog + Terminal::ANSI::RESET)
+                      EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + right_prog + Terminal::ANSI::RESET)
 
         # Second line with doc metadata
         return unless height >= 2
 
         title_text = view_model.document_title[0, [width - 15, 0].max]
-        surface.write(bounds, height, 1, Terminal::ANSI::WHITE + "[#{title_text}]" + Terminal::ANSI::RESET)
+        surface.write(bounds, height, 1, EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + "[#{title_text}]" + Terminal::ANSI::RESET)
         surface.write(bounds, height, [width - 10, 1].max,
-                      Terminal::ANSI::WHITE + "[#{view_model.language}]" + Terminal::ANSI::RESET)
+                      EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + "[#{view_model.language}]" + Terminal::ANSI::RESET)
       end
 
       def render_message_overlay(surface, bounds, view_model, width, height)
@@ -104,7 +104,7 @@ module EbookReader
         col = [(width - text.length) / 2, 1].max
         mid_row = [(height / 2.0).ceil, 1].max
         surface.write(bounds, mid_row, col,
-                      Terminal::ANSI::BG_DARK + Terminal::ANSI::BRIGHT_YELLOW + text + Terminal::ANSI::RESET)
+                      EbookReader::Constants::UIConstants::BG_PRIMARY + EbookReader::Constants::UIConstants::BG_ACCENT + text + Terminal::ANSI::RESET)
       end
     end
   end

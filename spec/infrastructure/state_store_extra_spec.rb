@@ -26,4 +26,3 @@ RSpec.describe 'StateStore extras' do
     end
   end
 end
-

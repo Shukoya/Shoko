@@ -20,4 +20,3 @@ RSpec.describe EbookReader::Domain::Services::LayoutService do
     expect(service.adjust_for_line_spacing(20, :relaxed)).to eq(10)
   end
 end
-

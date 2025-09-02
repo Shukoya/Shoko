@@ -15,7 +15,7 @@ RSpec.describe EbookReader::Infrastructure::Validator do
   end
 
   it 'validates range' do
-    ctx = EbookReader::Infrastructure::Validator::RangeValidationContext.new(5, (1..3), :age, 'bad')
+    ctx = EbookReader::Infrastructure::Validator::RangeValidationContext.new(5, 1..3, :age, 'bad')
     expect(validator.range_valid?(ctx)).to be false
   end
 
@@ -24,4 +24,3 @@ RSpec.describe EbookReader::Infrastructure::Validator do
     expect(validator.format_valid?(ctx)).to be false
   end
 end
-

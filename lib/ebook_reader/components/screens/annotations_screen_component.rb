@@ -14,7 +14,8 @@ module EbookReader
           super()
           @state = state
           @selected = 0
-          @annotations_by_book = {}
+          @list = []
+          @mode = :book
           @current_book_path = nil
           @current_annotation = nil
           refresh_data
@@ -41,48 +42,47 @@ module EbookReader
           update_current_annotation
         end
 
+        # Normalize raw annotations (string-keyed hashes) into symbol-keyed items
+        # Includes page metadata when present
+        def normalize_list(raw)
+          (raw || []).map do |a|
+            {
+              text: a['text'],
+              note: a['note'],
+              id: a['id'],
+              range: a['range'],
+              chapter_index: a['chapter_index'],
+              created_at: a['created_at'],
+              updated_at: a['updated_at'],
+              page_current: a['page_current'],
+              page_total: a['page_total'],
+              page_mode: a['page_mode'],
+            }
+          end
+        end
+
         def refresh_data
-          @annotations_by_book = {}
-          @selected = 0
-
-          # Determine current book from global state (persisted by reader)
-          @current_book_path = @state.get(%i[reader book_path])
-          if @current_book_path
-            raw = EbookReader::Annotations::AnnotationStore.get(@current_book_path)
-            # Fallback to state if store is empty but state has recent annotations
-            if (!raw || raw.empty?)
-              state_ann = @state.get(%i[reader annotations]) || []
-              raw = state_ann.map do |a|
-                # State may already have symbol keys
-                if a.is_a?(Hash)
-                  {
-                    'text' => a[:text] || a['text'],
-                    'note' => a[:note] || a['note'],
-                    'id' => a[:id] || a['id'],
-                    'chapter_index' => a[:chapter_index] || a['chapter_index'],
-                    'created_at' => a[:created_at] || a['created_at'],
-                    'updated_at' => a[:updated_at] || a['updated_at'],
-                  }
-                else
-                  nil
-                end
-              end.compact
+          prev_selected = @selected
+          path = @state.get(%i[reader book_path])
+          if path && !path.to_s.empty?
+            @mode = :book
+            @current_book_path = path
+            raw = @state.get(%i[reader annotations]) || []
+            @list = normalize_list(raw).map { |a| a.merge(book_path: path) }
+          else
+            @mode = :all
+            mapping = @state.get(%i[menu annotations_all]) || {}
+            flattened = []
+            mapping.each do |book_path, items|
+              normalize_list(items).each do |a|
+                flattened << a.merge(book_path: book_path)
+              end
             end
-
-            # Normalize keys to symbols expected by renderer
-            normalized = (raw || []).map do |a|
-              {
-                text: a['text'],
-                note: a['note'],
-                id: a['id'],
-                chapter_index: a['chapter_index'],
-                created_at: a['created_at'],
-                updated_at: a['updated_at'],
-              }
-            end
-            @annotations_by_book[@current_book_path] = normalized
+            @list = flattened
           end
 
+          annotations = current_annotations
+          @selected = [[prev_selected, 0].max, [annotations.length - 1, 0].max].min
           update_current_annotation
         end
 
@@ -93,8 +93,34 @@ module EbookReader
           width = bounds.width
 
           # Header
-          surface.write(bounds, 1, 2, "#{COLOR_TEXT_ACCENT}📝 Annotations#{Terminal::ANSI::RESET}")
-          surface.write(bounds, 1, width - 20, "#{COLOR_TEXT_DIM}[ESC] Back#{Terminal::ANSI::RESET}")
+          count = current_annotations.length
+          book_label = if @mode == :all
+                         'All Books'
+                       else
+                         (@current_book_path ? File.basename(@current_book_path) : 'No book selected')
+                       end
+          header_left = "#{COLOR_TEXT_ACCENT}📝 Annotations (#{count}) — #{book_label}#{Terminal::ANSI::RESET}"
+          header_right = "#{COLOR_TEXT_DIM}[Enter] Open • [e] Edit • [d] Delete#{Terminal::ANSI::RESET}"
+          surface.write(bounds, 1, 2, header_left)
+          surface.write(bounds, 1, [width - header_right.length - 1, header_left.length + 2].max,
+                        header_right)
+          # Divider and column headers
+          surface.write(bounds, 2, 1, COLOR_TEXT_DIM + ('─' * width) + Terminal::ANSI::RESET)
+          idx_w = 4
+          ch_w = 6
+          date_w = 10
+          book_w = (@mode == :all ? 12 : 0)
+          avail = width - (idx_w + ch_w + date_w + book_w + 8)
+          snippet_w = (avail * 0.55).to_i
+          note_w = avail - snippet_w
+          columns = if @mode == :all
+                      format("%-#{idx_w}s  %-#{ch_w}s  %-#{snippet_w}s  %-#{note_w}s  %-#{book_w}s  %-#{date_w}s",
+                             '#', 'Ch', 'Snippet', 'Note', 'Book', 'Date')
+                    else
+                      format("%-#{idx_w}s  %-#{ch_w}s  %-#{snippet_w}s  %-#{note_w}s  %-#{date_w}s",
+                             '#', 'Ch', 'Snippet', 'Note', 'Date')
+                    end
+          surface.write(bounds, 3, 1, COLOR_TEXT_DIM + columns + Terminal::ANSI::RESET)
 
           annotations = current_annotations
 
@@ -105,10 +131,8 @@ module EbookReader
           end
 
           # Footer instructions
-          if annotations.any?
-            surface.write(bounds, height - 3, 2, "#{COLOR_TEXT_DIM}[Enter] Edit • [d] Delete#{Terminal::ANSI::RESET}")
-          end
-          surface.write(bounds, height - 2, 2, "#{COLOR_TEXT_DIM}[ESC] Back to menu#{Terminal::ANSI::RESET}")
+          surface.write(bounds, height - 2, 2,
+                        "#{COLOR_TEXT_DIM}[↑/↓] Navigate • [Enter] Open • [d] Delete • [ESC] Back#{Terminal::ANSI::RESET}")
         end
 
         def preferred_height(_available_height)
@@ -118,14 +142,15 @@ module EbookReader
         private
 
         def current_annotations
-          return [] unless @current_book_path
-
-          @annotations_by_book[@current_book_path] || []
+          @list || []
         end
 
         def update_current_annotation
           annotations = current_annotations
           @current_annotation = annotations[@selected] if @selected < annotations.length
+          return unless @current_annotation && @current_annotation[:book_path]
+
+          @current_book_path = @current_annotation[:book_path]
         end
 
         def render_empty_state(surface, bounds, width, height)
@@ -139,8 +164,8 @@ module EbookReader
         end
 
         def render_annotations_list(surface, bounds, width, height, annotations)
-          list_start_row = 3
-          list_height = height - list_start_row - 4
+          list_start_row = 4
+          list_height = height - list_start_row - 2
           return if list_height <= 0
 
           start_index, visible_annotations = calculate_visible_range(list_height, annotations)
@@ -149,7 +174,7 @@ module EbookReader
             row = list_start_row + index
             is_selected = (start_index + index) == @selected
 
-            render_annotation_item(surface, bounds, row, width, annotation, is_selected)
+            render_annotation_item(surface, bounds, row, width, annotation, is_selected, (start_index + index))
           end
         end
 
@@ -169,34 +194,61 @@ module EbookReader
           [start_index, visible_annotations]
         end
 
-        def render_annotation_item(surface, bounds, row, width, annotation, is_selected)
+        def render_annotation_item(surface, bounds, row, width, annotation, is_selected, absolute_index)
           # Extract annotation details
-          text = annotation[:text] || 'No text'
-          note = annotation[:note] || ''
-          annotation[:book_title] || 'Unknown Book'
+          text = (annotation[:text] || 'No text').to_s.tr("\n", ' ')
+          note = (annotation[:note] || '').to_s.tr("\n", ' ')
+          created = (annotation[:created_at] || '').to_s.split('T').first
+          chapter = annotation[:chapter_index]
 
-          # Truncate for display
-          max_text_length = [width - 20, 40].max
-          display_text = truncate_text(text, max_text_length)
+          # Column widths (match header)
+          idx_w = 4
+          ch_w = 6
+          date_w = 10
+          book_w = (@mode == :all ? 12 : 0)
+          avail = width - (idx_w + ch_w + date_w + book_w + 8)
+          snippet_w = (avail * 0.6).to_i
+          note_w = avail - snippet_w
 
-          prefix = is_selected ? '▶ ' : '  '
-          content = "#{prefix}\"#{display_text}\""
-          unless note.empty?
-            content += " #{COLOR_TEXT_DIM}(#{truncate_text(note,
-                                                           20)})#{Terminal::ANSI::RESET}"
-          end
-
-          if is_selected
-            surface.write(bounds, row, 1, SELECTION_HIGHLIGHT + content + Terminal::ANSI::RESET)
+          pointer = is_selected ? '▸' : ' '
+          idx = format("%#{idx_w}d", absolute_index + 1)
+          chv = chapter.nil? ? '-' : chapter.to_i
+          snippet = truncate_text(text, snippet_w)
+          note_tr = truncate_text(note, note_w)
+          if @mode == :all
+            book = annotation[:book_path] ? File.basename(annotation[:book_path]) : ''
+            line = format("%s %s  %-#{ch_w}s  %-#{snippet_w}s  %-#{note_w}s  %-#{book_w}s  %-#{date_w}s",
+                          pointer, idx, chv, snippet, note_tr, truncate_text(book, book_w), created)
           else
-            surface.write(bounds, row, 1, COLOR_TEXT_PRIMARY + content + Terminal::ANSI::RESET)
+            line = format("%s %s  %-#{ch_w}s  %-#{snippet_w}s  %-#{note_w}s  %-#{date_w}s",
+                          pointer, idx, chv, snippet, note_tr, created)
           end
+
+          color = is_selected ? SELECTION_HIGHLIGHT : COLOR_TEXT_PRIMARY
+          surface.write(bounds, row, 1, color + line + Terminal::ANSI::RESET)
         end
 
         def truncate_text(text, max_length)
           return text if text.length <= max_length
 
           "#{text[0...(max_length - 3)]}..."
+        end
+
+        def normalize_list(raw)
+          (raw || []).map do |a|
+            {
+              text: a['text'],
+              note: a['note'],
+              id: a['id'],
+              range: a['range'],
+              chapter_index: a['chapter_index'],
+              created_at: a['created_at'],
+              updated_at: a['updated_at'],
+              page_current: a['page_current'],
+              page_total: a['page_total'],
+              page_mode: a['page_mode'],
+            }
+          end
         end
       end
     end

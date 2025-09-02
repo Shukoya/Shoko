@@ -35,4 +35,3 @@ RSpec.describe EbookReader::Infrastructure::Logger do
     expect(io.string).to be_empty
   end
 end
-

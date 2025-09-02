@@ -8,8 +8,11 @@ RSpec.describe EbookReader::Controllers::InputController do
   let(:ui) { double('UI', handle_popup_action: nil, cleanup_popup_state: nil, switch_mode: nil) }
 
   class FakeDeps
-    def initialize(ui); @ui = ui; end
-    def resolve(name); name == :ui_controller ? @ui : nil; end
+    def initialize(ui) = @ui = ui
+
+    def resolve(name)
+      name == :ui_controller ? @ui : nil
+    end
   end
 
   subject(:ic) { described_class.new(state, FakeDeps.new(ui)) }
@@ -29,4 +32,3 @@ RSpec.describe EbookReader::Controllers::InputController do
     expect(ui).to have_received(:cleanup_popup_state)
   end
 end
-

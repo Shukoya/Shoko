@@ -16,11 +16,11 @@ module EbookReader
         end
 
         def input=(value)
-          @state.set([:menu, :file_input], value || '')
+          @state.set(%i[menu file_input], value || '')
         end
 
         def input
-          @state.get([:menu, :file_input]) || ''
+          @state.get(%i[menu file_input]) || ''
         end
 
         def do_render(surface, bounds)
@@ -35,7 +35,7 @@ module EbookReader
           surface.write(bounds, 3, 2, "#{COLOR_TEXT_PRIMARY}File path:#{Terminal::ANSI::RESET}")
 
           # Input field with cursor
-          input_text = @state.get([:menu, :file_input]) || ''
+          input_text = @state.get(%i[menu file_input]) || ''
           input_width = [width - 15, 40].max
           display_input = truncate_input(input_text, input_width)
 

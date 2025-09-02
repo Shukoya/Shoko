@@ -15,7 +15,7 @@ require_relative 'components/layouts/horizontal'
 require_relative 'components/header_component'
 require_relative 'components/content_component'
 require_relative 'components/footer_component'
-require_relative 'components/popup_overlay_component'
+require_relative 'components/tooltip_overlay_component'
 require_relative 'components/sidebar_panel_component'
 require_relative 'input/dispatcher'
 
@@ -25,7 +25,7 @@ module EbookReader
   # This refactored ReaderController now delegates responsibilities to focused controllers:
   # - NavigationController: handles page/chapter navigation
   # - UIController: handles mode switching and UI state
-  # - StateController: handles persistence and state management 
+  # - StateController: handles persistence and state management
   # - InputController: handles all input processing
   #
   # The ReaderController now focuses only on:
@@ -42,7 +42,6 @@ module EbookReader
     include Input::KeyDefinitions::Helpers
 
     attr_reader :doc, :path, :state, :page_calculator, :dependencies
-    
 
     # Delegate to focused controllers
     def_delegators :@navigation_controller, :next_page, :prev_page, :next_chapter, :prev_chapter,
@@ -54,31 +53,35 @@ module EbookReader
                    :handle_popup_action
 
     def_delegators :@state_controller, :save_progress, :load_progress, :load_bookmarks,
-                   :add_bookmark, :jump_to_bookmark, :delete_selected_bookmark, :quit_to_menu, 
+                   :add_bookmark, :jump_to_bookmark, :delete_selected_bookmark, :quit_to_menu,
                    :quit_application
 
     def_delegators :@input_controller, :handle_popup_navigation, :handle_popup_action_key,
                    :handle_popup_cancel, :handle_popup_menu_input
 
-    def initialize(epub_path, _config = nil, dependencies = nil)
+  def initialize(epub_path, _config = nil, dependencies = nil)
       @path = epub_path
       @dependencies = dependencies || Domain::ContainerFactory.create_default_container
       @state = @dependencies.resolve(:global_state)
 
       # Initialize document and services first
       @page_calculator = @dependencies.resolve(:page_calculator)
-      @chapter_cache = @dependencies.resolve(:chapter_cache) if @dependencies.registered?(:chapter_cache)
+      if @dependencies.registered?(:chapter_cache)
+        @chapter_cache = @dependencies.resolve(:chapter_cache)
+      end
       @layout_service = @dependencies.resolve(:layout_service)
       @clipboard_service = @dependencies.resolve(:clipboard_service)
       @terminal_service = @dependencies.resolve(:terminal_service)
+      @wrapping_service = @dependencies.resolve(:wrapping_service) if @dependencies.registered?(:wrapping_service)
 
       # Load document before creating controllers that depend on it
       load_document
       # Expose current book path in state for downstream services/screens
-      @state.update({[:reader, :book_path] => @path})
-      
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(book_path: @path))
+
       # Initialize focused controllers with proper dependencies including document
-      @navigation_controller = Controllers::NavigationController.new(@state, @doc, @page_calculator, @dependencies)
+      @navigation_controller = Controllers::NavigationController.new(@state, @doc,
+                                                                     @page_calculator, @dependencies)
       @ui_controller = Controllers::UIController.new(@state, @dependencies)
       @state_controller = Controllers::StateController.new(@state, @doc, epub_path, @dependencies)
       @input_controller = Controllers::InputController.new(@state, @dependencies)
@@ -88,11 +91,14 @@ module EbookReader
       @dependencies.register(:ui_controller, @ui_controller)
       @dependencies.register(:state_controller, @state_controller)
       @dependencies.register(:input_controller, @input_controller)
+      # Expose reader controller for components/controllers needing cleanup hooks
+      @dependencies.register(:reader_controller, self)
 
       @presenter = Presenters::ReaderPresenter.new(self, @state)
 
       # Load saved data
       load_data
+      apply_pending_jump_if_present
       @terminal_cache = { width: nil, height: nil, checked_at: nil }
       @render_cache = Rendering::RenderCache.new
       @last_rendered_state = {}
@@ -100,6 +106,10 @@ module EbookReader
       # Build UI components
       build_component_layout
       @input_controller.setup_input_dispatcher(self)
+
+      # Build unified overlay component (used for highlights and popups)
+      coord = @dependencies.resolve(:coordinate_service)
+      @overlay = Components::TooltipOverlayComponent.new(self, coordinate_service: coord)
 
       # Initialize page calculations for navigation
       initialize_page_calculations
@@ -129,7 +139,10 @@ module EbookReader
       # Update page maps on resize
       if size_changed?(width, height)
         refresh_page_map(width, height)
-        @chapter_cache&.clear_cache_for_width(@state.get([:reader, :last_width])) if defined?(@chapter_cache)
+        if defined?(@chapter_cache)
+          @chapter_cache&.clear_cache_for_width(@state.get(%i[reader
+                                                              last_width]))
+        end
       end
 
       # Prepare frame
@@ -137,7 +150,7 @@ module EbookReader
       @state.update_terminal_size(width, height)
 
       # Special-case full-screen modes that render their own UI
-      if %i[annotation_editor annotations].include?(@state.get([:reader, :mode])) && @ui_controller.current_mode
+      if %i[annotation_editor annotations].include?(@state.get(%i[reader mode])) && @ui_controller.current_mode
         # Clear the frame area to avoid artifacts from reading view
         surface = @terminal_service.create_surface
         bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
@@ -148,14 +161,13 @@ module EbookReader
       end
 
       # Default: component-driven layout
-      @state.update({[:reader, :rendered_lines] => {}})
+      @state.dispatch(EbookReader::Domain::Actions::ClearRenderedLinesAction.new)
       surface = @terminal_service.create_surface
       root_bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
       @layout.render(surface, root_bounds)
-      # Render overlay components (e.g., popup menus) last
-      @overlay ||= Components::PopupOverlayComponent.new(self)
+      # Render overlay last (highlights, popup menu)
       @overlay.render(surface, root_bounds)
-      # NOTE: MouseableReader will call Terminal.end_frame after overlays
+      @terminal_service.end_frame
     end
 
     # Partial refresh hook for subclasses.
@@ -194,27 +206,32 @@ module EbookReader
       if @state.get(%i[config page_numbering_mode]) == :dynamic
         return { current: 0, total: 0 } unless @page_calculator
 
-        { current: @state.get([:reader, :current_page_index]) + 1, total: @page_calculator.total_pages }
+        { current: @state.get(%i[reader current_page_index]) + 1,
+          total: @page_calculator.total_pages }
       else
         height, width = @terminal_service.size
-        _, content_height = @layout_service.calculate_metrics(width, height, @state.get(%i[config view_mode]))
+        _, content_height = @layout_service.calculate_metrics(width, height,
+                                                              @state.get(%i[config view_mode]))
         actual_height = adjust_for_line_spacing(content_height)
 
         return { current: 0, total: 0 } if actual_height <= 0
 
-        update_page_map(width, height) if size_changed?(width, height) || @state.get([:reader, :page_map]).empty?
-        return { current: 0, total: 0 } unless @state.get([:reader, :total_pages]).positive?
+        update_page_map(width, height) if size_changed?(width,
+                                                        height) || @state.get(%i[reader
+                                                                                 page_map]).empty?
+        return { current: 0, total: 0 } unless @state.get(%i[reader total_pages]).positive?
 
-        pages_before = @state.get([:reader, :page_map])[0...@state.get([:reader, :current_chapter])].sum
+        pages_before = @state.get(%i[reader
+                                     page_map])[0...@state.get(%i[reader current_chapter])].sum
         line_offset = if @state.get(%i[config view_mode]) == :split
-                        @state.get([:reader, :left_page])
+                        @state.get(%i[reader left_page])
                       else
-                        @state.get([:reader, :single_page])
+                        @state.get(%i[reader single_page])
                       end
         page_in_chapter = (line_offset.to_f / actual_height).floor + 1
         current_global_page = pages_before + page_in_chapter
 
-        { current: current_global_page, total: @state.get([:reader, :total_pages]) }
+        { current: current_global_page, total: @state.get(%i[reader total_pages]) }
       end
     end
 
@@ -228,7 +245,7 @@ module EbookReader
           return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } }
         end
 
-        left_page = @state.get([:reader, :current_page_index]) + 1
+        left_page = @state.get(%i[reader current_page_index]) + 1
         right_page = [left_page + 1, @page_calculator.total_pages].min
         total = @page_calculator.total_pages
 
@@ -242,24 +259,27 @@ module EbookReader
           return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } }
         end
 
-        update_page_map(width, height) if size_changed?(width, height) || @state.get([:reader, :page_map]).empty?
-        unless @state.get([:reader, :total_pages]).positive?
+        update_page_map(width, height) if size_changed?(width,
+                                                        height) || @state.get(%i[reader
+                                                                                 page_map]).empty?
+        unless @state.get(%i[reader total_pages]).positive?
           return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } }
         end
 
-        pages_before = @state.get([:reader, :page_map])[0...@state.get([:reader, :current_chapter])].sum
+        pages_before = @state.get(%i[reader
+                                     page_map])[0...@state.get(%i[reader current_chapter])].sum
 
         # Calculate left page
-        left_line_offset = @state.get([:reader, :left_page]) || 0
+        left_line_offset = @state.get(%i[reader left_page]) || 0
         left_page_in_chapter = (left_line_offset.to_f / actual_height).floor + 1
         left_current = pages_before + left_page_in_chapter
 
         # Calculate right page
-        right_line_offset = @state.get([:reader, :right_page]) || actual_height
+        right_line_offset = @state.get(%i[reader right_page]) || actual_height
         right_page_in_chapter = (right_line_offset.to_f / actual_height).floor + 1
         right_current = pages_before + right_page_in_chapter
 
-        total = @state.get([:reader, :total_pages])
+        total = @state.get(%i[reader total_pages])
 
         {
           left: { current: left_current, total: total },
@@ -282,24 +302,26 @@ module EbookReader
     end
 
     def toc_down
-      @state.update({[:reader, :toc_selected] => @state.get([:reader, :toc_selected]) + 1})
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(toc_selected: @state.get(%i[reader toc_selected]) + 1))
     end
 
     def toc_up
-      @state.update({[:reader, :toc_selected] => [@state.get([:reader, :toc_selected]) - 1, 0].max})
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(toc_selected: [@state.get(%i[reader toc_selected]) - 1, 0].max))
     end
 
     def toc_select
-      jump_to_chapter(@state.get([:reader, :toc_selected]))
+      jump_to_chapter(@state.get(%i[reader toc_selected]))
     end
 
     def bookmark_down
-      bookmarks_count = (@state.get([:reader, :bookmarks]) || []).length - 1
-      @state.update({[:reader, :bookmark_selected] => [@state.get([:reader, :bookmark_selected]) + 1, bookmarks_count].max})
+      bookmarks_count = (@state.get(%i[reader bookmarks]) || []).length - 1
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(bookmark_selected: [@state.get(%i[reader bookmark_selected]) + 1,
+                                                                                                   bookmarks_count].max))
     end
 
     def bookmark_up
-      @state.update({[:reader, :bookmark_selected] => [@state.get([:reader, :bookmark_selected]) - 1, 0].max})
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(bookmark_selected: [@state.get(%i[reader bookmark_selected]) - 1,
+                                                                                                   0].max))
     end
 
     def bookmark_select
@@ -308,17 +330,17 @@ module EbookReader
 
     def create_view_model
       UI::ViewModels::ReaderViewModel.new(
-        current_chapter: @state.get([:reader, :current_chapter]),
+        current_chapter: @state.get(%i[reader current_chapter]),
         total_chapters: @doc&.chapters&.length || 0,
-        current_page: @state.get([:reader, :current_page]),
-        total_pages: @state.get([:reader, :total_pages]),
-        chapter_title: @doc&.get_chapter(@state.get([:reader, :current_chapter]))&.title || '',
+        current_page: @state.get(%i[reader current_page]),
+        total_pages: @state.get(%i[reader total_pages]),
+        chapter_title: @doc&.get_chapter(@state.get(%i[reader current_chapter]))&.title || '',
         document_title: @doc&.title || '',
         view_mode: @state.get(%i[config view_mode]) || :split,
-        sidebar_visible: @state.get([:reader, :sidebar_visible]),
-        mode: @state.get([:reader, :mode]),
-        message: @state.get([:reader, :message]),
-        bookmarks: @state.get([:reader, :bookmarks]) || [],
+        sidebar_visible: @state.get(%i[reader sidebar_visible]),
+        mode: @state.get(%i[reader mode]),
+        message: @state.get(%i[reader message]),
+        bookmarks: @state.get(%i[reader bookmarks]) || [],
         show_page_numbers: @state.get(%i[config show_page_numbers]) || true,
         page_numbering_mode: @state.get(%i[config page_numbering_mode]) || :absolute,
         line_spacing: @state.get(%i[config line_spacing]) || :normal,
@@ -329,11 +351,10 @@ module EbookReader
 
     private
 
-
     def load_document
       document_service = Infrastructure::DocumentService.new(@path)
       @doc = document_service.load_document
-      
+
       # Register document in dependency container for services to access
       @dependencies.register(:document, @doc)
     end
@@ -342,6 +363,38 @@ module EbookReader
       @state_controller.load_progress
       @state_controller.load_bookmarks
       @state_controller.refresh_annotations
+    end
+
+    def apply_pending_jump_if_present
+      pending = @state.get(%i[reader pending_jump])
+      return unless pending
+
+      begin
+        chapter_index = pending[:chapter_index] || pending['chapter_index']
+        selection_range = pending[:selection_range] || pending['selection_range']
+        edit_flag = pending[:edit] || pending['edit']
+        ann = pending[:annotation] || pending['annotation']
+        @navigation_controller.jump_to_chapter(chapter_index) if chapter_index
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection_range)) if selection_range
+        if edit_flag && ann
+          # Ensure selection exists for editor context
+          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection_range)) if selection_range
+          # Switch to annotation editor with existing annotation payload
+          @ui_controller.switch_mode(:annotation_editor,
+                                     text: ann[:text] || ann['text'],
+                                     range: ann[:range] || ann['range'],
+                                     annotation: {
+                                       'id' => ann[:id] || ann['id'],
+                                       'text' => ann[:text] || ann['text'],
+                                       'note' => ann[:note] || ann['note'],
+                                       'chapter_index' => ann[:chapter_index] || ann['chapter_index'],
+                                       'range' => ann[:range] || ann['range'],
+                                     },
+                                     chapter_index: chapter_index)
+        end
+      ensure
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_jump: nil))
+      end
     end
 
     def build_component_layout
@@ -362,7 +415,7 @@ module EbookReader
     end
 
     def rebuild_root_layout
-      @layout = if @state.get([:reader, :sidebar_visible])
+      @layout = if @state.get(%i[reader sidebar_visible])
                   # Use horizontal layout with sidebar + main content
                   Components::Layouts::Horizontal.new(@sidebar_component, @main_content_layout)
                 else
@@ -410,9 +463,10 @@ module EbookReader
       if @state.get(%i[config page_numbering_mode]) == :dynamic && @page_calculator
         if size_changed?(width, height)
           @page_calculator.build_page_map(width, height, @doc, @state)
-          clamped_index = [@state.get([:reader, :current_page_index]), @page_calculator.total_pages - 1].min
+          clamped_index = [@state.get(%i[reader current_page_index]),
+                           @page_calculator.total_pages - 1].min
           clamped_index = [0, clamped_index].max
-          @state.update({[:reader, :current_page_index] => clamped_index})
+          @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: clamped_index))
         end
       elsif size_changed?(width, height)
         update_page_map(width, height)
@@ -443,22 +497,24 @@ module EbookReader
       return if @doc.nil?
 
       # Generate a cache key based on all factors that affect page layout
-      cache_key = "#{width}x#{height}-#{@state.get(%i[config view_mode])}-#{@state.get(%i[config line_spacing])}"
+      cache_key = "#{width}x#{height}-#{@state.get(%i[config
+                                                      view_mode])}-#{@state.get(%i[config
+                                                                                   line_spacing])}"
 
       # Use a cached map if it exists for the current configuration
       if @page_map_cache && @page_map_cache[:key] == cache_key
-        @state.update({[:reader, :page_map] => @page_map_cache[:map]})
-        @state.update({[:reader, :total_pages] => @page_map_cache[:total]})
+        @state.update({ %i[reader page_map] => @page_map_cache[:map],
+                        %i[reader total_pages] => @page_map_cache[:total] })
         return
       end
 
-      col_width, content_height = @layout_service.calculate_metrics(width, height, @state.get(%i[config view_mode]))
+      col_width, content_height = @layout_service.calculate_metrics(width, height,
+                                                                    @state.get(%i[config view_mode]))
       actual_height = adjust_for_line_spacing(content_height)
       return if actual_height <= 0
 
       calculate_page_map(col_width, actual_height, cache_key)
-      @state.update({[:reader, :last_width] => width})
-      @state.update({[:reader, :last_height] => height})
+      @state.update({ %i[reader last_width] => width, %i[reader last_height] => height })
     end
 
     def calculate_page_map(col_width, actual_height, cache_key)
@@ -468,11 +524,21 @@ module EbookReader
         wrapped = wrap_lines(lines, col_width)
         (wrapped.size.to_f / actual_height).ceil
       end
-      @state.update({[:reader, :page_map] => page_map})
-      @state.update({[:reader, :total_pages] => page_map.sum})
+      @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum })
 
       # Store the newly calculated map and its key in the cache
-      @page_map_cache = { key: cache_key, map: @state.get([:reader, :page_map]), total: @state.get([:reader, :total_pages]) }
+      @page_map_cache = { key: cache_key, map: @state.get(%i[reader page_map]),
+                          total: @state.get(%i[reader total_pages]) }
+    end
+
+    # Override helper to delegate to the DI-backed wrapping service
+    def wrap_lines(lines, width)
+      if @wrapping_service
+        chapter_index = @state&.get(%i[reader current_chapter]) || 0
+        return @wrapping_service.wrap_lines(lines, chapter_index, width)
+      end
+      # Fallback to helper behavior if service missing (tests/dev only)
+      super
     end
 
     # Hook for subclasses (MouseableReader) to clear any active selection/popup

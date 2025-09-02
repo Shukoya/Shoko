@@ -22,4 +22,3 @@ RSpec.describe EbookReader::Domain::Services::SelectionService do
     expect(text).not_to be_empty
   end
 end
-

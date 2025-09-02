@@ -7,6 +7,7 @@ module EbookReader
     module Sidebar
       # Modern bottom tab navigation for sidebar
       class TabHeaderComponent < BaseComponent
+        include Constants::UIConstants
         TABS = %i[toc annotations bookmarks].freeze
         TAB_INFO = {
           toc: { label: 'Contents', icon: '◉', key: 'g' },
@@ -33,7 +34,7 @@ module EbookReader
 
         def draw_separator(surface, bounds)
           # Draw subtle separator line at top
-          separator_char = "#{Terminal::ANSI::DIM}─#{Terminal::ANSI::RESET}"
+          separator_char = "#{COLOR_TEXT_DIM}─#{Terminal::ANSI::RESET}"
           (1..(bounds.width - 1)).each do |x|
             surface.write(bounds, 1, x, separator_char)
           end
@@ -62,8 +63,8 @@ module EbookReader
 
           if is_active
             # Active tab styling - modern and clean
-            icon_text = "#{Terminal::ANSI::BRIGHT_CYAN}#{icon}#{Terminal::ANSI::RESET}"
-            label_text = "#{Terminal::ANSI::BRIGHT_WHITE}#{label}#{Terminal::ANSI::RESET}"
+            icon_text = "#{COLOR_TEXT_ACCENT}#{icon}#{Terminal::ANSI::RESET}"
+            label_text = "#{COLOR_TEXT_PRIMARY}#{label}#{Terminal::ANSI::RESET}"
 
             # Center the content
             content = "#{icon} #{label}"
@@ -73,7 +74,7 @@ module EbookReader
             surface.write(bounds, y_pos + 1, x_pos + padding + 2, label_text)
 
             # Active indicator line
-            indicator_char = "#{Terminal::ANSI::BRIGHT_CYAN}▬#{Terminal::ANSI::RESET}"
+            indicator_char = "#{COLOR_TEXT_ACCENT}▬#{Terminal::ANSI::RESET}"
             indicator_width = [content.length, width - 2].min
             indicator_start = x_pos + [(width - indicator_width) / 2, 0].max
 
@@ -82,10 +83,10 @@ module EbookReader
             end
           else
             # Inactive tab styling
-            icon_text = "#{Terminal::ANSI::DIM}#{icon}#{Terminal::ANSI::RESET}"
+            icon_text = "#{COLOR_TEXT_DIM}#{icon}#{Terminal::ANSI::RESET}"
 
             # Show key hint for inactive tabs
-            key_hint = "#{Terminal::ANSI::DIM}[#{key}]#{Terminal::ANSI::RESET}"
+            key_hint = "#{COLOR_TEXT_DIM}[#{key}]#{Terminal::ANSI::RESET}"
 
             # Center the icon
             content_width = 1 # Just icon for inactive

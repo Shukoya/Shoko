@@ -137,9 +137,11 @@ module EbookReader
         container.register_factory(:layout_service) { |c| Domain::Services::LayoutService.new(c) }
         container.register_factory(:clipboard_service) { |c| Domain::Services::ClipboardService.new(c) }
         container.register_factory(:terminal_service) { |c| Domain::Services::TerminalService.new(c) }
+        container.register_factory(:annotation_service) { |c| Domain::Services::AnnotationService.new(c) }
+        container.register_factory(:wrapping_service) { |c| Domain::Services::WrappingService.new(c) }
 
         # Infrastructure services
-        container.register_factory(:document_service) do |c|
+        container.register_factory(:document_service) do |_c|
           # DocumentService will be created per book - requires epub_path parameter
           nil # Placeholder - will be created with path parameter when needed
         end
@@ -151,18 +153,18 @@ module EbookReader
         container.register_factory(:chapter_cache) do |_c|
           EbookReader::Services::ChapterCache.new
         end
-        
+
         # Unified state management
         container.register_singleton(:global_state) { |c| Infrastructure::ObserverStateStore.new(c.resolve(:event_bus)) }
 
-        # IMPORTANT: state_store must resolve to the same instance as global_state
+        # IMPORTANT: state_store must resolve to the same ObserverStateStore instance as :global_state
         container.register_factory(:state_store) { |c| c.resolve(:global_state) }
-        
+
         # Library scanner service
         container.register_factory(:library_scanner) do |_c|
           EbookReader::Services::LibraryScanner.new
         end
-        
+
         container
       end
 

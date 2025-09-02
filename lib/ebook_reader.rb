@@ -41,7 +41,7 @@ require_relative 'ebook_reader/builders/page_setup_builder'
 # Core components
 require_relative 'ebook_reader/version'
 require_relative 'ebook_reader/terminal'
-# Config functionality now in GlobalState
+# Config/state access uses ObserverStateStore via DI (:global_state resolves to the shared state store)
 
 # Validators
 require_relative 'ebook_reader/validators/file_path_validator'
@@ -52,6 +52,7 @@ require_relative 'ebook_reader/epub_finder'
 require_relative 'ebook_reader/recent_files'
 require_relative 'ebook_reader/progress_manager'
 require_relative 'ebook_reader/bookmark_manager'
+require_relative 'ebook_reader/annotations/annotation_store'
 
 # Document handling
 require_relative 'ebook_reader/epub_document'
@@ -73,14 +74,18 @@ require_relative 'ebook_reader/domain/services/page_calculator_service'
 require_relative 'ebook_reader/domain/services/coordinate_service'
 require_relative 'ebook_reader/domain/services/layout_service'
 require_relative 'ebook_reader/domain/services/clipboard_service'
+require_relative 'ebook_reader/domain/services/annotation_service'
 require_relative 'ebook_reader/domain/services/terminal_service'
 require_relative 'ebook_reader/domain/services/selection_service'
+require_relative 'ebook_reader/domain/services/wrapping_service'
 require_relative 'ebook_reader/domain/commands/base_command'
 require_relative 'ebook_reader/domain/commands/navigation_commands'
 require_relative 'ebook_reader/domain/commands/application_commands'
 require_relative 'ebook_reader/domain/commands/bookmark_commands'
 require_relative 'ebook_reader/domain/commands/sidebar_commands'
 require_relative 'ebook_reader/domain/commands/conditional_navigation_commands'
+require_relative 'ebook_reader/domain/commands/menu_commands'
+require_relative 'ebook_reader/domain/commands/annotation_editor_commands'
 require_relative 'ebook_reader/domain/actions/base_action'
 require_relative 'ebook_reader/domain/actions/toggle_view_mode_action'
 require_relative 'ebook_reader/domain/actions/switch_reader_mode_action'
@@ -98,6 +103,7 @@ require_relative 'ebook_reader/domain/actions/update_selections_action'
 require_relative 'ebook_reader/domain/actions/update_popup_menu_action'
 require_relative 'ebook_reader/domain/actions/update_rendered_lines_action'
 require_relative 'ebook_reader/domain/actions/update_annotations_action'
+require_relative 'ebook_reader/domain/actions/update_menu_action'
 require_relative 'ebook_reader/domain/actions/action_creators'
 
 # Domain selectors for state access
@@ -112,7 +118,7 @@ require_relative 'ebook_reader/input/domain_command_bridge'
 require_relative 'ebook_reader/ui/view_models/reader_view_model'
 # Removed unused: pure_content_component, pure_footer_component
 
-# Application layer - new architecture  
+# Application layer - new architecture
 require_relative 'ebook_reader/application/unified_application'
 # Removed unused: reader_application, menu_application
 
@@ -123,7 +129,7 @@ require_relative 'ebook_reader/controllers/state_controller'
 require_relative 'ebook_reader/controllers/input_controller'
 
 # Core reader components updated to use new state management
-# Removed: core/global_state (replaced with Infrastructure::ObserverStateStore)
+# Removed: legacy global state implementation (now using Infrastructure::ObserverStateStore)
 # Removed: state_accessor - no longer needed with direct state.get() and selectors
 # Removed: state_service (replaced with direct state management)
 # Removed: page_manager (merged into PageCalculatorService)
@@ -146,6 +152,8 @@ require_relative 'ebook_reader/components/component_interface'
 require_relative 'ebook_reader/components/screens/base_screen_component'
 require_relative 'ebook_reader/components/screens/recent_screen_component'
 require_relative 'ebook_reader/components/screens/menu_screen_component'
+require_relative 'ebook_reader/components/screens/annotation_detail_screen_component'
+require_relative 'ebook_reader/components/screens/annotation_editor_screen_component'
 
 # UI components
 require_relative 'ebook_reader/main_menu'

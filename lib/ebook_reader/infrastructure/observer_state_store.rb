@@ -4,10 +4,10 @@ require_relative 'state_store'
 
 module EbookReader
   module Infrastructure
-    # StateStore with observer pattern support for GlobalState compatibility
+    # StateStore with observer pattern support; central app state with observer notifications
     class ObserverStateStore < StateStore
       def initialize(event_bus = EventBus.new)
-        super(event_bus)
+        super
         @observers_by_path = Hash.new { |h, k| h[k] = [] }
         @observers_all = []
         load_config_from_file
@@ -53,17 +53,17 @@ module EbookReader
           path = path_or_updates
           normalized_path = normalize_path(path)
           old_value = get(normalized_path)
-          super({normalized_path => value})
+          super({ normalized_path => value })
           notify_observers(normalized_path, old_value, value) unless old_value == value
         end
       end
 
-      # Override set to include observer notifications  
+      # Override set to include observer notifications
       def set(path, value)
         old_value = get(path)
-        super(path, value)
+        super
         return value if old_value == value
-        
+
         normalized_path = normalize_path(path)
         notify_observers(normalized_path, old_value, value)
         value

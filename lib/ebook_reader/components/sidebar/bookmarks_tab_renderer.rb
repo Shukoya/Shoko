@@ -6,17 +6,18 @@ module EbookReader
   module Components
     module Sidebar
       # Bookmarks tab renderer for sidebar
-      class BookmarksTabRenderer < BaseComponent
+class BookmarksTabRenderer < BaseComponent
+  include Constants::UIConstants
         def initialize(controller)
           super()
           @controller = controller
         end
 
         def do_render(surface, bounds)
-          bookmarks = @controller.state.get([:reader, :bookmarks]) || []
+          bookmarks = @controller.state.get(%i[reader bookmarks]) || []
           doc = @controller.doc
           state = @controller.state
-          selected_index = state.get([:reader, :sidebar_bookmarks_selected]) || 0
+          selected_index = state.get(%i[reader sidebar_bookmarks_selected]) || 0
 
           return render_empty_message(surface, bounds) if bookmarks.empty?
 
@@ -37,7 +38,7 @@ module EbookReader
           messages.each_with_index do |message, i|
             x = bounds.x + [(bounds.width - message.length) / 2, 2].max
             y = start_y + i
-            surface.write(bounds, y, x, "#{Terminal::ANSI::DIM}#{message}#{Terminal::ANSI::RESET}")
+            surface.write(bounds, y, x, "#{COLOR_TEXT_DIM}#{message}#{Terminal::ANSI::RESET}")
           end
         end
 
@@ -70,7 +71,7 @@ module EbookReader
           chapter_title = chapter&.title || "Chapter #{bookmark.chapter_index + 1}"
 
           # First line: Chapter title with bookmark indicator
-          prefix = is_selected ? "#{Terminal::ANSI::BRIGHT_CYAN}▸ " : '  '
+          prefix = is_selected ? "#{COLOR_TEXT_ACCENT}#{SELECTION_POINTER}#{Terminal::ANSI::RESET}" : '  '
           chapter_text = chapter_title.to_s
 
           if chapter_text.length > max_width - 3
@@ -78,8 +79,8 @@ module EbookReader
           end
 
           # Modern bookmark icon
-          bookmark_icon = "#{Terminal::ANSI::YELLOW}◆#{Terminal::ANSI::RESET}"
-          title_style = is_selected ? Terminal::ANSI::BRIGHT_WHITE : Terminal::ANSI::WHITE
+          bookmark_icon = "#{COLOR_TEXT_WARNING}◆#{Terminal::ANSI::RESET}"
+          title_style = is_selected ? SELECTION_HIGHLIGHT : COLOR_TEXT_PRIMARY
           title_line = "#{prefix}#{bookmark_icon} #{title_style}#{chapter_text}#{Terminal::ANSI::RESET}"
           surface.write(bounds, y, bounds.x + 1, title_line)
 
@@ -93,7 +94,7 @@ module EbookReader
             position_text = " (#{bookmark.position_percentage}%)"
           end
 
-          snippet_style = is_selected ? Terminal::ANSI::GRAY : Terminal::ANSI::DIM
+          snippet_style = is_selected ? COLOR_TEXT_SECONDARY : COLOR_TEXT_DIM
           snippet_line = "    #{snippet_style}\"#{snippet}\"#{position_text}#{Terminal::ANSI::RESET}"
           surface.write(bounds, y + 1, bounds.x + 1, snippet_line)
         end

@@ -40,7 +40,7 @@ module EbookReader
         ].freeze
 
         def initialize(dependencies = nil, controller = nil)
-          super(dependencies, controller)
+          super
         end
 
         def render_with_context(surface, bounds, _context)
@@ -51,7 +51,7 @@ module EbookReader
             break if row >= bounds.height - 2
 
             col = [(bounds.width - line.length) / 2, 1].max
-            surface.write(bounds, row, col, Terminal::ANSI::WHITE + line + Terminal::ANSI::RESET)
+            surface.write(bounds, row, col, EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + line + Terminal::ANSI::RESET)
           end
         end
       end

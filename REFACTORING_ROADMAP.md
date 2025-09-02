@@ -1,9 +1,9 @@
 # EBook Reader Refactoring Roadmap
 
-**Current Status: Phase 4.1 - Layer Boundary Enforcement**  
-**Overall Progress: 78% Complete (re-verified and updated)**  
-**Estimated Completion: Phase 4.3**  
-**Critical Issue: Annotation highlight persists after editor cancel; saved annotations use placeholder text**
+**Current Status: Phase 4.5 - Documentation Alignment**  
+**Overall Progress: 92% Complete (re-verified and corrected)**  
+**Estimated Completion: Phase 4.5**  
+**Status Note:** Overlay, input, and annotations flows are unified; remaining work is cleanup, docs, DI consistency for renderers, and styling/state API touch-ups.
 
 ## Phase 1: Infrastructure Foundation ✅ COMPLETE
 
@@ -42,15 +42,15 @@
 - [x] Update DependencyContainer to resolve ObserverStateStore as primary state
 - [x] Verified :global_state dependency key correctly resolves to ObserverStateStore (GlobalState class completely removed)
 
-### 2.3 Component Interface Standardization ✅ COMPLETE
-**Issue Resolved**: All reading components now follow standard ComponentInterface pattern (100% compliance for active components)
+### 2.3 Component Interface Standardization ✅ COMPLETE (updated)
+**Correction**: `do_render` is now the prevailing pattern for active components.
 - [x] ComponentInterface defined
-- [x] Enforce ComponentInterface on ALL active components (all reading components now extend BaseComponent)
-- [x] Remove direct Terminal access from components (97% compliance - only EnhancedPopupMenu has minimal direct access)
-- [x] Standardize render method signatures - all reading components now use standard render(surface, bounds) → do_render(surface, bounds) pattern
-- [x] Create Surface abstraction for all rendering
-- [x] Convert ALL legacy reading components (base_view_renderer, single_view_renderer, split_view_renderer, help_renderer, toc_renderer, bookmarks_renderer) to standard ComponentInterface pattern
-- [x] Remove non-component classes from components directory (NavigationHandler, ProgressTracker, ContentRenderer deleted as unused legacy code)
+- [x] Reading components extend BaseComponent and implement do_render
+- [x] TooltipOverlayComponent implements do_render (verified)
+- [x] EnhancedPopupMenu is a proper component (do_render) and not a data object
+- [x] ReaderModes::AnnotationEditorMode removed (legacy file deleted)
+- [x] Surface abstraction adopted
+- [x] Legacy direct Terminal writes removed (components render via Surface)
 
 ## Phase 3: Architecture Cleanup 📋 PLANNED
 
@@ -60,7 +60,7 @@
 - [x] Extract UIController (mode switching, overlays)  
 - [x] Extract InputController (key handling consolidation)
 - [x] Extract StateController (state updates and persistence)
-- [x] Keep ReaderController as coordinator only (1314→491 lines, 62% reduction)
+- [x] Keep ReaderController as coordinator only (1314→549 lines, ~58% reduction)
 
 ### 3.2 Input System Unification ✅ COMPLETE
 **Issue Resolved**: All core navigation uses Domain Commands, specialized modes retain existing patterns
@@ -70,27 +70,24 @@
 - [x] Remove direct method call fallbacks for navigation commands in Input::Commands
 - [x] Navigation commands (:next_page, :prev_page, :next_chapter, :prev_chapter, :scroll_up, :scroll_down) now use NavigationService through Domain layer
 
-### 3.3 Terminal Access Elimination ✅ PARTIAL (re‑verified)
-**Verified Status**: ReaderController and reading components use `Surface` with `TerminalService`; a few direct `Terminal` usages remain and should be unified.
+### 3.3 Terminal Access Elimination ✅ COMPLETE (re‑verified)
+**Verified Status**: All rendering constructs surfaces via `TerminalService`. No direct `Terminal` construction remains in UI paths.
 - [x] Remove direct Terminal writes from MouseableReader
 - [x] Most component rendering goes through Surface/Component system
 - [x] `TerminalService` abstraction exists and is used in Reader loop
 - [x] ReaderController now uses `terminal_service.create_surface` (verified)
 - [x] Legacy `DynamicPageCalculator` removed (replaced by `Domain::Services::PageCalculatorService`)
-- [ ] Remaining direct `Terminal` usages to replace with `terminal_service.create_surface` and DI:
-  - `lib/ebook_reader/main_menu.rb` (`draw_screen` constructs `Components::Surface.new(Terminal)`).
-  - `lib/ebook_reader/ui/base_screen.rb` (`draw` constructs `Components::Surface.new(Terminal)`).
-  - `lib/ebook_reader/reader_modes/base_mode.rb` and `annotation_editor_mode.rb`/`annotations_mode.rb` legacy `draw` wrappers construct surfaces directly (render paths are OK). Replace wrappers to request a surface from `TerminalService` or remove the `draw` wrappers entirely and use `render(surface, bounds)` exclusively.
-  - Keep `Terminal::ANSI` constants allowed in UI for styling; only I/O should be through `Surface`/`TerminalService`.
+- [x] Remove fallbacks to `Components::Surface.new(Terminal)` in UI and modes; require injected `terminal_service`.
+  - Keep `Terminal::ANSI` usage for color constants; all I/O is via `Surface`/`TerminalService`.
 
-## Phase 4: Clean Architecture Enforcement 📋 PLANNED
+## Phase 4: Clean Architecture Enforcement 🚧 IN PROGRESS
 
-### 4.1 Layer Boundary Enforcement ❌ TODO (in progress)
+### 4.1 Layer Boundary Enforcement 🚧 IN PROGRESS
 ```
-Presentation Layer (Components) 
+Presentation Layer (Components)
     ↓ (Events only)
 Application Layer (Unified Application)
-    ↓ (Commands only) 
+    ↓ (Commands only)
 Domain Layer (Services, Actions, Models)
     ↓ (Repository pattern)
 Infrastructure Layer (StateStore, EventBus, Terminal)
@@ -98,7 +95,9 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
 - [ ] Enforce strict layer dependencies (components → controllers/application → domain → infrastructure)
 - [ ] Remove circular/side-channel dependencies (e.g., components updating navigation state directly)
 - [ ] Create clear interfaces between layers (no component-level navigation logic)
-- [ ] Remove `Components::Reading::NavigationHandler` once controller/domain handlers cover all cases
+- [x] Legacy `Components::Reading::NavigationHandler` removed
+- [ ] Remove cross-layer requires from components (e.g., domain/services required within components)
+- [ ] Unify overlay rendering via TooltipOverlayComponent; drop legacy popup render fallbacks
 
 ### 4.2 Dependency Injection Completion ✅ MOSTLY COMPLETE
 - [x] Remove direct instantiation of `EPUBDocument` in `ReaderController` (now uses `Infrastructure::DocumentService`)
@@ -151,30 +150,24 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
 4. ✅ **Input System Unification** - All navigation commands now use Domain::Commands through NavigationService
 5. ✅ **Dependency Injection Core** - EPUBDocument instantiation moved to Infrastructure::DocumentService
 6. ✅ **create_view_model Error Fix** - Method visibility issue resolved, book opening now works
+7. ✅ **Layer Hygiene (minor)** - Removed unused `require_relative 'annotations/annotation_store'` from MouseableReader
+8. ✅ **No cross-layer requires in components** - UI components do not require domain/services directly; services resolved via DI
+9. ✅ **Overlay Rendering Path** - Dropped legacy `render_with_surface` fallback; components render via `render(surface, bounds)`
+10. ✅ **Annotations Mutations Centralization** - All UI/controllers use `AnnotationService`; removed store fallbacks
+11. ✅ **Legacy Mode Removal** - Deleted `reader_modes/annotation_editor_mode.rb` (superseded by screen component)
+12. ✅ **Debug IO Cleanup** - Removed `/tmp/nav_debug.log` writes from `PageCalculatorService`
 
 **REMAINING PRIORITIES (Updated Priority Order):**
-1. **CRITICAL: Annotation UX Bugs**
-   - Persisting blue highlight after cancel: cancel path in `AnnotationEditorMode` did not clear selection. Fix applied: ESC now calls `reader.cleanup_popup_state` before switching to `:read`.
-   - Saved annotations use placeholder text: `UIController#extract_selected_text_from_selection` now extracts real text from `rendered_lines` using `CoordinateService` (replaces the "Selected text" stub).
-   - Follow-up: unify text extraction into a single `Domain::Services::SelectionService` to remove duplication between `MouseableReader` and `UIController`.
-2. **HIGH: Terminal Access Cleanup** — Replace remaining direct `Terminal` usage (specific targets).
-   - Use `@terminal_service.create_surface` instead of `Components::Surface.new(Terminal)` in:
-     - `MainMenu#draw_screen` (lib/ebook_reader/main_menu.rb)
-     - `UI::BaseScreen#draw` (lib/ebook_reader/ui/base_screen.rb)
-     - Legacy Mode `draw` wrappers (reader_modes/*): either delete wrappers or fetch surface via `TerminalService` injected via controller.
-   - No action needed for `Terminal::ANSI` usage.
-3. **HIGH: Singleton PageCalculator** — Verified COMPLETE.
-   - `:page_calculator` registered as a singleton in `ContainerFactory` (shared instance between navigation and rendering).
-4. **HIGH: Terminal Dimensions Consistency** — Verified COMPLETE.
-   - `StateStore#update_terminal_size` updates both `[:reader, :last_width/height]` and `[:ui, :terminal_width/height]`.
-5. **MEDIUM: Layer Boundary Enforcement** — Continue removing cross-layer imports and any residual circular dependencies.
-6. **MEDIUM: Complete Event-Driven Architecture** — Make components fully reactive to state events.
-7. **MEDIUM: Dispatcher Unification** — Two dispatchers exist; standardize on one.
-   - Current runtime uses `Input::Dispatcher` (lib/ebook_reader/input/dispatcher.rb).
-   - `Infrastructure::InputDispatcher` is present but unused; delete it or re-home it under `Input/` and remove duplication.
-8. **MEDIUM: DI Consistency in UI Elements** — Ensure UI elements don’t construct new containers internally.
-   - `Components::EnhancedPopupMenu` resolves `clipboard_service` via a new container. Inject `clipboard_service` from controller instead (as done for `coordinate_service`).
-9. **LOW: Comment Accuracy / Naming** — Replace lingering “GlobalState” comments with “ObserverStateStore/StateStore” to avoid confusion.
+1. ✅ HIGH: DI consistency in renderers (single source of services)
+   - Implemented: `ViewRendererFactory` passes `controller.dependencies`; `BaseViewRenderer` now requires dependencies (no ad-hoc containers).
+2. ✅ HIGH: Remove unused legacy UI scaffolding
+   - Implemented: deleted `lib/ebook_reader/ui/base_screen.rb` (no references remained).
+3. ✅ MEDIUM: Styling consistency
+   - Implemented: replaced raw `Terminal::ANSI` color codes in components with `Constants::UIConstants` (kept italics and reset codes).
+4. ✅ LOW: State API consistency (initial pass)
+   - Implemented in controllers: standardized on `set` for single-path writes; `update` retained for multi-path updates.
+5. ✅ LOW: Message timeout hygiene
+   - Implemented debounced timers in `UIController#set_message` and `StateController#set_message` to avoid thread buildup.
 
 ## Verification Notes (Claims Re‑checked)
 
@@ -182,28 +175,53 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
 - Phase 2.2 State System Unification: No `GlobalState` class in codebase; `:global_state` DI key resolves to `ObserverStateStore`. Some comments still mention “GlobalState”; update docs/comments only.
 - Phase 3.1 ReaderController Decomposition: Done; controllers exist (`navigation/ui/state/input`), and `ReaderController` now orchestrates.
 - Phase 3.2 Input System Unification: Reader navigation keys route through `DomainCommandBridge` and domain commands (verified in `Input::CommandFactory`, `Input::Commands`).
-- Phase 3.3 Terminal Access Elimination: Partial; remaining direct `Terminal` usage enumerated above.
-- Annotation UX Fixes: ESC cancel clears selection (`UIController#cleanup_popup_state` used during cancel in editor bindings). Selected text now extracted via `Domain::Services::SelectionService` from `rendered_lines` in both `UIController` and `MouseableReader`.
+- Phase 3.3 Terminal Access Elimination: COMPLETE — all surfaces created via `TerminalService`; frame lifecycle centralized in `ReaderController` (spec verified).
+- Annotation UX Fixes: ESC cancel clears selection (`UIController#cleanup_popup_state` in editor bindings). Selected text extraction uses `SelectionService` in both `UIController` and `MouseableReader` — VERIFIED.
+- Annotations layering: `Components::Screens::AnnotationsScreenComponent` reads from state only (OK). `Components::Sidebar::AnnotationsTabRenderer` does not require `annotation_store` — VERIFIED. No `ReaderModes::AnnotationsMode` found — claim outdated.
+- Component contract: `TooltipOverlayComponent` and `EnhancedPopupMenu` implement `do_render` (OK).
 - Singleton `PageCalculatorService`: Registered as singleton in container; used by nav/render paths.
 - Terminal dimension sync: `StateStore#update_terminal_size` updates both `[:reader, :last_width/height]` and `[:ui, :terminal_width/height]`.
+- Dispatcher duplication: Not present — only `Input::Dispatcher` exists (no `Infrastructure::InputDispatcher`).
+- DI hygiene: `Components::TooltipOverlayComponent` injects `coordinate_service` via constructor — VERIFIED.
+ - UI boundary: No component requires domain/services directly — services are accessed via DI — VERIFIED.
+ - MouseableReader: No lingering direct requires of `AnnotationStore` — VERIFIED.
+ - Selection/overlay duplication: Eliminated — column-bounds logic now lives in `CoordinateService`; overlay and selection extraction use it — VERIFIED.
+ - Annotation editor input: Routed via `Domain::Commands::AnnotationEditorCommandFactory` — VERIFIED; updated priorities accordingly.
 
-## Proposed Focus (Single Best Path Forward)
+## Phase 4: Annotations Unification 🚧 IN PROGRESS
 
-1) Finish TerminalService adoption end‑to‑end (IO through one abstraction only):
-   - Inject `terminal_service` wherever a surface is needed; forbid `Components::Surface.new(Terminal)` construction outside `TerminalService`.
-   - Convert `MainMenu`, `UI::BaseScreen`, and legacy reader mode `draw` methods to use `render(surface, bounds)` only. Remove or deprecate their `draw(height,width)` wrappers.
+Goal: One coherent annotations flow with strict layering (Domain Service + Actions + Selectors; UI via components only; no direct store access from UI), and a single presentation path (no duplicate modes/screens doing the same job).
 
-2) Unify input dispatching on `Input::Dispatcher` and remove `Infrastructure::InputDispatcher` to avoid dual implementations.
+### 4.1 Establish Domain AnnotationService ✅ COMPLETE (updated)
+- [x] `Domain::Services::AnnotationService` implemented with `list_for_book`, `list_all`, `add`, `update`, `delete`.
+- [x] Delegates to `Annotations::AnnotationStore`, dispatches `UpdateAnnotationsAction` after mutations.
+- [x] Registered as `:annotation_service` in `Domain::ContainerFactory`.
 
-3) Enforce DI in UI utilities:
-   - Update `EnhancedPopupMenu` to accept both `coordinate_service` and `clipboard_service` via constructor; remove new container usage.
+### 4.2 Remove UI-store coupling; enforce component contract ✅ COMPLETE
+- [x] `Components::Screens::AnnotationsScreenComponent` reads from state only (OK).
+- [x] `Components::Sidebar::AnnotationsTabRenderer` uses state only — no direct store coupling.
+- [x] Remove legacy `ReaderModes::AnnotationEditorMode` file to avoid confusion (superseded by screen component).
+- [x] `TooltipOverlayComponent` implements `do_render` (OK).
+- [x] Drop legacy popup render fallbacks; rely on component `render` (no `render_with_surface`).
 
-4) Standardize state updates:
-   - Prefer `update({ [:path, :to, :leaf] => value, ... })` for multi‑field changes and `set(path, value)` for single‑field writes; avoid mixing `update(path, value)` style except where backward compatibility is required.
+### 4.3 Centralize annotation mutations through Controller+Service ✅ COMPLETE
+- [x] Remove direct `AnnotationStore` fallbacks in `StateController#refresh_annotations` and MainMenu annotation actions; use `AnnotationService` exclusively.
+- [x] `UIController#refresh_annotations` delegates to `state_controller.refresh_annotations` (present).
+- [x] `MouseableReader#refresh_annotations` uses `AnnotationService`.
 
-5) Remove dead/legacy mode renderers if fully replaced by components (`reader_modes/toc_mode.rb`, `help_mode.rb`), or refactor them to thin component wrappers if still referenced.
+### 4.4 Selection/Overlay cohesion and cleanup ✅ COMPLETE (updated)
+- [x] Selection text extraction consolidated via `SelectionService`.
+- [x] `TooltipOverlayComponent` uses `do_render`; keep redraw-based invalidation and remove legacy popup fallbacks.
+- [x] Lightweight tests exist for selection normalization (`SelectionService`) and popup placement (`CoordinateService`).
 
-These steps tighten the architecture to one consistent pattern: Domain commands + DI container + one input dispatcher + one terminal IO abstraction, with all UI through components.
+### 4.5 Documentation Alignment 📖 IN PROGRESS (updated)
+- [x] Update `ARCHITECTURE.md` and README Architecture section to reflect Clean Architecture layering (Infrastructure → Domain (services, actions, selectors, commands) → Application (controllers, UnifiedApplication) → Presentation (components)).
+- [ ] Remove or reframe references to `ReaderModes` in docs; the editor is now a screen component and overlays are components.  
+  - Remaining: `DEVELOPMENT.md` still mentions `ReaderModes::*` in the “Strategy Pattern” section.
+- [x] Ensure configuration path casing in README is `~/.config/reader` (matches `Infrastructure::StateStore::CONFIG_DIR`).
+- [ ] Document DI patterns in more detail: clarify that a single `DependencyContainer` is created at app start and injected downward; components/renderers receive dependencies via constructor (no ad‑hoc containers). Expand examples in `ARCHITECTURE.md` and/or `DEVELOPMENT.md`.
+
+Outcome: A single, predictable flow — UI reads from state; controllers invoke Domain services; services persist and dispatch actions; the overlay is a proper component; there is no mode/screen duplication for annotations.
 
 ## Verified Findings: Dynamic Navigation (status)
 

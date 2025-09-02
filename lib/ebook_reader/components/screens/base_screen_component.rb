@@ -39,7 +39,8 @@ module EbookReader
 
         def write_selection_pointer(surface, bounds, row, selected = true)
           if selected
-            surface.write(bounds, row, 2, "#{Terminal::ANSI::BRIGHT_GREEN}▸ #{Terminal::ANSI::RESET}")
+            surface.write(bounds, row, 2,
+                          "#{EbookReader::Constants::UIConstants::SELECTION_POINTER_COLOR}#{EbookReader::Constants::UIConstants::SELECTION_POINTER}#{Terminal::ANSI::RESET}")
           else
             surface.write(bounds, row, 2, '  ')
           end

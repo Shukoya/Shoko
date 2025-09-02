@@ -20,7 +20,7 @@ module EbookReader
         def perform(context, _params = {})
           # Get UI controller through dependency injection
           ui_controller = context.dependencies.resolve(:ui_controller)
-          
+
           case @action
           when :up
             ui_controller.sidebar_up

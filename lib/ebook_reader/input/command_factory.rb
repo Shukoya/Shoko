@@ -16,13 +16,13 @@ module EbookReader
 
           # Map selection fields to state paths
           field_paths = {
-            selected: [:menu, :selected],
-            browse_selected: [:menu, :browse_selected],
-            toc_selected: [:reader, :toc_selected],
-            bookmark_selected: [:reader, :bookmark_selected],
-            sidebar_toc_selected: [:reader, :sidebar_toc_selected],
-            sidebar_bookmarks_selected: [:reader, :sidebar_bookmarks_selected],
-            sidebar_annotations_selected: [:reader, :sidebar_annotations_selected]
+            selected: %i[menu selected],
+            browse_selected: %i[menu browse_selected],
+            toc_selected: %i[reader toc_selected],
+            bookmark_selected: %i[reader bookmark_selected],
+            sidebar_toc_selected: %i[reader sidebar_toc_selected],
+            sidebar_bookmarks_selected: %i[reader sidebar_bookmarks_selected],
+            sidebar_annotations_selected: %i[reader sidebar_annotations_selected],
           }
 
           field_path = field_paths[selection_field.to_sym]
@@ -172,13 +172,13 @@ module EbookReader
         end
 
         # Text input commands (for search, file input)
-        def text_input_commands(input_field, context_method = nil)
+        def text_input_commands(input_field, context_method = nil, cursor_field: nil)
           commands = {}
 
           # Map input fields to state paths
           input_paths = {
-            search_query: [:menu, :search_query],
-            file_input: [:menu, :file_input]
+            search_query: %i[menu search_query],
+            file_input: %i[menu file_input],
           }
 
           input_path = input_paths[input_field.to_sym]
@@ -189,8 +189,24 @@ module EbookReader
               if context_method
                 ctx.send(context_method, key)
               elsif input_path
-                current = ctx.state.get(input_path)
-                ctx.state.update(input_path, current.length.positive? ? current[0...-1] : current)
+                current = (ctx.state.get(input_path) || '').to_s
+                if cursor_field
+                  cursor = (ctx.state.get([:menu, cursor_field]) || current.length).to_i
+                  if cursor > 0
+                    before = current[0, cursor - 1] || ''
+                    after = current[cursor..] || ''
+                    new_value = before + after
+                    new_cursor = cursor - 1
+                  else
+                    new_value = current
+                    new_cursor = cursor
+                  end
+                  ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value,
+                                                                                         cursor_field => new_cursor))
+                else
+                  new_value = current.length.positive? ? current[0...-1] : current
+                  ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value))
+                end
               end
               :handled
             end
@@ -203,12 +219,40 @@ module EbookReader
               if context_method
                 ctx.send(context_method, key)
               elsif input_path
-                current = ctx.state.get(input_path)
-                ctx.state.update(input_path, current + char)
+                current = (ctx.state.get(input_path) || '').to_s
+                if cursor_field
+                  cursor = (ctx.state.get([:menu, cursor_field]) || current.length).to_i
+                  before = current[0, cursor] || ''
+                  after = current[cursor..] || ''
+                  new_value = before + char + after
+                  new_cursor = cursor + 1
+                  ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value,
+                                                                                         cursor_field => new_cursor))
+                else
+                  new_value = current + char
+                  ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value))
+                end
               end
               :handled
             else
               :pass
+            end
+          end
+
+          # Delete at cursor
+          if cursor_field
+            KeyDefinitions::ACTIONS[:delete].each do |key|
+              commands[key] = lambda do |ctx, _|
+                current = (ctx.state.get(input_path) || '').to_s
+                cursor = (ctx.state.get([:menu, cursor_field]) || current.length).to_i
+                if cursor < current.length
+                  before = current[0, cursor] || ''
+                  after = current[(cursor + 1)..] || ''
+                  new_value = before + after
+                  ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value))
+                end
+                :handled
+              end
             end
           end
 

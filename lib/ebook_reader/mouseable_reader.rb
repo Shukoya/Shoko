@@ -4,12 +4,9 @@ require 'ostruct'
 
 require_relative 'reader_controller'
 require_relative 'annotations/mouse_handler'
-require_relative 'annotations/annotation_store'
 # Removed unused: ui/components/popup_menu
 require_relative 'components/enhanced_popup_menu'
 require_relative 'components/tooltip_overlay_component'
-require_relative 'reader_modes/annotation_editor_mode'
-require_relative 'reader_modes/annotations_mode'
 require_relative 'terminal_mouse_patch'
 
 module EbookReader
@@ -28,7 +25,6 @@ module EbookReader
       @selected_text = nil
       @state.dispatch(Domain::Actions::ClearSelectionAction.new)
       @state.dispatch(Domain::Actions::ClearRenderedLinesAction.new)
-      @tooltip_overlay = Components::TooltipOverlayComponent.new(self)
       refresh_annotations
     end
 
@@ -41,20 +37,12 @@ module EbookReader
 
     def draw_screen
       # Render the base UI via components
-      rendered_lines = @state.get([:reader, :rendered_lines])
+      rendered_lines = @state.get(%i[reader rendered_lines])
       rendered_lines.clear
       @state.dispatch(Domain::Actions::UpdateRenderedLinesAction.new(rendered_lines))
       super
 
-      # Use consolidated tooltip overlay component for all highlighting
-      if %i[read popup_menu].include?(@state.get([:reader, :mode]))
-        height, width = @terminal_service.size
-        bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
-        surface = @terminal_service.create_surface
-        @tooltip_overlay.render(surface, bounds)
-      end
-
-      @terminal_service.end_frame
+      # Overlay and frame end are handled by ReaderController now
     end
 
     def read_input_keys
@@ -118,22 +106,15 @@ module EbookReader
     end
 
     def refresh_highlighting
-      @terminal_service.size
-      # Re-render content area only
+      # Defer to ReaderController draw, which renders overlay and ends frame
       super
-      # Use consolidated tooltip overlay for all highlighting
-      height, width = @terminal_service.size
-      bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
-      surface = @terminal_service.create_surface
-      @tooltip_overlay.render(surface, bounds)
-      @terminal_service.end_frame
     end
 
     def handle_selection_end
       @state.dispatch(Domain::Actions::UpdateSelectionAction.new(@mouse_handler.selection_range))
-      return unless @state.get([:reader, :selection])
+      return unless @state.get(%i[reader selection])
 
-      @selected_text = extract_selected_text(@state.get([:reader, :selection]))
+      @selected_text = extract_selected_text(@state.get(%i[reader selection]))
 
       if @selected_text && !@selected_text.strip.empty?
         show_popup_menu
@@ -148,7 +129,8 @@ module EbookReader
       return unless selection
 
       # Use enhanced popup menu with coordinate service
-      popup_menu = Components::EnhancedPopupMenu.new(selection, nil, @coordinate_service, @clipboard_service)
+      popup_menu = Components::EnhancedPopupMenu.new(selection, nil, @coordinate_service,
+                                                     @clipboard_service)
       @state.dispatch(Domain::Actions::UpdatePopupMenuAction.new(popup_menu))
       return unless popup_menu&.visible # Only proceed if menu was created successfully
 
@@ -163,21 +145,27 @@ module EbookReader
     def clear_selection!
       @state.dispatch(Domain::Actions::ClearPopupMenuAction.new)
       @mouse_handler&.reset
-      @state.dispatch(Domain::Actions::ClearSelectionAction.new) if @state
+      @state&.dispatch(Domain::Actions::ClearSelectionAction.new)
     end
 
     # Old highlighting methods removed - now handled by TooltipOverlayComponent
     # This eliminates the direct terminal writes that bypassed the component system
 
     def refresh_annotations
-      annotations = Annotations::AnnotationStore.get(@path)
+      begin
+        service = @dependencies.resolve(:annotation_service)
+        annotations = service.list_for_book(@path)
+      rescue StandardError
+        annotations = []
+      end
       @state.dispatch(Domain::Actions::UpdateAnnotationsAction.new(annotations))
     end
 
     def extract_selected_text(range)
-      return '' unless range && @state.get([:reader, :rendered_lines])
+      return '' unless range && @state.get(%i[reader rendered_lines])
+
       selection_service = @dependencies.resolve(:selection_service)
-      selection_service.extract_text(range, @state.get([:reader, :rendered_lines]))
+      selection_service.extract_text(range, @state.get(%i[reader rendered_lines]))
     end
 
     def copy_to_clipboard(text)
@@ -189,28 +177,6 @@ module EbookReader
       false
     end
 
-    def determine_column_bounds(click_pos)
-      # Find which column the click position belongs to
-      terminal_coords = @coordinate_service.mouse_to_terminal(0, click_pos[:y])
-      terminal_row = terminal_coords[:y]
-
-      @state.get([:reader, :rendered_lines]).each_value do |line_info|
-        next unless line_info[:row] == terminal_row
-
-        line_start_col = line_info[:col]
-        line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
-
-        if click_pos[:x].between?(line_start_col, line_end_col)
-          return { start: line_start_col, end: line_end_col }
-        end
-      end
-
-      nil
-    end
-
-    def column_overlaps?(line_start, line_end, target_bounds)
-      # Check if line segment overlaps with target column bounds
-      !(line_end < target_bounds[:start] || line_start > target_bounds[:end])
-    end
+    # Column helpers moved to CoordinateService
   end
 end

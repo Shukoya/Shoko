@@ -10,8 +10,8 @@ module EbookReader
       # Commands that route to different actions based on application state
       class ConditionalNavigationCommand < BaseCommand
         def initialize(primary_action, sidebar_action, name: nil, description: nil)
-          @primary_action = primary_action  # Action when sidebar not visible
-          @sidebar_action = sidebar_action   # Action when sidebar is visible
+          @primary_action = primary_action # Action when sidebar not visible
+          @sidebar_action = sidebar_action # Action when sidebar is visible
           super(
             name: name || "conditional_#{primary_action}",
             description: description || "Conditional #{primary_action.to_s.tr('_', ' ')} navigation"
@@ -22,14 +22,14 @@ module EbookReader
 
         def perform(context, _params = {})
           state = context.dependencies.resolve(:global_state)
-          sidebar_visible = state.get([:reader, :sidebar_visible])
+          sidebar_visible = state.get(%i[reader sidebar_visible])
 
           if sidebar_visible
             # Route to sidebar command
             sidebar_command = SidebarCommand.new(@sidebar_action)
             sidebar_command.execute(context, _params)
           else
-            # Route to navigation command  
+            # Route to navigation command
             nav_command = NavigationCommand.new(@primary_action)
             nav_command.execute(context, _params)
           end
@@ -48,7 +48,7 @@ module EbookReader
           end
 
           def select_or_sidebar
-            new(:next_page, :select)  # Enter key: next page normally, select in sidebar
+            new(:next_page, :select) # Enter key: next page normally, select in sidebar
           end
         end
       end

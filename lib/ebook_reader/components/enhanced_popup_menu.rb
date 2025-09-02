@@ -1,17 +1,17 @@
 # frozen_string_literal: true
 
 require_relative 'base_component'
-require_relative '../domain/services/coordinate_service'
-require_relative '../domain/services/clipboard_service'
 
 module EbookReader
   module Components
     # Enhanced popup menu that uses the coordinate service for consistent positioning
     # and integrates with the clipboard service for reliable copy functionality.
     class EnhancedPopupMenu < BaseComponent
+      include Constants::UIConstants
       attr_reader :visible, :selected_index, :x, :y, :width, :height
 
-      def initialize(selection_range, available_actions = nil, coordinate_service = nil, clipboard_service = nil)
+      def initialize(selection_range, available_actions = nil, coordinate_service = nil,
+                     clipboard_service = nil)
         @coordinate_service = coordinate_service
         @clipboard_service = clipboard_service
 
@@ -36,21 +36,19 @@ module EbookReader
         end
 
         # Calculate optimal position using coordinate service
-        position = @coordinate_service.calculate_popup_position(@selection_range[:end], @width, @height)
+        position = @coordinate_service.calculate_popup_position(@selection_range[:end], @width,
+                                                                @height)
         @x = position[:x]
         @y = position[:y]
       end
 
-      def render(surface, bounds)
+      def do_render(surface, bounds)
         return unless @visible
 
         @items.each_with_index do |item, i|
           render_menu_item(surface, bounds, item, i)
         end
       end
-
-      # Legacy compatibility method for PopupOverlayComponent
-      alias render_with_surface render
 
       def handle_key(key)
         return nil unless @visible
@@ -103,7 +101,7 @@ module EbookReader
         }
 
         # Only offer clipboard if available
-        if @clipboard_service && @clipboard_service.available?
+        if @clipboard_service&.available?
           actions << {
             label: 'Copy to Clipboard',
             action: :copy_to_clipboard,
@@ -145,8 +143,8 @@ module EbookReader
         action = @available_actions[index]
 
         # Colors
-        bg = is_selected ? Terminal::ANSI::BG_BRIGHT_YELLOW : Terminal::ANSI::BG_DARK
-        fg = is_selected ? Terminal::ANSI::BLACK : Terminal::ANSI::WHITE
+        bg = is_selected ? POPUP_BG_SELECTED : POPUP_BG_DEFAULT
+        fg = is_selected ? POPUP_FG_SELECTED : POPUP_FG_DEFAULT
 
         # Background
         surface.write(bounds, item_y, @x, "#{bg}#{' ' * @width}#{Terminal::ANSI::RESET}")

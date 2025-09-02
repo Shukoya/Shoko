@@ -81,18 +81,17 @@ RSpec.describe EbookReader::Controllers::UIController do
   end
 
   it 'handles popup copy action with clipboard available' do
-    state.set(%i[reader rendered_lines], { })
-    state.set(%i[reader selection], { start: {x:1,y:1}, end: {x:1,y:1} })
+    state.set(%i[reader rendered_lines], {})
+    state.set(%i[reader selection], { start: { x: 1, y: 1 }, end: { x: 1, y: 1 } })
     ui.handle_popup_action({ action: :copy_to_clipboard, data: { selection_range: state.get(%i[reader selection]) } })
     expect(state.get(%i[reader mode])).to eq(:read)
   end
 
   it 'cleans up popup state' do
     state.set(%i[reader popup_menu], Object.new)
-    state.set(%i[reader selection], {a:1})
+    state.set(%i[reader selection], { a: 1 })
     ui.cleanup_popup_state
     expect(state.get(%i[reader popup_menu])).to be_nil
     expect(state.get(%i[reader selection])).to be_nil
   end
 end
-

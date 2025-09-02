@@ -8,19 +8,19 @@ module EbookReader
       # Toggle reader view between :split and :single
       class ToggleViewModeAction < BaseAction
         def apply(state)
-          current = state.get([:config, :view_mode]) || :split
+          current = state.get(%i[config view_mode]) || :split
           new_mode = current == :split ? :single : :split
-          
+
           # Update all state changes atomically
           state.update({
-            [:config, :view_mode] => new_mode,
-            [:reader, :last_width] => 0,
-            [:reader, :last_height] => 0,
-            [:reader, :dynamic_page_map] => nil,
-            [:reader, :dynamic_total_pages] => 0,
-            [:reader, :last_dynamic_width] => 0,
-            [:reader, :last_dynamic_height] => 0
-          })
+                         %i[config view_mode] => new_mode,
+                         %i[reader last_width] => 0,
+                         %i[reader last_height] => 0,
+                         %i[reader dynamic_page_map] => nil,
+                         %i[reader dynamic_total_pages] => 0,
+                         %i[reader last_dynamic_width] => 0,
+                         %i[reader last_dynamic_height] => 0,
+                       })
 
           new_mode
         end
@@ -28,4 +28,3 @@ module EbookReader
     end
   end
 end
-

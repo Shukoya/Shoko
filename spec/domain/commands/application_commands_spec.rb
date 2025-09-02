@@ -27,4 +27,3 @@ RSpec.describe EbookReader::Domain::Commands::ApplicationCommand do
     expect(state_store.get(%i[reader view_mode])).to eq(:single)
   end
 end
-

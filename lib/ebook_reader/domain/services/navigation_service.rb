@@ -22,7 +22,9 @@ module EbookReader
         # Navigate to next page
         def next_page
           current_state = @state_store.current_state
-          view_mode = current_state.dig(:config, :view_mode) || current_state.dig(:reader, :view_mode) || :split
+          view_mode = current_state.dig(:config,
+                                        :view_mode) || current_state.dig(:reader,
+                                                                         :view_mode) || :split
 
           if dynamic_mode?
             return unless @page_calculator
@@ -46,7 +48,9 @@ module EbookReader
         # Navigate to previous page
         def prev_page
           current_state = @state_store.current_state
-          view_mode = current_state.dig(:config, :view_mode) || current_state.dig(:reader, :view_mode) || :split
+          view_mode = current_state.dig(:config,
+                                        :view_mode) || current_state.dig(:reader,
+                                                                         :view_mode) || :split
 
           if dynamic_mode?
             return unless @page_calculator
@@ -77,24 +81,22 @@ module EbookReader
             page_index = @page_calculator.find_page_index(chapter_index, 0)
             page_index = 0 if page_index.nil? || page_index.negative?
             @state_store.update({
-              %i[reader current_chapter] => chapter_index,
-              %i[reader current_page_index] => page_index,
-            })
+                                  %i[reader current_chapter] => chapter_index,
+                                  %i[reader current_page_index] => page_index,
+                                })
+          elsif !@state_store.respond_to?(:get)
+            @state_store.update({
+                                  %i[reader current_chapter] => chapter_index,
+                                  %i[reader current_page] => 0,
+                                })
           else
-            if !@state_store.respond_to?(:get)
-              @state_store.update({
-                %i[reader current_chapter] => chapter_index,
-                %i[reader current_page] => 0,
-              })
-            else
-              @state_store.update({
-                %i[reader current_chapter] => chapter_index,
-                %i[reader current_page] => 0,
-                %i[reader single_page] => 0,
-                %i[reader left_page] => 0,
-                %i[reader right_page] => 1,
-              })
-            end
+            @state_store.update({
+                                  %i[reader current_chapter] => chapter_index,
+                                  %i[reader current_page] => 0,
+                                  %i[reader single_page] => 0,
+                                  %i[reader left_page] => 0,
+                                  %i[reader right_page] => 1,
+                                })
           end
         end
 
@@ -102,24 +104,22 @@ module EbookReader
         def go_to_start
           if dynamic_mode? && @page_calculator
             @state_store.update({
-              %i[reader current_chapter] => 0,
-              %i[reader current_page_index] => 0,
-            })
+                                  %i[reader current_chapter] => 0,
+                                  %i[reader current_page_index] => 0,
+                                })
+          elsif !@state_store.respond_to?(:get)
+            @state_store.update({
+                                  %i[reader current_chapter] => 0,
+                                  %i[reader current_page] => 0,
+                                })
           else
-            if !@state_store.respond_to?(:get)
-              @state_store.update({
-                %i[reader current_chapter] => 0,
-                %i[reader current_page] => 0,
-              })
-            else
-              @state_store.update({
-                %i[reader current_chapter] => 0,
-                %i[reader current_page] => 0,
-                %i[reader single_page] => 0,
-                %i[reader left_page] => 0,
-                %i[reader right_page] => 1,
-              })
-            end
+            @state_store.update({
+                                  %i[reader current_chapter] => 0,
+                                  %i[reader current_page] => 0,
+                                  %i[reader single_page] => 0,
+                                  %i[reader left_page] => 0,
+                                  %i[reader right_page] => 1,
+                                })
           end
         end
 
@@ -128,10 +128,14 @@ module EbookReader
           if dynamic_mode? && @page_calculator
             total = @page_calculator.total_pages
             return if total <= 0
+
             last_index = total - 1
             page = @page_calculator.get_page(last_index)
             updates = { %i[reader current_page_index] => last_index }
-            updates[%i[reader current_chapter]] = page[:chapter_index] if page && page[:chapter_index]
+            if page && page[:chapter_index]
+              updates[%i[reader current_chapter]] =
+                page[:chapter_index]
+            end
             @state_store.update(updates)
           else
             current_state = @state_store.current_state
@@ -140,19 +144,19 @@ module EbookReader
 
             last_chapter = total_chapters - 1
             last_page = calculate_last_page(last_chapter)
-            if !@state_store.respond_to?(:get)
+            if @state_store.respond_to?(:get)
               @state_store.update({
-                %i[reader current_chapter] => last_chapter,
-                %i[reader current_page] => last_page,
-              })
+                                    %i[reader current_chapter] => last_chapter,
+                                    %i[reader current_page] => last_page,
+                                    %i[reader single_page] => last_page,
+                                    %i[reader left_page] => last_page,
+                                    %i[reader right_page] => last_page + 1,
+                                  })
             else
               @state_store.update({
-                %i[reader current_chapter] => last_chapter,
-                %i[reader current_page] => last_page,
-                %i[reader single_page] => last_page,
-                %i[reader left_page] => last_page,
-                %i[reader right_page] => last_page + 1,
-              })
+                                    %i[reader current_chapter] => last_chapter,
+                                    %i[reader current_page] => last_page,
+                                  })
             end
           end
         end
@@ -163,14 +167,18 @@ module EbookReader
         # @param lines [Integer] Number of lines to scroll
         def scroll(direction, lines = 1)
           current_state = @state_store.current_state
-          view_mode = current_state.dig(:config, :view_mode) || current_state.dig(:reader, :view_mode) || :split
-          
+          view_mode = current_state.dig(:config,
+                                        :view_mode) || current_state.dig(:reader,
+                                                                         :view_mode) || :split
+
           # Determine current page based on available fields
-          if !@state_store.respond_to?(:get)
-            current_page = current_state.dig(:reader, :current_page) || 0
-          else
+          if @state_store.respond_to?(:get)
             page_field = view_mode == :split ? :left_page : :single_page
-            current_page = current_state.dig(:reader, page_field) || current_state.dig(:reader, :current_page) || 0
+            current_page = current_state.dig(:reader,
+                                             page_field) || current_state.dig(:reader,
+                                                                              :current_page) || 0
+          else
+            current_page = current_state.dig(:reader, :current_page) || 0
           end
 
           case direction
@@ -183,21 +191,19 @@ module EbookReader
             raise ArgumentError, "Invalid scroll direction: #{direction}"
           end
 
-          if new_page != current_page
-            if !@state_store.respond_to?(:get)
-              @state_store.set(%i[reader current_page], new_page)
-            else
-              if view_mode == :split
-                @state_store.update({
-                  %i[reader left_page] => new_page,
-                  %i[reader right_page] => new_page + 1,
-                  %i[reader current_page] => new_page,
-                })
-              else
-                @state_store.set(%i[reader single_page], new_page)
-                @state_store.set(%i[reader current_page], new_page)
-              end
-            end
+          return unless new_page != current_page
+
+          if !@state_store.respond_to?(:get)
+            @state_store.set(%i[reader current_page], new_page)
+          elsif view_mode == :split
+            @state_store.update({
+                                  %i[reader left_page] => new_page,
+                                  %i[reader right_page] => new_page + 1,
+                                  %i[reader current_page] => new_page,
+                                })
+          else
+            @state_store.set(%i[reader single_page], new_page)
+            @state_store.set(%i[reader current_page], new_page)
           end
         end
 
@@ -216,6 +222,7 @@ module EbookReader
 
         def dynamic_mode?
           return false unless @state_store.respond_to?(:get)
+
           EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(@state_store) == :dynamic
         end
 
@@ -227,9 +234,11 @@ module EbookReader
           page = @page_calculator&.get_page(new_index)
           if page
             @state_store.update({
-              %i[reader current_page_index] => new_index,
-              %i[reader current_chapter] => page[:chapter_index] || (@state_store.current_state.dig(:reader, :current_chapter) || 0),
-            })
+                                  %i[reader current_page_index] => new_index,
+                                  %i[reader
+                                     current_chapter] => page[:chapter_index] || (@state_store.current_state.dig(:reader,
+                                                                                                                 :current_chapter) || 0),
+                                })
           else
             @state_store.set(%i[reader current_page_index], new_index)
           end
@@ -239,17 +248,14 @@ module EbookReader
           current_chapter = state.dig(:reader, :current_chapter) || 0
           current_page = state.dig(:reader, :single_page) || state.dig(:reader, :current_page) || 0
           max_page = calculate_max_page_for_chapter(state)
-          
+
           if current_page < max_page
-            if !@state_store.respond_to?(:get)
-              @state_store.set(%i[reader current_page], current_page + 1)
-            else
+            if @state_store.respond_to?(:get)
               @state_store.set(%i[reader single_page], current_page + 1)
-              @state_store.set(%i[reader current_page], current_page + 1)
             end
+            @state_store.set(%i[reader current_page], current_page + 1)
           elsif can_advance_chapter?(state)
             jump_to_chapter(current_chapter + 1)
-          else
           end
         end
 
@@ -258,83 +264,82 @@ module EbookReader
           current_page = state.dig(:reader, :single_page) || state.dig(:reader, :current_page) || 0
 
           if current_page.positive?
-            if !@state_store.respond_to?(:get)
-              @state_store.set(%i[reader current_page], current_page - 1)
-            else
+            if @state_store.respond_to?(:get)
               @state_store.set(%i[reader single_page], current_page - 1)
-              @state_store.set(%i[reader current_page], current_page - 1)
             end
+            @state_store.set(%i[reader current_page], current_page - 1)
           elsif current_chapter.positive?
             prev_chapter_index = current_chapter - 1
             last_page = calculate_last_page(prev_chapter_index)
-            if !@state_store.respond_to?(:get)
+            if @state_store.respond_to?(:get)
               @state_store.update({
-                %i[reader current_chapter] => prev_chapter_index,
-                %i[reader current_page] => last_page,
-              })
+                                    %i[reader current_chapter] => prev_chapter_index,
+                                    %i[reader current_page] => last_page,
+                                    %i[reader single_page] => last_page,
+                                  })
             else
               @state_store.update({
-                %i[reader current_chapter] => prev_chapter_index,
-                %i[reader current_page] => last_page,
-                %i[reader single_page] => last_page,
-              })
+                                    %i[reader current_chapter] => prev_chapter_index,
+                                    %i[reader current_page] => last_page,
+                                  })
             end
-        end
+          end
         end
 
         def next_page_split(state)
           # Split mode shows two pages at once
           current_chapter = state.dig(:reader, :current_chapter) || 0
-          current_left_page = state.dig(:reader, :left_page) || state.dig(:reader, :current_page) || 0
+          current_left_page = state.dig(:reader,
+                                        :left_page) || state.dig(:reader, :current_page) || 0
           max_page = calculate_max_page_for_chapter(state)
-          
+
           if current_left_page + 2 <= max_page
-            if !@state_store.respond_to?(:get)
-              @state_store.set(%i[reader current_page], current_left_page + 2)
-            else
+            if @state_store.respond_to?(:get)
               @state_store.update({
-                %i[reader left_page] => current_left_page + 2,
-                %i[reader right_page] => current_left_page + 3,
-                %i[reader current_page] => current_left_page + 2,
-              })
+                                    %i[reader left_page] => current_left_page + 2,
+                                    %i[reader right_page] => current_left_page + 3,
+                                    %i[reader current_page] => current_left_page + 2,
+                                  })
+            else
+              @state_store.set(%i[reader current_page], current_left_page + 2)
             end
           elsif can_advance_chapter?(state)
             jump_to_chapter(current_chapter + 1)
-          else
           end
         end
 
         def prev_page_split(state)
           current_chapter = state.dig(:reader, :current_chapter) || 0
-          current_left_page = state.dig(:reader, :left_page) || state.dig(:reader, :current_page) || 0
+          current_left_page = state.dig(:reader,
+                                        :left_page) || state.dig(:reader, :current_page) || 0
 
           if current_left_page >= 2
-            if !@state_store.respond_to?(:get)
-              @state_store.set(%i[reader current_page], current_left_page - 2)
-            else
+            if @state_store.respond_to?(:get)
               @state_store.update({
-                %i[reader left_page] => current_left_page - 2,
-                %i[reader right_page] => current_left_page - 1,
-                %i[reader current_page] => current_left_page - 2,
-              })
+                                    %i[reader left_page] => current_left_page - 2,
+                                    %i[reader right_page] => current_left_page - 1,
+                                    %i[reader current_page] => current_left_page - 2,
+                                  })
+            else
+              @state_store.set(%i[reader current_page], current_left_page - 2)
             end
           elsif current_chapter.positive?
             prev_chapter_index = current_chapter - 1
             last_page = calculate_last_page(prev_chapter_index)
             # Align to even page for split mode
             aligned_left_page = (last_page / 2) * 2
-            if !@state_store.respond_to?(:get)
+            if @state_store.respond_to?(:get)
               @state_store.update({
-                %i[reader current_chapter] => prev_chapter_index,
-                %i[reader current_page] => aligned_left_page,
-              })
+                                    %i[reader current_chapter] => prev_chapter_index,
+                                    %i[reader left_page] => aligned_left_page,
+                                    %i[reader right_page] => aligned_left_page + 1,
+                                    %i[reader current_page] => aligned_left_page,
+                                  })
             else
               @state_store.update({
-                %i[reader current_chapter] => prev_chapter_index,
-                %i[reader left_page] => aligned_left_page,
-                %i[reader right_page] => aligned_left_page + 1,
-                %i[reader current_page] => aligned_left_page,
-              })
+                                    %i[reader current_chapter] => prev_chapter_index,
+                                    %i[reader current_page] => aligned_left_page,
+                                  })
             end
           end
         end
@@ -360,13 +365,7 @@ module EbookReader
           return 0 unless @page_calculator
 
           current_chapter = state.dig(:reader, :current_chapter) || 0
-          result = @page_calculator.calculate_pages_for_chapter(current_chapter)
-          
-          File.open('/tmp/nav_debug.log', 'a') do |f|
-            f.puts "    calc_max_page: chapter=#{current_chapter}, result=#{result}, calc_class=#{@page_calculator.class}"
-          end
-          
-          result
+          @page_calculator.calculate_pages_for_chapter(current_chapter)
         end
 
         def calculate_last_page(chapter_index)

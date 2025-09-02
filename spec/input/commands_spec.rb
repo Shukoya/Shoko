@@ -9,7 +9,9 @@ RSpec.describe EbookReader::Input::Commands do
 
   it 'executes symbol methods with or without args' do
     ctx = Class.new do
-      def ping(key=nil); key ? :with_key : :no_key; end
+      def ping(key = nil)
+        key ? :with_key : :no_key
+      end
     end.new
 
     expect(described_class.execute(:ping, ctx, 'x')).to eq(:with_key)
@@ -18,7 +20,7 @@ RSpec.describe EbookReader::Input::Commands do
 
   it 'executes procs with varying arity' do
     ctx = Object.new
-    two = ->(c, k) { [:two, k] }
+    two = ->(_c, k) { [:two, k] }
     one = ->(k) { [:one, k] }
     zero = -> { :zero }
     expect(described_class.execute(two, ctx, 'k')).to eq([:two, 'k'])
@@ -28,14 +30,16 @@ RSpec.describe EbookReader::Input::Commands do
 
   it 'executes array command [symbol, *args]' do
     ctx = Class.new do
-      def sum(a,b); a+b; end
+      def sum(a, b) = a + b
     end.new
     expect(described_class.execute([:sum, 2, 3], ctx)).to eq(5)
   end
 
   it 'routes BaseCommand to execute with params' do
     cmd = Class.new(EbookReader::Domain::Commands::BaseCommand) do
-      def perform(context, params={}); :handled if params[:triggered_by] == :input; end
+      def perform(_context, params = {})
+        :handled if params[:triggered_by] == :input
+      end
     end.new(name: 'x')
     ctx = double('Ctx')
     expect(described_class.execute(cmd, ctx, 'k')).to eq(:handled)

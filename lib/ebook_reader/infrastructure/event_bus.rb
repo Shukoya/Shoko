@@ -3,7 +3,7 @@
 module EbookReader
   module Infrastructure
     # Thread-safe event bus for application-wide event handling.
-    # Replaces the problematic observer pattern in GlobalState.
+    # Complements ObserverStateStore by broadcasting application events.
     class EventBus
       def initialize
         @subscribers = Hash.new { |h, k| h[k] = [] }
@@ -64,7 +64,7 @@ module EbookReader
           event_type: event.type,
           error: e.message
         )
-        # Unlike GlobalState, we log errors but don't silently ignore them in development
+        # Log errors from subscribers for visibility during development and tests
         # Only re-raise in tests if explicitly expected
         raise e if defined?(RSpec) && !Thread.current[:suppress_event_errors]
       end

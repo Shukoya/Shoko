@@ -8,9 +8,11 @@ module EbookReader
         def self.create(state, controller = nil)
           case Domain::Selectors::ConfigSelectors.view_mode(state)
           when :split
-            SplitViewRenderer.new(nil, controller)
+            # Always pass the app dependencies to ensure a single DI source
+            SplitViewRenderer.new(controller&.dependencies, controller)
           else
-            SingleViewRenderer.new(Domain::Selectors::ConfigSelectors.page_numbering_mode(state), nil, controller)
+            SingleViewRenderer.new(Domain::Selectors::ConfigSelectors.page_numbering_mode(state),
+                                   controller&.dependencies, controller)
           end
         end
       end

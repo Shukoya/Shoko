@@ -11,4 +11,3 @@ RSpec.describe EbookReader::Domain::Selectors::ConfigSelectors do
     expect(%i[absolute dynamic]).to include(described_class.page_numbering_mode(state))
   end
 end
-

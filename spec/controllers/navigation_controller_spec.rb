@@ -10,8 +10,11 @@ RSpec.describe EbookReader::Controllers::NavigationController do
   let(:term) { double('Term', size: [24, 80]) }
   let(:container) do
     Class.new do
-      def initialize(term); @term = term; end
-      def resolve(name); name == :terminal_service ? @term : nil; end
+      def initialize(term) = @term = term
+
+      def resolve(name)
+        name == :terminal_service ? @term : nil
+      end
     end.new(term)
   end
 
@@ -39,4 +42,3 @@ RSpec.describe EbookReader::Controllers::NavigationController do
     expect(state.get(%i[reader selection])).to be_nil
   end
 end
-

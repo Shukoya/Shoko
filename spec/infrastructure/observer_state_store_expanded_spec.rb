@@ -9,7 +9,7 @@ RSpec.describe 'ObserverStateStore notifications (expanded)' do
   it 'notifies parent path observers' do
     calls = []
     parent = Object.new
-    def parent.state_changed(path, *_); @calls << path; end
+    def parent.state_changed(path, *_) = @calls << path
     parent.instance_variable_set(:@calls, calls)
 
     store.add_observer(parent, [:reader])
@@ -17,4 +17,3 @@ RSpec.describe 'ObserverStateStore notifications (expanded)' do
     expect(calls).to include(%i[reader mode])
   end
 end
-

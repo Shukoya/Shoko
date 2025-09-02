@@ -9,7 +9,7 @@ module EbookReader
       # Supports both dynamic and absolute page numbering modes
       class SplitViewRenderer < BaseViewRenderer
         def initialize(dependencies = nil, controller = nil)
-          super(dependencies, controller)
+          super
         end
 
         def render_with_context(surface, bounds, context)
@@ -25,11 +25,11 @@ module EbookReader
         def render_divider(surface, bounds, col_width)
           (3..[bounds.height - 1, 4].max).each do |row|
             surface.write(bounds, row, col_width + 3,
-                          "#{Terminal::ANSI::GRAY}│#{Terminal::ANSI::RESET}")
+                          "#{EbookReader::Constants::UIConstants::BORDER_PRIMARY}│#{Terminal::ANSI::RESET}")
           end
         end
 
-        def render_column_lines(surface, bounds, lines, start_col, col_width, config,
+        def render_column_lines(surface, bounds, lines, start_col, col_width, _config,
                                 controller = nil, context = nil)
           lines.each_with_index do |line, idx|
             spacing = controller&.state ? EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(controller.state) : :normal
@@ -73,23 +73,27 @@ module EbookReader
 
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :split)
           display_height = adjust_for_line_spacing(content_height, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
-          
+
           # Access wrap_lines through controller for now - in full refactor this would be a service
           wrapped = @controller.wrap_lines(chapter.lines || [], col_width) if @controller
           return unless wrapped
 
           # Render components
           render_chapter_header_with_context(surface, bounds, context, chapter)
-          render_left_column_with_context(surface, bounds, wrapped, context, col_width, display_height)
+          render_left_column_with_context(surface, bounds, wrapped, context, col_width,
+                                          display_height)
           render_divider(surface, bounds, col_width)
-          render_right_column_with_context(surface, bounds, wrapped, context, col_width, display_height)
+          render_right_column_with_context(surface, bounds, wrapped, context, col_width,
+                                           display_height)
         end
 
         def render_chapter_header_with_context(surface, bounds, context, chapter)
           return unless context&.state
-          chapter_info = "[#{context.state.get([:reader, :current_chapter]) + 1}] #{chapter.title || 'Unknown'}"
+
+          chapter_info = "[#{context.state.get(%i[reader
+                                                  current_chapter]) + 1}] #{chapter.title || 'Unknown'}"
           surface.write(bounds, 1, 1,
-                        Terminal::ANSI::BLUE + chapter_info[0, bounds.width - 2].to_s + Terminal::ANSI::RESET)
+                        EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + chapter_info[0, bounds.width - 2].to_s + Terminal::ANSI::RESET)
         end
 
         def render_dynamic_left_column_with_context(surface, bounds, lines, col_width, context)
@@ -101,16 +105,24 @@ module EbookReader
                               nil, context)
         end
 
-        def render_left_column_with_context(surface, bounds, wrapped, context, col_width, display_height)
+        def render_left_column_with_context(surface, bounds, wrapped, context, col_width,
+                                            display_height)
           return unless context&.state
-          left_lines = wrapped.slice(context.state.get([:reader, :left_page]) || 0, display_height) || []
-          render_column_lines(surface, bounds, left_lines, 1, col_width, context.config, nil, context)
+
+          left_lines = wrapped.slice(context.state.get(%i[reader left_page]) || 0,
+                                     display_height) || []
+          render_column_lines(surface, bounds, left_lines, 1, col_width, context.config, nil,
+                              context)
         end
 
-        def render_right_column_with_context(surface, bounds, wrapped, context, col_width, display_height)
+        def render_right_column_with_context(surface, bounds, wrapped, context, col_width,
+                                             display_height)
           return unless context&.state
-          right_lines = wrapped.slice(context.state.get([:reader, :right_page]) || 0, display_height) || []
-          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width, context.config, nil, context)
+
+          right_lines = wrapped.slice(context.state.get(%i[reader right_page]) || 0,
+                                      display_height) || []
+          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width,
+                              context.config, nil, context)
         end
       end
     end

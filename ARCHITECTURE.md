@@ -2,95 +2,72 @@
 
 ## Overview
 
-Reader follows a modular, object-oriented architecture designed for maintainability and extensibility.
+Reader follows a Clean Architecture with strict layer boundaries, dependency injection, and component-driven rendering. Presentation never talks directly to persistence; all state mutations flow through domain services and actions.
 
-## Core Design Patterns
-
-### 1. **Command Pattern** (Input Handling)
-- Encapsulates user actions as command objects
-- Enables undo/redo functionality (future feature)
-- Decouples input handling from business logic
-
-### 2. **Strategy Pattern** (Reader Modes)
-- Different strategies for rendering content (reading, help, TOC, bookmarks)
-- Easy to add new viewing modes
-- Consistent interface for all modes
-
-### 3. **Template Method Pattern** (Rendering)
-- Base renderer defines structure
-- Subclasses implement specific rendering logic
-- Promotes code reuse
-
-### 4. **Observer Pattern** (State Management)
-- Configuration changes notify dependent components
-- Progress tracking updates automatically
-
-## Component Architecture
+## Layers
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        Application Layer                     │
+│                        Presentation                          │
 ├─────────────────────────────────────────────────────────────┤
-│  CLI  │  MainMenu  │  Reader  │  ReaderModes  │  Commands  │
+│  UI Components (do_render)  │  Overlay/Popup Components      │
+│  Screens (e.g. Annotation Editor, Annotations, Browse)       │
 ├─────────────────────────────────────────────────────────────┤
-│                         UI Layer                             │
+│                        Application                           │
 ├─────────────────────────────────────────────────────────────┤
-│  Terminal  │  Renderers  │  UI Components  │  InputHandler  │
+│  Controllers (Reader/UI/State/Input) │ UnifiedApplication    │
 ├─────────────────────────────────────────────────────────────┤
-│                      Business Layer                          │
+│                           Domain                              │
 ├─────────────────────────────────────────────────────────────┤
-│  EPUBDocument  │  Config  │  Managers  │  EPUBFinder        │
+│  Services  │  Actions  │  Commands  │  Selectors              │
 ├─────────────────────────────────────────────────────────────┤
-│                       Data Layer                             │
+│                        Infrastructure                         │
 ├─────────────────────────────────────────────────────────────┤
-│  File System  │  JSON Storage  │  EPUB Files                │
+│  StateStore/ObserverStateStore │ EventBus │ Terminal/Surface  │
+│  DocumentService  │ Logger  │ Persistence (JSON)             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## Core Design Patterns
+
+- Command Pattern (Input): Key bindings route to `Domain::Commands` via `Input::Dispatcher` and `DomainCommandBridge`.
+- Observer Pattern (State): `ObserverStateStore` notifies components/controllers on path changes.
+- Dependency Injection: `Domain::ContainerFactory` resolves services and infrastructure; components receive dependencies via constructor.
+- Component Rendering: Components implement `do_render(surface, bounds)`; all terminal I/O goes through `TerminalService` + `Components::Surface`.
+
+Note: Legacy ReaderModes are replaced by screen components. The former `ReaderModes::AnnotationEditorMode` was superseded by `Components::Screens::AnnotationEditorScreenComponent`.
+
 ## Key Components
 
-### Terminal Layer
-- **Terminal**: Low-level terminal manipulation using ANSI escape codes
-- **ANSI Module**: Constants for colors and control sequences
-
-### Application Components
-- **CLI**: Entry point and command-line interface
-- **MainMenu**: File selection and application menu
-- **Reader**: Main reading interface and mode coordination
-
-### UI Components
-- **Renderers**: Specialized rendering for different content types
-- **ReaderModes**: Mode-specific behavior and rendering
-- **InputHandler**: Keyboard input processing
-- **Copy-friendly Rendering**: Header, content, footer, and messages are printed directly so standard terminal text selection always works; no separate copy mode exists.
-
-### Business Logic
-- **EPUBDocument**: EPUB parsing and content extraction
-- **Config**: User preferences and settings
-- **Managers**: Bookmarks, progress, and recent files
-
-### Data Storage
-- **JSON Files**: Configuration, bookmarks, progress
-- **File System**: EPUB file scanning and access
+- Presentation
+  - UI Components: Header, Content, Footer, Sidebar, Overlay (tooltip/popup), Screens (Browse, Recent, Settings, Annotations, Annotation Editor).
+  - Rendering Surface: `Components::Surface` abstracts writing to Terminal.
+- Application
+  - Controllers: `ReaderController` orchestrates rendering and loop; `UIController` manages modes/overlays; `NavigationController` and `StateController` handle navigation/persistence; `InputController` configures the dispatcher.
+  - UnifiedApplication: decides between menu and reader modes.
+- Domain
+  - Services: Navigation, PageCalculator, Selection, Coordinate, Layout, Clipboard, Annotation.
+  - Actions/Selectors: explicit state transitions and read-only projections.
+  - Commands: Navigation/Application/Sidebar command objects for input.
+- Infrastructure
+  - StateStore/ObserverStateStore, EventBus, Terminal (buffered output/input/mouse), Logger, DocumentService, Managers (bookmarks, progress, recent files).
 
 ## Data Flow
 
-1. **Startup**: CLI → MainMenu → EPUBFinder
-2. **File Selection**: MainMenu → Reader → EPUBDocument
-3. **Reading**: Reader → ReaderMode → Renderer → Terminal
-4. **Input**: Terminal → Reader → Command → State Change
-5. **Persistence**: Managers → JSON Files
+1. Startup: CLI → `Application::UnifiedApplication` → either MainMenu or Reader
+2. Input: Terminal → `Input::Dispatcher` → Domain Commands → Domain Services → Actions → StateStore
+3. Rendering: Controllers request `TerminalService.create_surface`; Components render via `do_render` into Surface; `TerminalService` manages frames
+4. Persistence: Domain services/Managers persist to JSON via Infrastructure; UI reads via selectors/state
 
 ## Extension Points
 
-- **New Reader Modes**: Implement `ReaderModes::BaseMode`
-- **New Commands**: Implement command methods directly on Reader
-- **New Renderers**: Use UI components or create new ones under `UI`
-- **New File Formats**: Implement document parser interface
+- New Screen/Component: extend `Components::BaseComponent` and implement `do_render`.
+- New Input behavior: add `Domain::Commands` and map via `DomainCommandBridge`.
+- New Domain logic: implement a service; expose actions/selectors as needed.
+- New File format: implement a document parser and plug into `DocumentService`.
 
 ## Performance Considerations
 
-- **Lazy Loading**: Chapters loaded on demand
-- **Caching**: EPUB file list cached for 24 hours
-- **Double Buffering**: Terminal updates use buffering
-- **Efficient Parsing**: Minimal DOM parsing for performance
+- Buffered output: Terminal double-buffering via `TerminalBuffer`.
+- Lazy loading: Chapters loaded on demand.
+- Caching: Library scan and chapter wrapping caches via services.

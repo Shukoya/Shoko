@@ -11,4 +11,3 @@ RSpec.describe EbookReader::Domain::Selectors::MenuSelectors do
     expect([true, false]).to include(described_class.search_active?(state))
   end
 end
-

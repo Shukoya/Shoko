@@ -9,14 +9,15 @@ module EbookReader
     # This component consolidates the scattered rendering logic and provides
     # consistent coordinate handling for the fragile tooltip system.
     class TooltipOverlayComponent < BaseComponent
-      def initialize(controller)
+      include Constants::UIConstants
+      def initialize(controller, coordinate_service:)
         @controller = controller
-        @coordinate_service = Domain::ContainerFactory.create_default_container.resolve(:coordinate_service)
+        @coordinate_service = coordinate_service
         @last_selection_segments = []
       end
 
       # Render all overlay elements: highlights, popups, tooltips
-      def render(surface, bounds)
+      def do_render(surface, bounds)
         # Render in specific order to ensure proper layering
         clear_previous_selection_artifacts(surface, bounds)
         render_saved_annotations(surface, bounds)
@@ -27,18 +28,21 @@ module EbookReader
       private
 
       def render_saved_annotations(surface, bounds)
-        return unless @controller.state.get([:reader, :annotations])
+        return unless @controller.state.get(%i[reader annotations])
 
-        @controller.state.get([:reader, :annotations])
-                   .select { |a| a['chapter_index'] == @controller.state.get([:reader, :current_chapter]) }
+        @controller.state.get(%i[reader annotations])
+                   .select do |a|
+          a['chapter_index'] == @controller.state.get(%i[reader
+                                                         current_chapter])
+        end
                    .each do |annotation|
-          render_text_highlight(surface, bounds, annotation['range'], Terminal::ANSI::BG_CYAN)
+          render_text_highlight(surface, bounds, annotation['range'], HIGHLIGHT_BG_SAVED)
         end
       end
 
       def render_active_selection(surface, bounds)
         # Render current selection highlight
-        selection_range = @controller.state.get([:reader, :selection]) ||
+        selection_range = @controller.state.get(%i[reader selection]) ||
                           @controller.instance_variable_get(:@mouse_handler)&.selection_range
 
         unless selection_range
@@ -49,31 +53,27 @@ module EbookReader
 
         # Reset tracking for this frame
         @last_selection_segments.clear
-        render_text_highlight(surface, bounds, selection_range, Terminal::ANSI::BG_BLUE)
+        render_text_highlight(surface, bounds, selection_range, HIGHLIGHT_BG_ACTIVE)
       end
 
       def render_popup_menu(surface, bounds)
-        popup_menu = @controller.state.get([:reader, :popup_menu])
+        popup_menu = @controller.state.get(%i[reader popup_menu])
         return unless popup_menu&.visible
 
-        # Handle both old and new popup menu interfaces
-        if popup_menu.respond_to?(:render)
-          popup_menu.render(surface, bounds)
-        elsif popup_menu.respond_to?(:render_with_surface)
-          popup_menu.render_with_surface(surface, bounds)
-        end
+        # Unified component rendering path
+        popup_menu.render(surface, bounds)
       end
 
       def render_text_highlight(surface, bounds, range, color)
         normalized_range = @coordinate_service.normalize_selection_range(range)
         return unless normalized_range
 
-        rendered_lines = @controller.state.get([:reader, :rendered_lines]) || {}
+        rendered_lines = @controller.state.get(%i[reader rendered_lines]) || {}
         start_pos = normalized_range[:start]
         end_pos = normalized_range[:end]
 
         # Determine which column the selection started in (for column-aware highlighting)
-        target_column_bounds = determine_highlight_column_bounds(start_pos, rendered_lines)
+        target_column_bounds = @coordinate_service.column_bounds_for(start_pos, rendered_lines)
 
         (start_pos[:y]..end_pos[:y]).each do |y|
           render_highlighted_line(surface, bounds, rendered_lines, y, start_pos, end_pos, color,
@@ -95,8 +95,7 @@ module EbookReader
 
           # If we have column bounds, only highlight within the target column
           if target_column_bounds
-            next unless column_overlaps_highlight?(line_start_col, line_end_col,
-                                                   target_column_bounds)
+            next unless @coordinate_service.column_overlaps?(line_start_col, line_end_col, target_column_bounds)
 
             # Constrain selection to target column bounds
             row_start_x = y == start_pos[:y] ? start_pos[:x] : target_column_bounds[:start]
@@ -140,7 +139,8 @@ module EbookReader
         seg_start = line_start_col + highlight_bounds[:start]
         seg_len = highlight_bounds[:end] - highlight_bounds[:start] + 1
         original_text = line_text[highlight_bounds[:start]..highlight_bounds[:end]]
-        @last_selection_segments << { row: terminal_row, col: seg_start, len: seg_len, text: original_text }
+        @last_selection_segments << { row: terminal_row, col: seg_start, len: seg_len,
+                                      text: original_text }
       end
 
       def calculate_line_highlight_bounds(line_text, line_start_col, current_y, start_pos, end_pos)
@@ -168,7 +168,7 @@ module EbookReader
 
         # Add highlighted portion
         highlighted_part = line_text[bounds[:start]..bounds[:end]]
-        result += "#{color}#{Terminal::ANSI::WHITE}#{highlighted_part}#{Terminal::ANSI::RESET}"
+        result += "#{color}#{COLOR_TEXT_PRIMARY}#{highlighted_part}#{Terminal::ANSI::RESET}"
 
         # Add text after highlight
         result += line_text[(bounds[:end] + 1)..] if bounds[:end] < line_text.length - 1
@@ -183,7 +183,7 @@ module EbookReader
 
         @last_selection_segments.each do |seg|
           safe_text = seg[:text] || ''
-          repaint = "#{Terminal::ANSI::RESET}#{Terminal::ANSI::WHITE}#{safe_text}#{Terminal::ANSI::RESET}"
+          repaint = "#{Terminal::ANSI::RESET}#{COLOR_TEXT_PRIMARY}#{safe_text}#{Terminal::ANSI::RESET}"
           surface.write(bounds, seg[:row], seg[:col], repaint)
         end
 
@@ -191,28 +191,7 @@ module EbookReader
         @pending_clear = false
       end
 
-      def determine_highlight_column_bounds(click_pos, rendered_lines)
-        # Find which column the click position belongs to
-        terminal_row = click_pos[:y] + 1
-
-        rendered_lines.each_value do |line_info|
-          next unless line_info[:row] == terminal_row
-
-          line_start_col = line_info[:col]
-          line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
-
-          if click_pos[:x].between?(line_start_col, line_end_col)
-            return { start: line_start_col, end: line_end_col }
-          end
-        end
-
-        nil
-      end
-
-      def column_overlaps_highlight?(line_start, line_end, target_bounds)
-        # Check if line segment overlaps with target column bounds
-        !(line_end < target_bounds[:start] || line_start > target_bounds[:end])
-      end
+      # Column bounds and overlap checks are now handled by CoordinateService
     end
   end
 end

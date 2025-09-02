@@ -12,4 +12,3 @@ RSpec.describe EbookReader::Domain::Selectors::ReaderSelectors do
     expect(described_class.last_width(state)).to be_a(Integer)
   end
 end
-

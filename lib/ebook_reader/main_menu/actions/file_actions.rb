@@ -6,10 +6,16 @@ module EbookReader
       # A module to handle file-related actions in the main menu.
       module FileActions
         def open_selected_book
-          browse_selected = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state)
-          return unless @filtered_epubs[browse_selected]
+          # Use the component's current filtered view to determine the selected book
+          book = (respond_to?(:selected_book) ? selected_book : nil)
+          # Fallback to internal list if component is unavailable (tests)
+          book ||= begin
+            idx = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state)
+            (@filtered_epubs && @filtered_epubs[idx])
+          end
+          return unless book
 
-          path = @filtered_epubs[browse_selected]['path']
+          path = book['path']
           if path && File.exist?(path)
             open_book(path)
           else
@@ -51,7 +57,8 @@ module EbookReader
           RecentFiles.add(path)
           # Ensure reader loop runs even if a previous session set running=false
           if instance_variable_defined?(:@state) && @state
-            @state.update({[:reader, :book_path] => path, [:reader, :running] => true, [:reader, :mode] => :read})
+            @state.update({ %i[reader book_path] => path, %i[reader running] => true,
+                            %i[reader mode] => :read })
           end
           # Pass dependencies to MouseableReader
           dependencies = @dependencies || Domain::ContainerFactory.create_default_container

@@ -17,7 +17,7 @@ module EbookReader
       end
 
       def handle_key(key)
-        @dispatcher.handle_key(key) if @dispatcher
+        @dispatcher&.handle_key(key)
       end
 
       # Enhanced popup navigation handlers for direct key routing
@@ -99,7 +99,7 @@ module EbookReader
         register_annotations_list_bindings_new(reader_controller)
       end
 
-      def register_read_bindings(reader_controller)
+      def register_read_bindings(_reader_controller)
         bindings = Input::CommandFactory.reader_navigation_commands
         bindings.merge!(Input::CommandFactory.reader_control_commands)
 
@@ -124,7 +124,7 @@ module EbookReader
         @dispatcher.register_mode(:read, bindings)
       end
 
-      def register_popup_menu_bindings(reader_controller)
+      def register_popup_menu_bindings(_reader_controller)
         # Popup menu navigation is now handled directly in main_loop via handle_popup_menu_input
         bindings = {}
         bindings.merge!(Input::CommandFactory.menu_selection_commands)
@@ -132,12 +132,12 @@ module EbookReader
         @dispatcher.register_mode(:popup_menu, bindings)
       end
 
-      def register_help_bindings_new(reader_controller)
+      def register_help_bindings_new(_reader_controller)
         bindings = { __default__: :exit_help }
         @dispatcher.register_mode(:help, bindings)
       end
 
-      def register_toc_bindings_new(reader_controller)
+      def register_toc_bindings_new(_reader_controller)
         bindings = {}
 
         # Exit TOC
@@ -154,7 +154,7 @@ module EbookReader
         @dispatcher.register_mode(:toc, bindings)
       end
 
-      def register_bookmarks_bindings_new(reader_controller)
+      def register_bookmarks_bindings_new(_reader_controller)
         bindings = {}
 
         # Exit bookmarks
@@ -172,90 +172,28 @@ module EbookReader
         @dispatcher.register_mode(:bookmarks, bindings)
       end
 
-      def register_annotation_editor_bindings_new(reader_controller)
+      def register_annotation_editor_bindings_new(_reader_controller)
         bindings = {}
-        
-        # ESC prefix handling: ESC alone cancels, ESC + 's' saves
-        bindings["\e"] = lambda { |ctx, key|
-          ui = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-          mode = ui.current_mode
-          if mode
-            mode.instance_variable_set(:@escape_armed, true)
-            :handled
-          else
-            ui.switch_mode(:read)
-            :handled
-          end
-        }
 
-        # 's' with ESC armed -> save. 'c' with ESC armed -> cancel. Otherwise insert char.
-        bindings['s'] = lambda { |ctx, key|
-          ui = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-          mode = ui.current_mode
-          armed = mode && mode.instance_variable_defined?(:@escape_armed) && mode.instance_variable_get(:@escape_armed)
-          if armed
-            mode.instance_variable_set(:@escape_armed, false)
-            mode&.send(:save_annotation)
-            :handled
-          else
-            mode&.send(:handle_character, 's')
-            :handled
-          end
-        }
-        bindings['c'] = lambda { |ctx, key|
-          ui = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-          mode = ui.current_mode
-          armed = mode && mode.instance_variable_defined?(:@escape_armed) && mode.instance_variable_get(:@escape_armed)
-          if armed
-            mode.instance_variable_set(:@escape_armed, false)
-            ui.cleanup_popup_state if ui.respond_to?(:cleanup_popup_state)
-            ui.switch_mode(:read)
-            :handled
-          else
-            mode&.send(:handle_character, 'c')
-            :handled
-          end
-        }
-        bindings['S'] = lambda { |ctx, key|
-          ui = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-          mode = ui.current_mode
-          mode&.save_annotation
-          :handled
-        }
-        
-        bindings["\x7F"] = lambda { |ctx, key|  # Backspace
-          ui_controller = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-          mode = ui_controller.current_mode
-          mode&.send(:handle_backspace)
-          :handled
-        }
-        
-        bindings["\b"] = lambda { |ctx, key|  # Alternative backspace
-          ui_controller = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-          mode = ui_controller.current_mode
-          mode&.send(:handle_backspace)
-          :handled
-        }
-        
-        bindings["\r"] = lambda { |ctx, key|  # Enter
-          ui_controller = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-          mode = ui_controller.current_mode
-          mode&.send(:handle_enter)
-          :handled
-        }
-        
-        # Default handler for character input; if ESC-armed and not s/c, disarm and treat as char
-        bindings[:__default__] = lambda { |ctx, key|
-          ui = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
-          mode = ui.current_mode
-          if mode && mode.instance_variable_defined?(:@escape_armed) && mode.instance_variable_get(:@escape_armed)
-            # Not 's' or 'c' → disarm and handle character normally
-            mode.instance_variable_set(:@escape_armed, false)
-          end
-          mode&.send(:handle_character, key)
-          :handled
-        }
-        
+        # Cancel editor
+        bindings["\e"] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.cancel
+
+        # Save: support Ctrl+S (\x13) and 'S'
+        bindings["\x13"] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
+        bindings['S']   = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
+
+        # Backspace (both variants)
+        bindings["\x7F"] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.backspace
+        bindings["\b"]   = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.backspace
+
+        # Enter (CR and LF)
+        EbookReader::Input::KeyDefinitions::ACTIONS[:confirm].each do |k|
+          bindings[k] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.enter
+        end
+
+        # Default: insert printable characters
+        bindings[:__default__] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.insert_char
+
         @dispatcher.register_mode(:annotation_editor, bindings)
       end
 
@@ -281,21 +219,21 @@ module EbookReader
         end
       end
 
-      def register_annotations_list_bindings_new(reader_controller)
+      def register_annotations_list_bindings_new(_reader_controller)
         bindings = {}
-        
+
         # Exit keys
         ['q', "\e", "\u0001"].each do |key|
-          bindings[key] = lambda { |ctx, k|
+          bindings[key] = lambda { |ctx, _k|
             ui_controller = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
             ui_controller.switch_mode(:read)
             :handled
           }
         end
-        
+
         # Navigation down keys (j, down arrow variants)
         ['j', "\e[B", "\eOB"].each do |key|
-          bindings[key] = lambda { |ctx, k|
+          bindings[key] = lambda { |ctx, _k|
             ui_controller = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
             mode = ui_controller.current_mode
             if mode && mode.respond_to?(:selected_annotation) && mode.respond_to?(:annotations)
@@ -308,10 +246,10 @@ module EbookReader
             :handled
           }
         end
-        
+
         # Navigation up keys (k, up arrow variants)
         ['k', "\e[A", "\eOA"].each do |key|
-          bindings[key] = lambda { |ctx, k|
+          bindings[key] = lambda { |ctx, _k|
             ui_controller = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
             mode = ui_controller.current_mode
             if mode && mode.respond_to?(:selected_annotation)
@@ -321,17 +259,17 @@ module EbookReader
             :handled
           }
         end
-        
+
         # Enter keys - jump to annotation
         ["\r", "\n"].each do |key|
-          bindings[key] = lambda { |ctx, k|
+          bindings[key] = lambda { |ctx, _k|
             ui_controller = ctx.instance_variable_get(:@dependencies).resolve(:ui_controller)
             mode = ui_controller.current_mode
             mode&.jump_to_annotation if mode.respond_to?(:jump_to_annotation)
             :handled
           }
         end
-        
+
         @dispatcher.register_mode(:annotations, bindings)
       end
     end

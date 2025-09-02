@@ -10,8 +10,9 @@ RSpec.describe EbookReader::Infrastructure::ObserverStateStore do
     called = []
     observer = Class.new do
       attr_reader :called
-      def initialize(called); @called = called; end
-      def state_changed(path, _old, _new); @called << path; end
+
+      def initialize(called) = @called = called
+      def state_changed(path, _old, _new) = @called << path
     end.new(called)
     store.add_observer(observer, %i[reader current_chapter])
 
@@ -20,4 +21,3 @@ RSpec.describe EbookReader::Infrastructure::ObserverStateStore do
     expect(called).to include(%i[reader current_chapter])
   end
 end
-

@@ -22,7 +22,7 @@ module EbookReader
 
         private
 
-        def render_dynamic_lines(surface, bounds, lines, start_row, col_start, col_width, config,
+        def render_dynamic_lines(surface, bounds, lines, start_row, col_start, col_width, _config,
                                  controller = nil, context = nil)
           lines.each_with_index do |line, idx|
             spacing = controller&.state ? EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(controller.state) : :normal
@@ -34,7 +34,7 @@ module EbookReader
           end
         end
 
-        def render_absolute_lines(surface, bounds, lines, start_row, col_start, col_width, config,
+        def render_absolute_lines(surface, bounds, lines, start_row, col_start, col_width, _config,
                                   controller = nil, context = nil, displayable = nil)
           lines.each_with_index do |line, idx|
             spacing = controller&.state ? EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(controller.state) : :normal
@@ -76,13 +76,14 @@ module EbookReader
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :single)
           col_start = [(bounds.width - col_width) / 2, 1].max
           displayable = adjust_for_line_spacing(content_height, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
-          
+
           # Access wrap_lines through controller for now - in full refactor this would be a service
           wrapped = @controller.wrap_lines(chapter.lines || [], col_width) if @controller
           return unless wrapped
-          
+
           return unless context&.state
-          lines = wrapped.slice(context.state.get([:reader, :single_page]) || 0, displayable) || []
+
+          lines = wrapped.slice(context.state.get(%i[reader single_page]) || 0, displayable) || []
           start_row = calculate_centered_start_row(content_height, lines.size, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
 
           render_absolute_lines(surface, bounds, lines, start_row, col_start, col_width, context.config,

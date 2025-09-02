@@ -10,10 +10,15 @@ RSpec.describe EbookReader::Controllers::StateController do
   let(:page_calc) { double('PageCalc', get_page: { chapter_index: 0, start_line: 0 }, build_page_map: nil, find_page_index: 0) }
 
   class Ctn
-    def initialize(term, page_calc) = (@term = term; @pc = page_calc)
+    def initialize(term, page_calc)
+      (@term = term
+       @pc = page_calc)
+    end
+
     def resolve(name)
       return @term if name == :terminal_service
       return @pc if name == :page_calculator
+
       nil
     end
   end
@@ -24,8 +29,8 @@ RSpec.describe EbookReader::Controllers::StateController do
     stub_const('EbookReader::ProgressManager', Class.new do
       @saved = nil
       class << self; attr_accessor :saved; end
-      def self.save(path, ch, off); @saved = [path, ch, off]; end
-      def self.load(_path); { 'chapter' => 1, 'line_offset' => 5 }; end
+      def self.save(path, ch, off) = @saved = [path, ch, off]
+      def self.load(_path) = { 'chapter' => 1, 'line_offset' => 5 }
     end)
 
     stub_const('EbookReader::BookmarkManager', Class.new do
