@@ -128,7 +128,15 @@ module EbookReader
     def run
       @terminal_service.setup
       if @pending_initial_calculation
-        perform_initial_calculations_with_progress
+        unless preloaded_page_data?
+          # Build silently if needed but avoid showing a loading overlay
+          height, width = @terminal_service.size
+          if Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic && @page_calculator
+            @page_calculator.build_page_map(width, height, @doc, @state)
+          else
+            update_page_map(width, height)
+          end
+        end
         @pending_initial_calculation = false
       end
       main_loop
@@ -361,6 +369,12 @@ module EbookReader
 
       # Register document in dependency container for services to access
       @dependencies.register(:document, @doc)
+      # Expose chapter count for navigation service logic
+      begin
+        @state.update({ %i[reader total_chapters] => (@doc&.chapter_count || 0) })
+      rescue StandardError
+        # best-effort
+      end
     end
 
     def load_data
@@ -577,22 +591,35 @@ module EbookReader
       @terminal_service.start_frame
       surface = @terminal_service.create_surface
       bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
-      surface.fill(bounds, ' ')
 
-      # Minimal progress bar (pip-like): green progressed, grey remaining
-      bar_width = [[width * 0.6, 20].max.to_i, width - 4].min
+      # Ultra-minimal progress bar near the top, single-row height
+      bar_row = [2, height - 1].min
+      bar_col = 2
+      bar_width = [[width - (bar_col + 1), 10].max, width - bar_col].min
+
       progress = (@state.get(%i[ui loading_progress]) || 0.0).to_f.clamp(0.0, 1.0)
       filled = (bar_width * progress).round
-      bar_row = [height / 2, 1].max
-      bar_col = [[(width - bar_width) / 2, 1].max, width - bar_width + 1].min
 
-      green = Terminal::ANSI::BG_BRIGHT_GREEN
-      grey  = Terminal::ANSI::BG_GREY
-      reset = Terminal::ANSI::RESET
-      bar_str = (green + (' ' * filled)) + (grey + (' ' * (bar_width - filled))) + reset
-      surface.write(bounds, bar_row, bar_col, bar_str)
+      green_fg = Terminal::ANSI::BRIGHT_GREEN
+      grey_fg  = Terminal::ANSI::GRAY
+      reset    = Terminal::ANSI::RESET
+
+      # Use thin line glyphs with foreground colors to avoid background bleed
+      track = if bar_width > 0
+                (green_fg + ('━' * filled)) + (grey_fg + ('━' * (bar_width - filled))) + reset
+              else
+                ''
+              end
+      surface.write(bounds, bar_row, bar_col, track)
 
       @terminal_service.end_frame
+    end
+
+    def preloaded_page_data?
+      if Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic
+        return @page_calculator && @page_calculator.total_pages.positive?
+      end
+      @state.get(%i[reader total_pages]).to_i.positive?
     end
 
     # Override helper to delegate to the DI-backed wrapping service

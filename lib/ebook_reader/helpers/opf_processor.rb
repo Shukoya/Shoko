@@ -20,9 +20,25 @@ module EbookReader
       def extract_metadata
         metadata = {}
         if (meta_elem = @opf.elements['//metadata'])
-          metadata[:title] = meta_elem.elements['*[local-name()="title"]']&.text
+          raw_title = meta_elem.elements['*[local-name()="title"]']&.text
+          metadata[:title] = HTMLProcessor.clean_html(raw_title.to_s).strip if raw_title
           if (lang = meta_elem.elements['*[local-name()="language"]']&.text)
             metadata[:language] = lang.include?('_') ? lang : "#{lang}_#{lang.upcase}"
+          end
+
+          # dc:creator (authors) — may be multiple
+          authors = []
+          meta_elem.elements.each('*[local-name()="creator"]') do |creator|
+            txt = HTMLProcessor.clean_html(creator.text.to_s).strip
+            authors << txt unless txt.empty?
+          end
+          metadata[:authors] = authors unless authors.empty?
+
+          # dc:date — parse year if present
+          if (date_elem = meta_elem.elements['*[local-name()="date"]']) && date_elem.text
+            if (m = date_elem.text.to_s.match(/(\d{4})/))
+              metadata[:year] = m[1]
+            end
           end
         end
         metadata

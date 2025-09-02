@@ -362,16 +362,23 @@ module EbookReader
         end
 
         def calculate_max_page_for_chapter(state)
-          return 0 unless @page_calculator
-
           current_chapter = state.dig(:reader, :current_chapter) || 0
-          @page_calculator.calculate_pages_for_chapter(current_chapter)
+          if @page_calculator
+            pages = @page_calculator.calculate_pages_for_chapter(current_chapter)
+            return pages if pages.positive?
+          end
+          # Fallback to state page_map (page count)
+          state.dig(:reader, :page_map)&.[](current_chapter) || 0
         end
 
         def calculate_last_page(chapter_index)
-          return 0 unless @page_calculator
-
-          @page_calculator.calculate_pages_for_chapter(chapter_index)
+          if @page_calculator
+            pages = @page_calculator.calculate_pages_for_chapter(chapter_index)
+            return pages if pages.positive?
+          end
+          # Fallback to state page_map for absolute mode
+          state = @state_store.current_state
+          state.dig(:reader, :page_map)&.[](chapter_index) || 0
         end
       end
     end

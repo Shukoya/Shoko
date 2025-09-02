@@ -161,11 +161,26 @@ module EbookReader
           selected = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state)
           start_index, visible_books = calculate_visible_range(list_height, selected)
 
-          visible_books.each_with_index do |book, index|
-            row = list_start_row + index
-            is_selected = (start_index + index) == selected
+          # Draw header row and divider
+          draw_list_header(surface, bounds, width, list_start_row - 1)
+          list_start_row += 1
 
-            render_book_item(surface, bounds, row, width, book, is_selected)
+          # Inline loading info
+          loading_path = @state.get(%i[menu loading_path])
+          loading_active = @state.get(%i[menu loading_active])
+          loading_progress = (@state.get(%i[menu loading_progress]) || 0.0).to_f
+
+          current_row = list_start_row
+          visible_books.each_with_index do |book, index|
+            is_selected = (start_index + index) == selected
+            render_book_item(surface, bounds, current_row, width, book, is_selected)
+
+            if loading_active && loading_path == book['path'] && current_row + 1 < bounds.bottom
+              draw_inline_progress(surface, bounds, width, current_row + 1, loading_progress)
+              current_row += 2
+            else
+              current_row += 1
+            end
           end
         end
 
@@ -184,25 +199,82 @@ module EbookReader
         end
 
         def render_book_item(surface, bounds, row, width, book, is_selected)
-          title = book['name'] || 'Unknown Title'
-          author = book['author'] || 'Unknown Author'
-
-          # Truncate long titles/authors
-          max_title_length = [width - 40, 30].max
-          title = truncate_text(title, max_title_length)
-          author = truncate_text(author, 20)
-
-          prefix = is_selected ? '▶ ' : '  '
-          text = "#{prefix}#{title}"
-          if author != 'Unknown Author'
-            text += " #{COLOR_TEXT_DIM}by #{author}#{Terminal::ANSI::RESET}"
+          @meta_cache ||= {}
+          path = book['path']
+          meta = @meta_cache[path]
+          unless meta
+            require_relative '../../helpers/metadata_extractor'
+            meta = Helpers::MetadataExtractor.from_epub(path)
+            @meta_cache[path] = meta
           end
 
+          title = (meta[:title] || book['name'] || 'Unknown').to_s
+          authors = (meta[:author_str] || '').to_s
+          year = (meta[:year] || '').to_s
+          size_mb = format_size(book['size'] || (File.size(path) rescue 0))
+
+          # Compute column widths
+          pointer_w = 2
+          gap = 2
+          remaining = width - pointer_w - (gap * 3)
+          year_w = 6
+          size_w = 8
+          author_w = [[(remaining * 0.25).to_i, 12].max, remaining - 20 - year_w - size_w].min
+          title_w = [remaining - author_w - year_w - size_w, 20].max
+
+          # Compose columns
+          pointer = is_selected ? '▸ ' : '  '
+          title_col = truncate_text(title, title_w).ljust(title_w)
+          author_col = truncate_text(authors, author_w).ljust(author_w)
+          year_col = year[0, 4].ljust(year_w)
+          size_col = size_mb.rjust(size_w)
+
+          line = [title_col, author_col, year_col, size_col].join(' ' * gap)
           if is_selected
-            surface.write(bounds, row, 1, SELECTION_HIGHLIGHT + text + Terminal::ANSI::RESET)
+            surface.write(bounds, row, 1, SELECTION_HIGHLIGHT + pointer + line + Terminal::ANSI::RESET)
           else
-            surface.write(bounds, row, 1, COLOR_TEXT_PRIMARY + text + Terminal::ANSI::RESET)
+            surface.write(bounds, row, 1, COLOR_TEXT_PRIMARY + pointer + line + Terminal::ANSI::RESET)
           end
+        end
+
+        def draw_list_header(surface, bounds, width, row)
+          return if row < 5
+          pointer_w = 2
+          gap = 2
+          remaining = width - pointer_w - (gap * 3)
+          year_w = 6
+          size_w = 8
+          author_w = [[(remaining * 0.25).to_i, 12].max, remaining - 20 - year_w - size_w].min
+          title_w = [remaining - author_w - year_w - size_w, 20].max
+
+          headers = [
+            'Title'.ljust(title_w),
+            'Author(s)'.ljust(author_w),
+            'Year'.ljust(year_w),
+            'Size'.rjust(size_w),
+          ].join(' ' * gap)
+
+          header_style = Terminal::ANSI::BOLD + Terminal::ANSI::LIGHT_GREY
+          surface.write(bounds, row, 1, header_style + (' ' * pointer_w) + headers + Terminal::ANSI::RESET)
+          # Divider line
+          divider = ("─" * [width - 2, 1].max)
+          surface.write(bounds, row + 1, 1, COLOR_TEXT_DIM + divider + Terminal::ANSI::RESET)
+        end
+
+        def format_size(bytes)
+          mb = (bytes.to_f / (1024 * 1024)).round(1)
+          format('%.1f MB', mb)
+        end
+
+        def draw_inline_progress(surface, bounds, width, row, progress)
+          bar_col = 3
+          usable = [width - bar_col - 2, 10].max
+          filled = (usable * progress.to_f.clamp(0.0, 1.0)).round
+          green = Terminal::ANSI::BRIGHT_GREEN
+          grey  = Terminal::ANSI::GRAY
+          reset = Terminal::ANSI::RESET
+          track = (green + ('━' * filled)) + (grey + ('━' * (usable - filled))) + reset
+          surface.write(bounds, row, bar_col, track)
         end
 
         def truncate_text(text, max_length)
