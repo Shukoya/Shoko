@@ -17,7 +17,9 @@ RSpec.describe EbookReader::ReaderController do
         def title = 'Doc'
         def language = 'en'
       end
+
       def initialize(_path); end
+
       def load_document
         ch = FakeChapter.new('Ch1', ['line one', 'line two'])
         FakeDoc.new(ch)
@@ -30,6 +32,7 @@ RSpec.describe EbookReader::ReaderController do
         attr_accessor :render_calls
       end
       def initialize(*); end
+
       def render(_surface, _bounds)
         self.class.render_calls = (self.class.render_calls || 0) + 1
       end

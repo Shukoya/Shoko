@@ -33,7 +33,7 @@ module EbookReader
       def state_changed(path, _old_value, new_value)
         return unless path == %i[menu mode]
 
-        mapped = (new_value == :search) ? :browse : new_value
+        mapped = new_value == :search ? :browse : new_value
         @current_screen = @screen_components[mapped] || @screen_components[:menu]
       end
 

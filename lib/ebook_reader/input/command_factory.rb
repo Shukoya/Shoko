@@ -192,7 +192,7 @@ module EbookReader
                 current = (ctx.state.get(input_path) || '').to_s
                 if cursor_field
                   cursor = (ctx.state.get([:menu, cursor_field]) || current.length).to_i
-                  if cursor > 0
+                  if cursor.positive?
                     before = current[0, cursor - 1] || ''
                     after = current[cursor..] || ''
                     new_value = before + after
@@ -202,7 +202,7 @@ module EbookReader
                     new_cursor = cursor
                   end
                   ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value,
-                                                                                         cursor_field => new_cursor))
+                                                                                        cursor_field => new_cursor))
                 else
                   new_value = current.length.positive? ? current[0...-1] : current
                   ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value))
@@ -227,7 +227,7 @@ module EbookReader
                   new_value = before + char + after
                   new_cursor = cursor + 1
                   ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value,
-                                                                                         cursor_field => new_cursor))
+                                                                                        cursor_field => new_cursor))
                 else
                   new_value = current + char
                   ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value))

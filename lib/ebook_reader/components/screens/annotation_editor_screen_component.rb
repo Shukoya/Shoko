@@ -11,7 +11,8 @@ module EbookReader
       class AnnotationEditorScreenComponent < BaseComponent
         include Constants::UIConstants
 
-        def initialize(ui_controller, text: nil, range: nil, annotation: nil, chapter_index: nil, dependencies: nil)
+        def initialize(ui_controller, text: nil, range: nil, annotation: nil, chapter_index: nil,
+                       dependencies: nil)
           super(dependencies)
           @ui = ui_controller
           @dependencies = dependencies
@@ -42,6 +43,7 @@ module EbookReader
           draw_box(surface, bounds, box_y, 2, box_h, box_w, label: 'Selected Text')
           wrap_text(@selected_text.to_s.tr("\n", ' '), box_w - 4).each_with_index do |line, i|
             break if i >= box_h - 2
+
             surface.write(bounds, box_y + 1 + i, 4,
                           COLOR_TEXT_PRIMARY + line.ljust(box_w - 4) + Terminal::ANSI::RESET)
           end
@@ -54,6 +56,7 @@ module EbookReader
           wrapped = wrap_text(@note, box_w - 4)
           wrapped.each_with_index do |line, i|
             break if i >= note_h - 2
+
             surface.write(bounds, note_y + 1 + i, 4,
                           COLOR_TEXT_PRIMARY + line.ljust(box_w - 4) + Terminal::ANSI::RESET)
           end
@@ -91,6 +94,7 @@ module EbookReader
 
         def handle_backspace
           return unless @cursor_pos.positive?
+
           @note.slice!(@cursor_pos - 1)
           @cursor_pos -= 1
         end
@@ -102,6 +106,7 @@ module EbookReader
 
         def handle_character(key)
           return unless key.to_s.length == 1 && key.ord >= 32 && key.ord < 127
+
           @note.insert(@cursor_pos, key)
           @cursor_pos += 1
         end
@@ -120,6 +125,7 @@ module EbookReader
 
         def wrap_text(text, width)
           return [''] if text.nil? || text.empty?
+
           text.split("\n", -1).flat_map { |line| line.empty? ? [''] : line.scan(/.{1,#{width}}/) }
         end
       end

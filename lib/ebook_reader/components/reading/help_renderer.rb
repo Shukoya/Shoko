@@ -51,7 +51,8 @@ module EbookReader
             break if row >= bounds.height - 2
 
             col = [(bounds.width - line.length) / 2, 1].max
-            surface.write(bounds, row, col, EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + line + Terminal::ANSI::RESET)
+            surface.write(bounds, row, col,
+                          EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + line + Terminal::ANSI::RESET)
           end
         end
       end

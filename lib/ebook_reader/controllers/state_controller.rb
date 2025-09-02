@@ -43,13 +43,17 @@ module EbookReader
         current_bookmarks << bookmark_data
         @state.dispatch(EbookReader::Domain::Actions::UpdateBookmarksAction.new(current_bookmarks))
 
-        set_message("Bookmark added at Chapter #{@state.get(%i[reader current_chapter]) + 1}, Page #{@state.get(%i[reader current_page])}")
+        set_message("Bookmark added at Chapter #{@state.get(%i[reader
+                                                               current_chapter]) + 1}, Page #{@state.get(%i[
+                                                                                                           reader current_page
+                                                                                                         ])}")
       end
 
       def jump_to_bookmark
         bookmarks = @state.get(%i[reader bookmarks])
         bookmark = bookmarks[@state.get(%i[reader bookmark_selected])]
         return unless bookmark
+
         @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(bookmark.chapter_index))
         @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(single_page: bookmark.line_offset,
                                                                            left_page: bookmark.line_offset))
@@ -78,16 +82,15 @@ module EbookReader
           svc = @dependencies.resolve(:annotation_service) if @dependencies.respond_to?(:resolve)
           if svc
             annotations = svc.list_for_book(@path)
-          else
+          elsif defined?(EbookReader::Annotations::AnnotationStore)
             # Fallback to store for test contexts lacking DI registration
-            if defined?(EbookReader::Annotations::AnnotationStore)
-              annotations = EbookReader::Annotations::AnnotationStore.get(@path) || []
-            end
+            annotations = EbookReader::Annotations::AnnotationStore.get(@path) || []
           end
         rescue StandardError => e
           # Log the error and keep annotations empty
           begin
-            @dependencies.resolve(:logger).error('Failed to refresh annotations', error: e.message, path: @path)
+            @dependencies.resolve(:logger).error('Failed to refresh annotations', error: e.message,
+                                                                                  path: @path)
           rescue StandardError
             # no-op
           end

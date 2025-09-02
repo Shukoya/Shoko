@@ -29,7 +29,8 @@ module EbookReader
         private
 
         def render_header(surface, bounds)
-          surface.write(bounds, 1, 2, "#{EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT}🔖 Bookmarks#{Terminal::ANSI::RESET}")
+          surface.write(bounds, 1, 2,
+                        "#{EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT}🔖 Bookmarks#{Terminal::ANSI::RESET}")
           surface.write(bounds, 1, [bounds.width - 40, 40].max,
                         "#{EbookReader::Constants::UIConstants::COLOR_TEXT_DIM}[B/ESC] Back [d] Delete#{Terminal::ANSI::RESET}")
         end
@@ -68,12 +69,15 @@ module EbookReader
           text_snippet = bookmark.text_snippet[0, width - 8]
 
           if selected
-            surface.write(bounds, row, 2, "#{EbookReader::Constants::UIConstants::SELECTION_POINTER_COLOR}#{EbookReader::Constants::UIConstants::SELECTION_POINTER}#{Terminal::ANSI::RESET}")
-            surface.write(bounds, row, 4, "#{EbookReader::Constants::UIConstants::SELECTION_HIGHLIGHT}#{chapter_text}#{Terminal::ANSI::RESET}")
+            surface.write(bounds, row, 2,
+                          "#{EbookReader::Constants::UIConstants::SELECTION_POINTER_COLOR}#{EbookReader::Constants::UIConstants::SELECTION_POINTER}#{Terminal::ANSI::RESET}")
+            surface.write(bounds, row, 4,
+                          "#{EbookReader::Constants::UIConstants::SELECTION_HIGHLIGHT}#{chapter_text}#{Terminal::ANSI::RESET}")
             surface.write(bounds, row + 1, 6,
                           "#{Terminal::ANSI::ITALIC}#{EbookReader::Constants::UIConstants::COLOR_TEXT_SECONDARY}#{text_snippet}#{Terminal::ANSI::RESET}")
           else
-            surface.write(bounds, row, 4, "#{EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY}#{chapter_text}#{Terminal::ANSI::RESET}")
+            surface.write(bounds, row, 4,
+                          "#{EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY}#{chapter_text}#{Terminal::ANSI::RESET}")
             surface.write(bounds, row + 1, 6,
                           "#{EbookReader::Constants::UIConstants::COLOR_TEXT_DIM}#{EbookReader::Constants::UIConstants::COLOR_TEXT_SECONDARY}#{text_snippet}#{Terminal::ANSI::RESET}")
           end

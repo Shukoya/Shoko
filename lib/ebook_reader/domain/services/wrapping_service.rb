@@ -8,10 +8,6 @@ module EbookReader
       # Service responsible for wrapping chapter lines to a column width.
       # Uses the shared ChapterCache to avoid recomputation across frames.
       class WrappingService < BaseService
-        def initialize(dependencies)
-          super
-        end
-
         # Wrap raw lines for a chapter to the given width.
         # Falls back to a local wrapper if cache is unavailable.
         #
@@ -58,6 +54,7 @@ module EbookReader
           current = ''
           words.each do |word|
             next if word.nil?
+
             if current.empty?
               current = word
             elsif current.length + 1 + word.length <= width
@@ -73,4 +70,3 @@ module EbookReader
     end
   end
 end
-

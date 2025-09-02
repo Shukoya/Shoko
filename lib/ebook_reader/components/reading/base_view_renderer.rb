@@ -12,7 +12,10 @@ module EbookReader
           super()
           # Require a single DI source: either provided explicitly or from the controller
           @dependencies = dependencies || controller&.dependencies
-          raise ArgumentError, 'Dependencies must be provided to BaseViewRenderer' unless @dependencies
+          unless @dependencies
+            raise ArgumentError,
+                  'Dependencies must be provided to BaseViewRenderer'
+          end
 
           @layout_service = @dependencies.resolve(:layout_service)
           @controller = controller
@@ -87,7 +90,8 @@ module EbookReader
             state.set(%i[reader rendered_lines], rendered_lines)
           end
 
-          surface.write(bounds, row, col, EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + text + Terminal::ANSI::RESET)
+          surface.write(bounds, row, col,
+                        EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + text + Terminal::ANSI::RESET)
         end
 
         def highlight_keywords(line)

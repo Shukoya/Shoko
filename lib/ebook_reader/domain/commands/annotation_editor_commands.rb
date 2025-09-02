@@ -55,6 +55,7 @@ module EbookReader
           when :insert_char
             ch = (params[:key] || '').to_s
             return :pass if ch.empty?
+
             mode&.handle_character(ch)
           else
             return :pass

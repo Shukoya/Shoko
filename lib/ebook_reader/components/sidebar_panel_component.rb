@@ -13,6 +13,7 @@ module EbookReader
     # Collapsible sidebar panel with tabbed interface for TOC, Annotations, and Bookmarks
     class SidebarPanelComponent < BaseComponent
       include Constants::UIConstants
+
       TABS = %i[toc annotations bookmarks].freeze
       TAB_NAMES = { toc: 'TOC', annotations: 'Notes', bookmarks: 'Marks' }.freeze
       DEFAULT_WIDTH_PERCENT = 30

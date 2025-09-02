@@ -8,6 +8,7 @@ module EbookReader
   module Components
     class HeaderComponent < BaseComponent
       include Constants::UIConstants
+
       def initialize(view_model_provider = nil, theme = :dark)
         super()
         @view_model_provider = view_model_provider

@@ -38,12 +38,14 @@ module EbookReader
         def setup
           @@session_depth += 1
           return if @@session_depth > 1
+
           Terminal.setup
         end
 
         def cleanup
-          @@session_depth -= 1 if @@session_depth > 0
-          return if @@session_depth > 0
+          @@session_depth -= 1 if @@session_depth.positive?
+          return if @@session_depth.positive?
+
           Terminal.cleanup
         end
 

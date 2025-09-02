@@ -67,8 +67,6 @@ module EbookReader
         def required_dependencies
           [:coordinate_service]
         end
-
-        private
       end
     end
   end

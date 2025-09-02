@@ -7,6 +7,7 @@ RSpec.describe EbookReader::Components::Screens::AnnotationEditorScreenComponent
 
   class FakeUIForEditor
     attr_reader :dependencies
+
     def initialize(svc, state)
       @state = state
       @dependencies = Class.new do
@@ -14,6 +15,7 @@ RSpec.describe EbookReader::Components::Screens::AnnotationEditorScreenComponent
         def resolve(name) = (name == :annotation_service ? @svc : nil)
       end.new(svc)
     end
+
     def current_book_path = '/tmp/book.epub'
     def refresh_annotations; end
     def cleanup_popup_state; end
@@ -48,4 +50,3 @@ RSpec.describe EbookReader::Components::Screens::AnnotationEditorScreenComponent
     comp.save_annotation
   end
 end
-

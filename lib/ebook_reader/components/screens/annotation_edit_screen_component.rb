@@ -98,11 +98,12 @@ module EbookReader
         def handle_backspace
           text = (@state.get(%i[menu annotation_edit_text]) || '').to_s
           cur = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
-          if cur.positive?
-            new_text = text.dup
-            new_text.slice!(cur - 1)
-            @state.update({ %i[menu annotation_edit_text] => new_text, %i[menu annotation_edit_cursor] => cur - 1 })
-          end
+          return unless cur.positive?
+
+          new_text = text.dup
+          new_text.slice!(cur - 1)
+          @state.update({ %i[menu annotation_edit_text] => new_text,
+                          %i[menu annotation_edit_cursor] => cur - 1 })
         end
 
         def handle_enter
@@ -110,16 +111,19 @@ module EbookReader
           cur = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
           new_text = text.dup
           new_text.insert(cur, "\n")
-          @state.update({ %i[menu annotation_edit_text] => new_text, %i[menu annotation_edit_cursor] => cur + 1 })
+          @state.update({ %i[menu annotation_edit_text] => new_text,
+                          %i[menu annotation_edit_cursor] => cur + 1 })
         end
 
         def handle_character(char)
           return unless char.to_s.length == 1 && char.ord >= 32
+
           text = (@state.get(%i[menu annotation_edit_text]) || '').to_s
           cur = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
           new_text = text.dup
           new_text.insert(cur, char)
-          @state.update({ %i[menu annotation_edit_text] => new_text, %i[menu annotation_edit_cursor] => cur + 1 })
+          @state.update({ %i[menu annotation_edit_text] => new_text,
+                          %i[menu annotation_edit_cursor] => cur + 1 })
         end
 
         private

@@ -159,7 +159,8 @@ module EbookReader
             row = list_start_row + index
             is_selected = (start_index + index) == @selected
 
-            render_annotation_item(surface, bounds, row, width, annotation, is_selected, (start_index + index))
+            render_annotation_item(surface, bounds, row, width, annotation, is_selected,
+                                   start_index + index)
           end
         end
 
@@ -179,7 +180,8 @@ module EbookReader
           [start_index, visible_annotations]
         end
 
-        def render_annotation_item(surface, bounds, row, width, annotation, is_selected, absolute_index)
+        def render_annotation_item(surface, bounds, row, width, annotation, is_selected,
+                                   absolute_index)
           # Extract annotation details
           text = (annotation[:text] || 'No text').to_s.tr("\n", ' ')
           note = (annotation[:note] || '').to_s.tr("\n", ' ')

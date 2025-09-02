@@ -48,7 +48,7 @@ module EbookReader
                          else current
                          end
 
-        @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: new_selected))
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: new_selected))
         end
 
         def selected_book
@@ -104,11 +104,11 @@ module EbookReader
 
           # Footer
           book_count = @filtered_epubs&.length.to_i
-          if @state.get(%i[menu mode]) == :search || @state.get(%i[menu search_active])
-            hint = "#{book_count} books • ↑↓ Navigate • Enter Open • / Exit Search"
-          else
-            hint = "#{book_count} books • ↑↓ Navigate • Enter Open • / Search • r Refresh • ESC Back"
-          end
+          hint = if @state.get(%i[menu mode]) == :search || @state.get(%i[menu search_active])
+                   "#{book_count} books • ↑↓ Navigate • Enter Open • / Exit Search"
+                 else
+                   "#{book_count} books • ↑↓ Navigate • Enter Open • / Search • r Refresh • ESC Back"
+                 end
           surface.write(bounds, height - 1, [(width - hint.length) / 2, 1].max,
                         COLOR_TEXT_DIM + hint + Terminal::ANSI::RESET)
         end
@@ -211,7 +211,11 @@ module EbookReader
           title = (meta[:title] || book['name'] || 'Unknown').to_s
           authors = (meta[:author_str] || '').to_s
           year = (meta[:year] || '').to_s
-          size_mb = format_size(book['size'] || (File.size(path) rescue 0))
+          size_mb = format_size(book['size'] || begin
+            File.size(path)
+          rescue StandardError
+            0
+          end)
 
           # Compute column widths
           pointer_w = 2
@@ -239,6 +243,7 @@ module EbookReader
 
         def draw_list_header(surface, bounds, width, row)
           return if row < 5
+
           pointer_w = 2
           gap = 2
           remaining = width - pointer_w - (gap * 3)
@@ -257,7 +262,7 @@ module EbookReader
           header_style = Terminal::ANSI::BOLD + Terminal::ANSI::LIGHT_GREY
           surface.write(bounds, row, 1, header_style + (' ' * pointer_w) + headers + Terminal::ANSI::RESET)
           # Divider line
-          divider = ("─" * [width - 2, 1].max)
+          divider = ('─' * [width - 2, 1].max)
           surface.write(bounds, row + 1, 1, COLOR_TEXT_DIM + divider + Terminal::ANSI::RESET)
         end
 

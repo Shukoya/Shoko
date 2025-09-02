@@ -68,14 +68,18 @@ module EbookReader
         clear_selection!
         max_chapter = (@doc&.chapters&.length || 1) - 1
         return unless @state.get(%i[reader current_chapter]) < max_chapter
-        @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(@state.get(%i[reader current_chapter]) + 1))
+
+        @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(@state.get(%i[reader
+                                                                                            current_chapter]) + 1))
         @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: 0))
       end
 
       def prev_chapter
         clear_selection!
         return unless @state.get(%i[reader current_chapter]).positive?
-        @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(@state.get(%i[reader current_chapter]) - 1))
+
+        @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(@state.get(%i[reader
+                                                                                            current_chapter]) - 1))
         @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: 0))
       end
 
@@ -88,7 +92,9 @@ module EbookReader
       def go_to_end
         clear_selection!
         @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new((@doc&.chapters&.length || 1) - 1))
-        @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: @state.get(%i[reader total_pages]) - 1))
+        @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: @state.get(%i[
+                                                                                                            reader total_pages
+                                                                                                          ]) - 1))
       end
 
       def jump_to_chapter(chapter_index)
@@ -106,7 +112,8 @@ module EbookReader
         else
           # Absolute mode uses per-chapter offsets
           @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(chapter_index))
-          @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(single_page: 0, left_page: 0))
+          @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(single_page: 0,
+                                                                             left_page: 0))
         end
       end
 

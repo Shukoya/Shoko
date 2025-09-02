@@ -17,7 +17,9 @@ RSpec.describe EbookReader::MouseableReader do
         def title = 'Doc'
         def language = 'en'
       end
+
       def initialize(_path); end
+
       def load_document
         ch = FakeChapter.new('Ch1', ['l1'])
         FakeDoc.new(ch)

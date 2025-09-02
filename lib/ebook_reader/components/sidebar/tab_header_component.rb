@@ -8,6 +8,7 @@ module EbookReader
       # Modern bottom tab navigation for sidebar
       class TabHeaderComponent < BaseComponent
         include Constants::UIConstants
+
         TABS = %i[toc annotations bookmarks].freeze
         TAB_INFO = {
           toc: { label: 'Contents', icon: '◉', key: 'g' },

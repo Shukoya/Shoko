@@ -8,6 +8,7 @@ module EbookReader
       # Annotations tab renderer for sidebar
       class AnnotationsTabRenderer < BaseComponent
         include Constants::UIConstants
+
         def initialize(controller)
           super()
           @controller = controller

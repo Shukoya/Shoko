@@ -74,7 +74,8 @@ module EbookReader
 
         # Progress left
         left_prog = "[#{view_model.current_chapter + 1}/#{view_model.total_chapters}]"
-        surface.write(bounds, row1, 1, EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + left_prog + Terminal::ANSI::RESET)
+        surface.write(bounds, row1, 1,
+                      EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + left_prog + Terminal::ANSI::RESET)
 
         # Mode center
         mode_label = view_model.view_mode == :split ? '[SPLIT]' : '[SINGLE]'
@@ -92,7 +93,8 @@ module EbookReader
         return unless height >= 2
 
         title_text = view_model.document_title[0, [width - 15, 0].max]
-        surface.write(bounds, height, 1, EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + "[#{title_text}]" + Terminal::ANSI::RESET)
+        surface.write(bounds, height, 1,
+                      EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + "[#{title_text}]" + Terminal::ANSI::RESET)
         surface.write(bounds, height, [width - 10, 1].max,
                       EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + "[#{view_model.language}]" + Terminal::ANSI::RESET)
       end

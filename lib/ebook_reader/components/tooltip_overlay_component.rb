@@ -10,6 +10,7 @@ module EbookReader
     # consistent coordinate handling for the fragile tooltip system.
     class TooltipOverlayComponent < BaseComponent
       include Constants::UIConstants
+
       def initialize(controller, coordinate_service:)
         @controller = controller
         @coordinate_service = coordinate_service
@@ -94,7 +95,8 @@ module EbookReader
 
           # If we have column bounds, only highlight within the target column
           if target_column_bounds
-            next unless @coordinate_service.column_overlaps?(line_start_col, line_end_col, target_column_bounds)
+            next unless @coordinate_service.column_overlaps?(line_start_col, line_end_col,
+                                                             target_column_bounds)
 
             # Constrain selection to target column bounds
             row_start_x = y == start_pos[:y] ? start_pos[:x] : target_column_bounds[:start]

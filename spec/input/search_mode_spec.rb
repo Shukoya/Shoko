@@ -78,7 +78,10 @@ RSpec.describe 'MainMenu search mode integration' do
     expect(state.get(%i[menu search_query])).to eq('a')
 
     # Create the files on the fake filesystem for selection to succeed
-    FileUtils.mkdir_p('/'); File.write('/ap.epub', ''); File.write('/gamma.epub', ''); File.write('/alpha.epub', '')
+    FileUtils.mkdir_p('/')
+    File.write('/ap.epub', '')
+    File.write('/gamma.epub', '')
+    File.write('/alpha.epub', '')
 
     # Move selection down once (should point to the second filtered match)
     dispatcher.handle_key("\e[B")

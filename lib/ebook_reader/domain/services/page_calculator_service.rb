@@ -45,7 +45,7 @@ module EbookReader
           return if layout_metrics[:lines_per_page] <= 0
 
           build_all_chapter_pages(doc, layout_metrics) do |idx, total|
-            on_progress.call(idx, total) if on_progress
+            on_progress&.call(idx, total)
           end
           @pages_data
         end
@@ -147,9 +147,7 @@ module EbookReader
 
           chapter_lines = get_chapter_lines(chapter_index, state)
           wrapped_lines = @text_wrapper.wrap_chapter_lines(chapter_lines, calculate_column_width)
-          result = (wrapped_lines.size.to_f / lines_per_page).ceil
-
-          result
+          (wrapped_lines.size.to_f / lines_per_page).ceil
         end
 
         def calculate_lines_per_page
@@ -195,10 +193,8 @@ module EbookReader
 
           begin
             chapter = doc.get_chapter(chapter_index)
-            chapter_lines = chapter&.dig(:lines) || chapter&.lines || []
-
-            chapter_lines
-          rescue StandardError => e
+            chapter&.dig(:lines) || chapter&.lines || []
+          rescue StandardError
             []
           end
         end

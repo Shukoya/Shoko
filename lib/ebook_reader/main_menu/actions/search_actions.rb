@@ -20,7 +20,9 @@ module EbookReader
         def move_search_cursor(delta)
           search_cursor = EbookReader::Domain::Selectors::MenuSelectors.search_cursor(@state)
           search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
-          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(search_cursor: (search_cursor + delta).clamp(0, search_query.length)))
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(search_cursor: (search_cursor + delta).clamp(
+            0, search_query.length
+          )))
         end
 
         def handle_delete

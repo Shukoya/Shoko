@@ -11,7 +11,7 @@ module EbookReader
           # Fallback to internal list if component is unavailable (tests)
           book ||= begin
             idx = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state)
-            (@filtered_epubs && @filtered_epubs[idx])
+            @filtered_epubs && @filtered_epubs[idx]
           end
           return unless book
 
@@ -42,6 +42,7 @@ module EbookReader
 
         def open_book(path)
           return file_not_found unless File.exist?(path)
+
           load_and_open_with_progress(path)
         rescue StandardError => e
           handle_reader_error(path, e)
@@ -67,98 +68,93 @@ module EbookReader
         ensure
           # Return cleanly to the previous menu mode (e.g., :recent or :browse)
           @terminal_service.setup
-          if respond_to?(:switch_to_mode)
-            if prior_mode
-              switch_to_mode(prior_mode)
-            else
-              switch_to_mode(:browse)
-            end
-          end
+          switch_to_mode(prior_mode || :browse) if respond_to?(:switch_to_mode)
         end
 
         # Show inline progress in the current list and only open reader once fully loaded
         def load_and_open_with_progress(path)
           # In test environments, run synchronously to satisfy timing-sensitive specs
-          if defined?(RSpec)
-            return run_reader(path)
-          end
+          return run_reader(path) if defined?(RSpec)
+
           index = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
           mode  = EbookReader::Domain::Selectors::MenuSelectors.mode(@state)
 
           @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-            loading_active: true,
-            loading_path: path,
-            loading_progress: 0.0,
-            loading_index: index,
-            loading_mode: mode,
-          ))
+                            loading_active: true,
+                            loading_path: path,
+                            loading_progress: 0.0,
+                            loading_index: index,
+                            loading_mode: mode
+                          ))
 
           begin
-              height, width = @terminal_service.size
-              # Prepare services
-              layout = @dependencies.resolve(:layout_service)
-              wrapper = @dependencies.registered?(:wrapping_service) ? @dependencies.resolve(:wrapping_service) : nil
-              page_calc = @dependencies.resolve(:page_calculator)
+            height, width = @terminal_service.size
+            # Prepare services
+            layout = @dependencies.resolve(:layout_service)
+            wrapper = @dependencies.registered?(:wrapping_service) ? @dependencies.resolve(:wrapping_service) : nil
+            page_calc = @dependencies.resolve(:page_calculator)
 
-              # Load document
-              doc_svc = EbookReader::Infrastructure::DocumentService.new(path)
-              doc = doc_svc.load_document
-              # Update total chapters for navigation service expectations
-              @state.update({ %i[reader total_chapters] => (doc&.chapter_count || 0) })
-              # Pre-register for reuse
-              @dependencies.register(:document, doc)
+            # Load document
+            doc_svc = EbookReader::Infrastructure::DocumentService.new(path)
+            doc = doc_svc.load_document
+            # Update total chapters for navigation service expectations
+            @state.update({ %i[reader total_chapters] => doc&.chapter_count || 0 })
+            # Pre-register for reuse
+            @dependencies.register(:document, doc)
 
-              # Build pages according to numbering mode
-              if @state.get(%i[config page_numbering_mode]) == :dynamic
-                page_calc.build_page_map(width, height, doc, @state) do |done, total|
-                  @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                    loading_progress: (done.to_f / [total, 1].max)
-                  ))
-                  draw_screen
-                end
+            # Build pages according to numbering mode
+            if @state.get(%i[config page_numbering_mode]) == :dynamic
+              page_calc.build_page_map(width, height, doc, @state) do |done, total|
                 @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                  loading_progress: 1.0
-                ))
-              else
-                # Absolute mode: compute per-chapter with progress
-                col_w, content_h = layout.calculate_metrics(width, height, @state.get(%i[config view_mode]))
-                lines_per_page = layout.adjust_for_line_spacing(content_h, @state.get(%i[config line_spacing]))
-                total = doc.chapter_count
-                page_map = []
-                total.times do |i|
-                  chapter = doc.get_chapter(i)
-                  lines = chapter&.lines || []
-                  wrapped = if wrapper
-                              wrapper.wrap_lines(lines, i, col_w)
-                            else
-                              # Simple fallback wrap
-                              lines.flat_map { |ln|
-                                if ln.length <= col_w
-                                  ln
-                                else
-                                  ln.scan(/.{1,#{col_w}}/)
-                                end
-                              }
-                            end
-                  pages = (wrapped.size.to_f / [lines_per_page, 1].max).ceil
-                  page_map << pages
-                  @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                    loading_progress: ((i + 1).to_f / [total, 1].max)
-                  ))
-                  draw_screen
-                end
-                @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum,
-                                %i[reader last_width] => width, %i[reader last_height] => height })
+                                  loading_progress: (done.to_f / [total, 1].max)
+                                ))
+                draw_screen
               end
+              @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
+                                loading_progress: 1.0
+                              ))
+            else
+              # Absolute mode: compute per-chapter with progress
+              col_w, content_h = layout.calculate_metrics(width, height,
+                                                          @state.get(%i[config view_mode]))
+              lines_per_page = layout.adjust_for_line_spacing(content_h,
+                                                              @state.get(%i[config line_spacing]))
+              total = doc.chapter_count
+              page_map = []
+              total.times do |i|
+                chapter = doc.get_chapter(i)
+                lines = chapter&.lines || []
+                wrapped = if wrapper
+                            wrapper.wrap_lines(lines, i, col_w)
+                          else
+                            # Simple fallback wrap
+                            lines.flat_map do |ln|
+                              if ln.length <= col_w
+                                ln
+                              else
+                                ln.scan(/.{1,#{col_w}}/)
+                              end
+                            end
+                          end
+                pages = (wrapped.size.to_f / [lines_per_page, 1].max).ceil
+                page_map << pages
+                @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
+                                  loading_progress: ((i + 1).to_f / [total, 1].max)
+                                ))
+                draw_screen
+              end
+              @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum,
+                              %i[reader last_width] => width, %i[reader last_height] => height })
+            end
           rescue StandardError => e
             handle_reader_error(path, e)
           ensure
             # Clear loading UI and open the reader
             @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-              loading_active: false,
-              loading_path: nil,
-              loading_index: nil,
-            ))
+                              loading_active: false,
+                              loading_path: nil,
+                              loading_index: nil
+                            ))
             run_reader(path)
           end
         end

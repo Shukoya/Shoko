@@ -115,7 +115,8 @@ module EbookReader
 
             line_start_col = line_info[:col]
             line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
-            return { start: line_start_col, end: line_end_col } if pos[:x].between?(line_start_col, line_end_col)
+            return { start: line_start_col, end: line_end_col } if pos[:x].between?(line_start_col,
+                                                                                    line_end_col)
           end
           nil
         end
@@ -127,6 +128,7 @@ module EbookReader
         # @return [Boolean]
         def column_overlaps?(line_start, line_end, bounds)
           return false unless bounds
+
           !(line_end < bounds[:start] || line_start > bounds[:end])
         end
 

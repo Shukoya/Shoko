@@ -28,6 +28,7 @@ module EbookReader
         container = REXML::Document.new(container_xml)
         rootfile = container.elements['//rootfile']
         return nil unless rootfile
+
         opf_path = rootfile.attributes['full-path']
         zip.find_entry(opf_path) ? opf_path : nil
       rescue StandardError
@@ -36,6 +37,7 @@ module EbookReader
 
       def self.normalize(meta)
         return {} unless meta.is_a?(Hash)
+
         authors = Array(meta[:authors]).compact.map(&:to_s).reject(&:empty?)
         {
           authors: authors,
@@ -49,4 +51,3 @@ module EbookReader
     end
   end
 end
-

@@ -59,7 +59,7 @@ module EbookReader
     def_delegators :@input_controller, :handle_popup_navigation, :handle_popup_action_key,
                    :handle_popup_cancel, :handle_popup_menu_input
 
-  def initialize(epub_path, _config = nil, dependencies = nil)
+    def initialize(epub_path, _config = nil, dependencies = nil)
       @path = epub_path
       @dependencies = dependencies || Domain::ContainerFactory.create_default_container
       @state = @dependencies.resolve(:global_state)
@@ -72,7 +72,9 @@ module EbookReader
       @layout_service = @dependencies.resolve(:layout_service)
       @clipboard_service = @dependencies.resolve(:clipboard_service)
       @terminal_service = @dependencies.resolve(:terminal_service)
-      @wrapping_service = @dependencies.resolve(:wrapping_service) if @dependencies.registered?(:wrapping_service)
+      if @dependencies.registered?(:wrapping_service)
+        @wrapping_service = @dependencies.resolve(:wrapping_service)
+      end
 
       # Load document before creating controllers that depend on it
       load_document
@@ -83,7 +85,8 @@ module EbookReader
       @navigation_controller = Controllers::NavigationController.new(@state, @doc,
                                                                      @page_calculator, @dependencies)
       @ui_controller = Controllers::UIController.new(@state, @dependencies)
-      @state_controller = Controllers::StateController.new(@state, @doc, epub_path, @dependencies)
+      @state_controller = Controllers::StateController.new(@state, @doc, epub_path,
+                                                           @dependencies)
       @input_controller = Controllers::InputController.new(@state, @dependencies)
 
       # Register controllers in the dependency container for components that resolve them
@@ -314,11 +317,15 @@ module EbookReader
     end
 
     def toc_down
-      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(toc_selected: @state.get(%i[reader toc_selected]) + 1))
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(toc_selected: @state.get(%i[
+                                                                                                          reader toc_selected
+                                                                                                        ]) + 1))
     end
 
     def toc_up
-      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(toc_selected: [@state.get(%i[reader toc_selected]) - 1, 0].max))
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(toc_selected: [
+        @state.get(%i[reader toc_selected]) - 1, 0
+      ].max))
     end
 
     def toc_select
@@ -371,7 +378,7 @@ module EbookReader
       @dependencies.register(:document, @doc)
       # Expose chapter count for navigation service logic
       begin
-        @state.update({ %i[reader total_chapters] => (@doc&.chapter_count || 0) })
+        @state.update({ %i[reader total_chapters] => @doc&.chapter_count || 0 })
       rescue StandardError
         # best-effort
       end
@@ -393,10 +400,14 @@ module EbookReader
         edit_flag = pending[:edit] || pending['edit']
         ann = pending[:annotation] || pending['annotation']
         @navigation_controller.jump_to_chapter(chapter_index) if chapter_index
-      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection_range)) if selection_range
+        if selection_range
+          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection_range))
+        end
         if edit_flag && ann
           # Ensure selection exists for editor context
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection_range)) if selection_range
+          if selection_range
+            @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection_range))
+          end
           # Switch to annotation editor with existing annotation payload
           @ui_controller.switch_mode(:annotation_editor,
                                      text: ann[:text] || ann['text'],
@@ -411,7 +422,7 @@ module EbookReader
                                      chapter_index: chapter_index)
         end
       ensure
-      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_jump: nil))
+        @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_jump: nil))
       end
     end
 
@@ -605,7 +616,7 @@ module EbookReader
       reset    = Terminal::ANSI::RESET
 
       # Use thin line glyphs with foreground colors to avoid background bleed
-      track = if bar_width > 0
+      track = if bar_width.positive?
                 (green_fg + ('━' * filled)) + (grey_fg + ('━' * (bar_width - filled))) + reset
               else
                 ''
@@ -617,8 +628,9 @@ module EbookReader
 
     def preloaded_page_data?
       if Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic
-        return @page_calculator && @page_calculator.total_pages.positive?
+        return @page_calculator&.total_pages&.positive?
       end
+
       @state.get(%i[reader total_pages]).to_i.positive?
     end
 

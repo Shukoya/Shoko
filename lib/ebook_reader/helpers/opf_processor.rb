@@ -35,10 +35,8 @@ module EbookReader
           metadata[:authors] = authors unless authors.empty?
 
           # dc:date — parse year if present
-          if (date_elem = meta_elem.elements['*[local-name()="date"]']) && date_elem.text
-            if (m = date_elem.text.to_s.match(/(\d{4})/))
-              metadata[:year] = m[1]
-            end
+          if (date_elem = meta_elem.elements['*[local-name()="date"]']) && date_elem.text && (m = date_elem.text.to_s.match(/(\d{4})/))
+            metadata[:year] = m[1]
           end
         end
         metadata

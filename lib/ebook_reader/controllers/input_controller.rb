@@ -179,7 +179,7 @@ module EbookReader
 
         # Save: support Ctrl+S (\x13) and 'S'
         bindings["\x13"] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
-        bindings['S']   = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
+        bindings['S'] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
 
         # Backspace (both variants)
         bindings["\x7F"] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.backspace

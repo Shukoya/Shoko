@@ -107,11 +107,6 @@ module EbookReader
       draw_screen
     end
 
-    def refresh_highlighting
-      # Defer to ReaderController draw, which renders overlay and ends frame
-      super
-    end
-
     def handle_selection_end
       @state.dispatch(Domain::Actions::UpdateSelectionAction.new(@mouse_handler.selection_range))
       return unless @state.get(%i[reader selection])

@@ -20,7 +20,7 @@ module EbookReader
 
         # Setter method for selection index (used by input handlers)
         def selected=(index)
-        @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: index))
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: index))
           invalidate
         end
 
@@ -77,6 +77,7 @@ module EbookReader
           current_row = list_start
           visible_items.each_with_index do |book, i|
             break if current_row >= bounds.height - 1
+
             render_recent_item(surface, bounds, current_row, bounds.width, book, start_index + i,
                                selected)
             if loading_active && loading_path == book['path'] && current_row + 1 < bounds.height - 1
@@ -104,7 +105,11 @@ module EbookReader
           @meta_cache ||= {}
 
           path = book['path']
-          size_bytes = (File.size(path) rescue 0)
+          size_bytes = begin
+            File.size(path)
+          rescue StandardError
+            0
+          end
           meta = @meta_cache[path]
           unless meta
             require_relative '../../helpers/metadata_extractor'
@@ -125,7 +130,8 @@ module EbookReader
           year_w = 6
           last_w = 16
           size_w = 8
-          author_w = [[(remaining * 0.25).to_i, 12].max, remaining - 20 - year_w - last_w - size_w].min
+          author_w = [[(remaining * 0.25).to_i, 12].max,
+                      remaining - 20 - year_w - last_w - size_w].min
           title_w = [remaining - author_w - year_w - last_w - size_w, 20].max
 
           pointer = is_selected ? '▸ ' : '  '
@@ -150,7 +156,8 @@ module EbookReader
           year_w = 6
           last_w = 16
           size_w = 8
-          author_w = [[(remaining * 0.25).to_i, 12].max, remaining - 20 - year_w - last_w - size_w].min
+          author_w = [[(remaining * 0.25).to_i, 12].max,
+                      remaining - 20 - year_w - last_w - size_w].min
           title_w = [remaining - author_w - year_w - last_w - size_w, 20].max
 
           headers = [
@@ -163,7 +170,7 @@ module EbookReader
           header_style = Terminal::ANSI::BOLD + Terminal::ANSI::LIGHT_GREY
           surface.write(bounds, row, 1, header_style + (' ' * pointer_w) + headers + Terminal::ANSI::RESET)
           # Divider line
-          divider = ("─" * [width - 2, 1].max)
+          divider = ('─' * [width - 2, 1].max)
           surface.write(bounds, row + 1, 1, UIConstants::COLOR_TEXT_DIM + divider + Terminal::ANSI::RESET)
         end
 
@@ -175,11 +182,13 @@ module EbookReader
         def truncate_text(text, max_length)
           str = text.to_s
           return str if str.length <= max_length
+
           "#{str[0...(max_length - 3)]}..."
         end
 
         def relative_accessed_label(iso)
           return '' unless iso
+
           t = begin
             Time.parse(iso)
           rescue StandardError
@@ -194,15 +203,15 @@ module EbookReader
           weeks = days / 7
 
           if hours < 1
-            return minutes <= 1 ? 'a minute ago' : "#{minutes} minutes ago"
+            minutes <= 1 ? 'a minute ago' : "#{minutes} minutes ago"
           elsif days < 1
-            return hours == 1 ? 'an hour ago' : "#{hours} hours ago"
+            hours == 1 ? 'an hour ago' : "#{hours} hours ago"
           elsif days == 1
-            return 'yesterday'
+            'yesterday'
           elsif days < 7
-            return days == 1 ? 'a day ago' : "#{days} days ago"
+            days == 1 ? 'a day ago' : "#{days} days ago"
           else
-            return weeks == 1 ? 'a week ago' : "#{weeks} weeks ago"
+            weeks == 1 ? 'a week ago' : "#{weeks} weeks ago"
           end
         end
 

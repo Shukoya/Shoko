@@ -20,32 +20,43 @@ module EbookReader
           case @action
           when :menu_up then update_menu_index(context, :selected, -1, 0, 5)
           when :menu_down then update_menu_index(context, :selected, +1, 0, 5)
-          when :menu_select then context.handle_menu_selection if context.respond_to?(:handle_menu_selection)
-          when :menu_quit then context.cleanup_and_exit(0, '') if context.respond_to?(:cleanup_and_exit)
-          when :back_to_menu then context.switch_to_mode(:menu) if context.respond_to?(:switch_to_mode)
+          when :menu_select then if context.respond_to?(:handle_menu_selection)
+                                   context.handle_menu_selection
+                                 end
+          when :menu_quit then if context.respond_to?(:cleanup_and_exit)
+                                 context.cleanup_and_exit(0,
+                                                          '')
+                               end
+          when :back_to_menu then if context.respond_to?(:switch_to_mode)
+                                    context.switch_to_mode(:menu)
+                                  end
           when :browse_up then browse_nav(context, -1)
           when :browse_down then browse_nav(context, +1)
-          when :browse_select then context.open_selected_book if context.respond_to?(:open_selected_book)
-          when :start_search then
+          when :browse_select then if context.respond_to?(:open_selected_book)
+                                     context.open_selected_book
+                                   end
+          when :start_search
             if context.respond_to?(:switch_to_search)
               context.switch_to_search
             else
               # Fallback: set mode/search_active via actions
               context.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(mode: :search,
-                                                                                          search_active: true))
+                                                                                        search_active: true))
             end
             current = (context.state.get(%i[menu search_query]) || '').to_s
             context.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(search_cursor: current.length))
-          when :exit_search then
+          when :exit_search
             if context.respond_to?(:switch_to_browse)
               context.switch_to_browse
             else
               context.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(mode: :browse,
-                                                                                           search_active: false))
+                                                                                        search_active: false))
             end
           when :recent_up then recent_nav(context, -1)
           when :recent_down then recent_nav(context, +1)
-          when :recent_select then context.open_selected_recent_book if context.respond_to?(:open_selected_recent_book)
+          when :recent_select then if context.respond_to?(:open_selected_recent_book)
+                                     context.open_selected_recent_book
+                                   end
           else
             :pass
           end
@@ -64,15 +75,14 @@ module EbookReader
         def browse_nav(context, delta)
           state = context.state
           # Prefer component's filtered list length; fall back to public accessor
-          max_idx = begin
-            if context.respond_to?(:main_menu_component) && context.main_menu_component.respond_to?(:browse_screen)
-              cnt = context.main_menu_component.browse_screen.filtered_count
-              [(cnt || 0) - 1, 0].max
-            else
-              epubs = (context.respond_to?(:filtered_epubs) && context.filtered_epubs) || []
-              [(epubs.length) - 1, 0].max
-            end
-          end
+          max_idx = if context.respond_to?(:main_menu_component) && context.main_menu_component.respond_to?(:browse_screen)
+                      cnt = context.main_menu_component.browse_screen.filtered_count
+                      [(cnt || 0) - 1, 0].max
+                    else
+                      epubs = (context.respond_to?(:filtered_epubs) && context.filtered_epubs) || []
+                      [epubs.length - 1, 0].max
+                    end
+
           current = state.get(%i[menu browse_selected]) || 0
           new_val = [[current + delta, 0].max, max_idx].min
           state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: new_val))

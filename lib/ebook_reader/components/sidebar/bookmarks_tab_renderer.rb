@@ -6,8 +6,9 @@ module EbookReader
   module Components
     module Sidebar
       # Bookmarks tab renderer for sidebar
-class BookmarksTabRenderer < BaseComponent
-  include Constants::UIConstants
+      class BookmarksTabRenderer < BaseComponent
+        include Constants::UIConstants
+
         def initialize(controller)
           super()
           @controller = controller

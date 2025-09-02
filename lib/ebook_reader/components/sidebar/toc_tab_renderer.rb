@@ -8,6 +8,7 @@ module EbookReader
       # TOC tab renderer for sidebar
       class TocTabRenderer < BaseComponent
         include Constants::UIConstants
+
         def initialize(controller)
           super()
           @controller = controller
@@ -97,17 +98,15 @@ module EbookReader
           max_title_length = bounds.width - 6
           title = (chapter.title || "Chapter #{idx + 1}")[0, max_title_length]
 
-          if idx == selected_index
-            # Selected item with modern styling
-            indicator = "#{COLOR_TEXT_ACCENT}●#{Terminal::ANSI::RESET}"
-            surface.write(bounds, y, bounds.x + 1, indicator)
-            surface.write(bounds, y, bounds.x + 3, "#{COLOR_TEXT_PRIMARY}#{title}#{Terminal::ANSI::RESET}")
-          else
-            # Unselected item with subtle styling
-            indicator = "#{COLOR_TEXT_DIM}○#{Terminal::ANSI::RESET}"
-            surface.write(bounds, y, bounds.x + 1, indicator)
-            surface.write(bounds, y, bounds.x + 3, "#{COLOR_TEXT_PRIMARY}#{title}#{Terminal::ANSI::RESET}")
-          end
+          indicator = if idx == selected_index
+                        # Selected item with modern styling
+                        "#{COLOR_TEXT_ACCENT}●#{Terminal::ANSI::RESET}"
+                      else
+                        # Unselected item with subtle styling
+                        "#{COLOR_TEXT_DIM}○#{Terminal::ANSI::RESET}"
+                      end
+          surface.write(bounds, y, bounds.x + 1, indicator)
+          surface.write(bounds, y, bounds.x + 3, "#{COLOR_TEXT_PRIMARY}#{title}#{Terminal::ANSI::RESET}")
         end
       end
     end

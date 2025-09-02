@@ -8,6 +8,7 @@ module EbookReader
     # and integrates with the clipboard service for reliable copy functionality.
     class EnhancedPopupMenu < BaseComponent
       include Constants::UIConstants
+
       attr_reader :visible, :selected_index, :x, :y, :width, :height
 
       def initialize(selection_range, available_actions = nil, coordinate_service = nil,

@@ -25,7 +25,8 @@ module EbookReader
         private
 
         def render_header(surface, bounds)
-          surface.write(bounds, 1, 2, "#{EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT}📖 Table of Contents#{Terminal::ANSI::RESET}")
+          surface.write(bounds, 1, 2,
+                        "#{EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT}📖 Table of Contents#{Terminal::ANSI::RESET}")
           surface.write(bounds, 1, [bounds.width - 30, 40].max,
                         "#{EbookReader::Constants::UIConstants::COLOR_TEXT_DIM}[t/ESC] Back to Reading#{Terminal::ANSI::RESET}")
         end
@@ -49,10 +50,13 @@ module EbookReader
           line = (chapter.title || 'Untitled')[0, bounds.width - 6]
 
           if idx == selected_index
-            surface.write(bounds, y, 2, "#{EbookReader::Constants::UIConstants::SELECTION_POINTER_COLOR}#{EbookReader::Constants::UIConstants::SELECTION_POINTER}#{Terminal::ANSI::RESET}")
-            surface.write(bounds, y, 4, EbookReader::Constants::UIConstants::SELECTION_HIGHLIGHT + line + Terminal::ANSI::RESET)
+            surface.write(bounds, y, 2,
+                          "#{EbookReader::Constants::UIConstants::SELECTION_POINTER_COLOR}#{EbookReader::Constants::UIConstants::SELECTION_POINTER}#{Terminal::ANSI::RESET}")
+            surface.write(bounds, y, 4,
+                          EbookReader::Constants::UIConstants::SELECTION_HIGHLIGHT + line + Terminal::ANSI::RESET)
           else
-            surface.write(bounds, y, 4, EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + line + Terminal::ANSI::RESET)
+            surface.write(bounds, y, 4,
+                          EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + line + Terminal::ANSI::RESET)
           end
         end
 

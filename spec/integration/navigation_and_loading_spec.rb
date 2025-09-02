@@ -63,8 +63,8 @@ RSpec.describe 'Navigation and loading integration' do
 
   context 'ReaderController sets total_chapters from document' do
     class TestDoc3
-      def initialize; @chapters = [1, 2, 3]; end
-      def chapter_count; 3; end
+      def initialize = @chapters = [1, 2, 3]
+      def chapter_count = 3
     end
 
     it 'updates state[:reader][:total_chapters]' do
