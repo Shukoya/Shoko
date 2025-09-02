@@ -16,7 +16,7 @@ module EbookReader
         end
 
         def input=(value)
-          @state.set(%i[menu file_input], value || '')
+        @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(file_input: (value || '')))
         end
 
         def input

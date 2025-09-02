@@ -1,9 +1,9 @@
 # EBook Reader Refactoring Roadmap
 
 **Current Status: Phase 4.5 - Documentation + Input Alignment**  
-**Overall Progress: ~85% Complete (audited 2025-09-02)**  
+**Overall Progress: ~88% Complete (audited 2025-09-02)**  
 **Estimated Completion: Phase 4.6**  
-**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Remaining work is documentation cleanup (Project Structure + DI examples), state API consistency in menu, removal of vestigial reader annotations mode paths, and small DI/style touch-ups.
+**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Remaining work is documentation cleanup (Project Structure + DI examples) and minor menu state API consistency. Reader loading flicker has been fixed by keeping the app in the alternate screen and drawing an in-app loading overlay while the book initializes.
 
 ## Phase 1: Infrastructure Foundation ✅ COMPLETE
 
@@ -190,6 +190,7 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
  - Selection/overlay duplication: Eliminated — column-bounds logic now lives in `CoordinateService`; overlay and selection extraction use it — VERIFIED.
 - Annotation editor input: Reader-context editor is routed via `Domain::Commands::AnnotationEditorCommandFactory` (InputController) — VERIFIED.  
   Menu-context editor is also routed via `Domain::Commands::AnnotationEditorCommandFactory` in `MainMenu#register_annotation_editor_bindings` — VERIFIED.
+- Loading UX: Previously, `MainMenu#run_reader` called `@terminal_service.cleanup` before constructing the reader, causing a flicker to the shell while large books loaded. Fixed by removing the pre-reader cleanup, making `TerminalService#setup/cleanup` idempotent (reference-counted), and drawing an in-app "Opening book…" overlay during initialization.
 
 ## Phase 4: Annotations Unification 🚧 IN PROGRESS
 
@@ -253,20 +254,23 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
 
 ## Newly Identified Follow-ups (from deep scan)
 
-1) Reader annotations mode vestiges  
-   - `UIController#open_annotations` sets `:annotations` mode without a dedicated component; `ReaderController#draw_screen` special-cases `:annotations` even though `current_mode` is nil. Remove the reader `:annotations` mode entirely and instead toggle the sidebar to the annotations tab (mirroring `open_toc`). Drop `InputController#register_annotations_list_bindings_new` and route navigation via conditional sidebar commands.
+1) Reader annotations mode vestiges — RESOLVED  
+   - `UIController#open_annotations` now toggles the sidebar tab; no reader `:annotations` mode or draw_screen special case remains.
 
-2) Input controller lambdas using `instance_variable_get`  
-   - Replace `instance_variable_get(:@dependencies)` lookups with explicit DI resolution in closures or route via domain commands to avoid closures touching controller internals.
+2) Input controller lambdas using `instance_variable_get` — RESOLVED  
+   - No remaining `instance_variable_get(:@dependencies)` patterns found in input/controller code.
 
-3) Consistent menu state updates  
-   - Prefer dispatching `UpdateMenuAction` for single-field changes in `MainMenu` to match controller patterns; reserve `set` for test helpers or scoped atomic updates.
+3) Consistent menu state updates — PARTIAL  
+   - Remaining: some lambdas still use `state.set` (e.g., menu/browse nav). Convert to dispatching `UpdateMenuAction` for consistency.
 
-4) Architecture docs  
+4) Architecture docs — OPEN  
    - Update `DEVELOPMENT.md` Project Structure + DI examples as noted above.
 
-5) MainMenuComponent DI hygiene  
-   - Stop reaching into `@main_menu.instance_variable_get(:@dependencies)`. Pass dependencies explicitly to `MainMenuComponent` and screen components via constructor to keep a single DI source.
+5) MainMenu/component DI hygiene — RESOLVED  
+   - No direct `instance_variable_get(:@dependencies)` use found. Continue to pass dependencies explicitly where needed.
 
-6) Component duplication  
-   - `Components::Screens::AnnotationsScreenComponent` defines `normalize_list` twice; deduplicate and keep a single implementation.
+6) Component duplication — RESOLVED  
+   - `Components::Screens::AnnotationsScreenComponent` has a single `normalize_list` implementation.
+
+7) Main menu file-open duplication — FIXED  
+   - Removed duplicate `open_book/run_reader/sanitize_input_path/handle_file_path` methods from `MainMenu`. The included `Actions::FileActions` module is now the single source.

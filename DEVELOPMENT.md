@@ -50,30 +50,37 @@ This guide covers the development setup, architecture, and best practices for co
 
 ```
 reader/
-├── bin/                    # Executable files
-│   └── ebook_reader       # Main executable
-├── lib/                   # Library code
-│   └── ebook_reader/      # Main module
-│       ├── core/          # Core components
-│       ├── concerns/      # Shared concerns
-│       ├── helpers/       # Helper modules
-│       ├── infrastructure/# Infrastructure (logging, etc.)
-│       ├── renderers/     # Rendering components
-│       ├── services/      # Service objects
-│       ├── ui/            # UI components
-│       └── validators/    # Input validators
-├── spec/                  # Test files
-├── docs/                  # Additional documentation
-└── examples/              # Example usage
+├── bin/                         # Executables (rspec, rubocop, ebook_reader, etc.)
+├── lib/
+│   └── ebook_reader/
+│       ├── application/         # App entry points (UnifiedApplication)
+│       ├── components/          # Presentation components (screens, reading, sidebar)
+│       ├── controllers/         # Application controllers (ui, navigation, input, state)
+│       ├── domain/
+│       │   ├── actions/         # Explicit state mutations
+│       │   ├── commands/        # Input-triggered command objects
+│       │   ├── selectors/       # Read-only projections from state
+│       │   └── services/        # Business logic (navigation, layout, annotations, etc.)
+│       ├── infrastructure/      # Event bus, logger, state store, document service
+│       ├── input/               # Dispatcher, key definitions, factories, bindings
+│       ├── presenters/          # View presenters (reader)
+│       ├── rendering/           # Render cache and helpers
+│       ├── ui/                  # Settings/view-model definitions
+│       ├── validators/          # File and terminal validation
+│       ├── services/            # Legacy helpers (e.g., chapter cache, library scanner)
+│       └── terminal*            # Terminal facade and buffer/output/input
+├── spec/                        # Tests
+├── ARCHITECTURE.md              # Architecture notes
+├── DEVELOPMENT.md               # This guide
+└── REFACTORING_ROADMAP.md       # Refactor status and plan
 ```
 
-### Key Directories
+### Layer Responsibilities (updated)
 
-- **core/**: Essential domain objects and state management
-- **infrastructure/**: Cross-cutting concerns like logging and monitoring
-- **services/**: Business logic extracted into service objects
-- **validators/**: Input validation and sanitization
-- **renderers/**: Display and formatting logic
+- Presentation (components): Rendering only via `Surface#do_render(surface, bounds)`. No direct terminal writes; no direct service resolution.
+- Application (controllers): Orchestrates flows, resolves services via DI, dispatches actions.
+- Domain (services/actions/selectors/commands): Business logic, explicit state mutations, input commands.
+- Infrastructure: State store, event bus, logger, terminal IO, persistence helpers.
 
 ## Architecture Overview
 
@@ -109,26 +116,34 @@ The application follows a layered architecture with clear separation of concerns
 
 ### Dependency Injection (DI)
 
-- A single `Domain::DependencyContainer` is created at app start and passed down.
-- Components and renderers receive dependencies via constructor; renderers use `ViewRendererFactory` to ensure a single DI source.
+- A single `Domain::DependencyContainer` is created once and threaded through the app.
+- Controllers resolve services via `@dependencies.resolve(:service_name)`.
+- Components do not create containers; they are given dependencies (or a controller that holds them) via constructor when needed.
 
 Examples:
 
 ```ruby
-# App entry
-container = EbookReader::Domain::ContainerFactory.create_default_container
-EbookReader::Application::UnifiedApplication.new(path).run
+# CLI entry → Unified application owns the container
+EbookReader::CLI.run
 
-# Reader renderers
-renderer = EbookReader::Components::Reading::ViewRendererFactory.create(state, controller)
+# application/unified_application.rb
+def run
+  if @epub_path
+    MouseableReader.new(@epub_path, nil, @dependencies).run
+  else
+    MainMenu.new(@dependencies).run
+  end
+end
 
-# Screen component with DI (menu)
-menu_component = EbookReader::Components::MainMenuComponent.new(main_menu)
-editor = menu_component.annotation_edit_screen
+# In a controller (UIController)
+def open_toc
+  nav = @dependencies.resolve(:navigation_service)
+  nav.jump_to_chapter(index)
+end
 
-# Resolving a service from a component
-svc = dependencies.resolve(:annotation_service)
-svc.update(path, id, note)
+# In a component that needs a service: pass dependencies explicitly
+overlay = Components::TooltipOverlayComponent.new(reader_controller,
+                                                 coordinate_service: @dependencies.resolve(:coordinate_service))
 ```
 
 ## Coding Standards

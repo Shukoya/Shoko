@@ -48,7 +48,7 @@ module EbookReader
                          else current
                          end
 
-          @state.set(%i[menu browse_selected], new_selected)
+        @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: new_selected))
         end
 
         def selected_book

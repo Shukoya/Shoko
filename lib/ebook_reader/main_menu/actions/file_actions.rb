@@ -53,7 +53,22 @@ module EbookReader
         end
 
         def run_reader(path)
-          @terminal_service.cleanup
+          # Keep the app in the alternate screen; show an in-app loading overlay
+          begin
+            height, width = @terminal_service.size
+            @terminal_service.start_frame
+            surface = @terminal_service.create_surface
+            bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
+            surface.fill(bounds, ' ')
+            msg = 'Opening book… Please wait'
+            row = [height / 2, 1].max
+            col = [[(width - msg.length) / 2, 1].max, width - msg.length + 1].min
+            surface.write(bounds, row, col, msg)
+            @terminal_service.end_frame
+          rescue StandardError
+            # Best-effort: if we cannot paint, continue silently
+          end
+
           RecentFiles.add(path)
           # Ensure reader loop runs even if a previous session set running=false
           if instance_variable_defined?(:@state) && @state

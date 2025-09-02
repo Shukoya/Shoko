@@ -7,6 +7,10 @@ module EbookReader
     module Services
       # Terminal interaction service for mouse and rendering coordination
       class TerminalService < BaseService
+        # Maintain a global session depth so nested setup/cleanup calls
+        # (e.g., menu -> reader) don't flicker or drop to shell.
+        @@session_depth = 0
+
         def enable_mouse
           Terminal.enable_mouse
         end
@@ -32,10 +36,14 @@ module EbookReader
         end
 
         def setup
+          @@session_depth += 1
+          return if @@session_depth > 1
           Terminal.setup
         end
 
         def cleanup
+          @@session_depth -= 1 if @@session_depth > 0
+          return if @@session_depth > 0
           Terminal.cleanup
         end
 

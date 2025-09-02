@@ -35,7 +35,7 @@ module EbookReader
         end
 
         # Build complete page map (PageManager compatibility)
-        def build_page_map(terminal_width, terminal_height, doc, config)
+        def build_page_map(terminal_width, terminal_height, doc, config, &on_progress)
           unless EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(config) == :dynamic
             return
           end
@@ -44,7 +44,9 @@ module EbookReader
           layout_metrics = prepare_layout_metrics(terminal_width, terminal_height, config)
           return if layout_metrics[:lines_per_page] <= 0
 
-          build_all_chapter_pages(doc, layout_metrics)
+          build_all_chapter_pages(doc, layout_metrics) do |idx, total|
+            on_progress.call(idx, total) if on_progress
+          end
           @pages_data
         end
 
@@ -220,11 +222,13 @@ module EbookReader
         end
 
         def build_all_chapter_pages(doc, layout_metrics)
+          total = doc.chapter_count
           doc.chapter_count.times do |chapter_idx|
             chapter = doc.get_chapter(chapter_idx)
             next unless chapter
 
             build_chapter_pages(chapter, chapter_idx, layout_metrics)
+            yield(chapter_idx + 1, total) if block_given?
           end
         end
 

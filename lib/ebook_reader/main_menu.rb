@@ -404,48 +404,48 @@ module EbookReader
 
     private
 
-    def create_menu_navigation_commands(max_value)
-      commands = {}
-      # Up navigation
-      Input::KeyDefinitions::NAVIGATION[:up].each do |key|
-        commands[key] = lambda do |ctx, _|
-          current = EbookReader::Domain::Selectors::MenuSelectors.selected(ctx.state)
-          ctx.state.set(%i[menu selected], [current - 1, 0].max)
-          :handled
+      def create_menu_navigation_commands(max_value)
+        commands = {}
+        # Up navigation
+        Input::KeyDefinitions::NAVIGATION[:up].each do |key|
+          commands[key] = lambda do |ctx, _|
+            current = EbookReader::Domain::Selectors::MenuSelectors.selected(ctx.state)
+            ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(selected: [current - 1, 0].max))
+            :handled
+          end
         end
-      end
-      # Down navigation
-      Input::KeyDefinitions::NAVIGATION[:down].each do |key|
-        commands[key] = lambda do |ctx, _|
-          current = EbookReader::Domain::Selectors::MenuSelectors.selected(ctx.state)
-          ctx.state.set(%i[menu selected], [current + 1, max_value].min)
-          :handled
+        # Down navigation
+        Input::KeyDefinitions::NAVIGATION[:down].each do |key|
+          commands[key] = lambda do |ctx, _|
+            current = EbookReader::Domain::Selectors::MenuSelectors.selected(ctx.state)
+            ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(selected: [current + 1, max_value].min))
+            :handled
+          end
         end
+        commands
       end
-      commands
-    end
 
-    def create_browse_navigation_commands(max_value_proc)
-      commands = {}
-      # Up navigation
-      Input::KeyDefinitions::NAVIGATION[:up].each do |key|
-        commands[key] = lambda do |ctx, _|
-          current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
-          ctx.state.set(%i[menu browse_selected], [current - 1, 0].max)
-          :handled
+      def create_browse_navigation_commands(max_value_proc)
+        commands = {}
+        # Up navigation
+        Input::KeyDefinitions::NAVIGATION[:up].each do |key|
+          commands[key] = lambda do |ctx, _|
+            current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
+            ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [current - 1, 0].max))
+            :handled
+          end
         end
-      end
-      # Down navigation
-      Input::KeyDefinitions::NAVIGATION[:down].each do |key|
-        commands[key] = lambda do |ctx, _|
-          current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
-          max_val = max_value_proc.call(ctx)
-          ctx.state.set(%i[menu browse_selected], [current + 1, max_val].min)
-          :handled
+        # Down navigation
+        Input::KeyDefinitions::NAVIGATION[:down].each do |key|
+          commands[key] = lambda do |ctx, _|
+            current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
+            max_val = max_value_proc.call(ctx)
+            ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [current + 1, max_val].min))
+            :handled
+          end
         end
+        commands
       end
-      commands
-    end
 
     def register_menu_bindings
       bindings = {}
@@ -678,25 +678,7 @@ module EbookReader
 
     # Legacy input handler removed; dispatcher handles all input
 
-    def open_book(path)
-      return file_not_found unless File.exist?(path)
-
-      run_reader(path)
-    rescue StandardError => e
-      handle_reader_error(path, e)
-    ensure
-      @terminal_service.setup
-    end
-
-    def run_reader(path)
-      @terminal_service.cleanup
-      RecentFiles.add(path)
-      # Share the same state across menu and reader for annotations/book path
-      @state.set(%i[reader book_path], path)
-      # Ensure reader loop runs even if a previous session set running=false
-      @state.update({ %i[reader running] => true, %i[reader mode] => :read })
-      MouseableReader.new(path, nil, @dependencies).run
-    end
+    # Duplicated file-open methods removed in favor of Actions::FileActions implementation
 
     # Provide current editor component for domain commands in menu context
     def current_editor_component
@@ -727,17 +709,7 @@ module EbookReader
       File.expand_path(path)
     end
 
-    def handle_file_path(path)
-      if File.exist?(path) && path.downcase.end_with?('.epub')
-        RecentFiles.add(path)
-        @state.set(%i[reader book_path], path)
-        reader = MouseableReader.new(path, nil, @dependencies)
-        reader.run
-      else
-        @scanner.scan_message = 'Invalid file path'
-        @scanner.scan_status = :error
-      end
-    end
+    # Use Actions::FileActions#handle_file_path
 
     def load_recent_books
       RecentFiles.load

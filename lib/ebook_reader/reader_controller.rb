@@ -111,8 +111,8 @@ module EbookReader
       coord = @dependencies.resolve(:coordinate_service)
       @overlay = Components::TooltipOverlayComponent.new(self, coordinate_service: coord)
 
-      # Initialize page calculations for navigation
-      initialize_page_calculations
+      # Defer heavy page calculations until after terminal setup
+      @pending_initial_calculation = true
 
       # Observe sidebar visibility changes to rebuild layout
       @state.add_observer(self, %i[reader sidebar_visible])
@@ -127,6 +127,10 @@ module EbookReader
 
     def run
       @terminal_service.setup
+      if @pending_initial_calculation
+        perform_initial_calculations_with_progress
+        @pending_initial_calculation = false
+      end
       main_loop
     ensure
       @terminal_service.cleanup
@@ -445,18 +449,7 @@ module EbookReader
     end
 
     def initialize_page_calculations
-      return unless @doc
-
-      # Get terminal size for initial page calculations
-      height, width = @terminal_service.size
-
-      if Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic && @page_calculator
-        # Build page map for dynamic mode
-        @page_calculator.build_page_map(width, height, @doc, @state)
-      else
-        # Update page map for absolute mode
-        update_page_map(width, height)
-      end
+      # left for compatibility; now handled in perform_initial_calculations_with_progress
     end
 
     def refresh_page_map(width, height)
@@ -529,6 +522,77 @@ module EbookReader
       # Store the newly calculated map and its key in the cache
       @page_map_cache = { key: cache_key, map: @state.get(%i[reader page_map]),
                           total: @state.get(%i[reader total_pages]) }
+    end
+
+    # Perform initial heavy page calculations with a visual progress overlay
+    def perform_initial_calculations_with_progress
+      return unless @doc
+
+      height, width = @terminal_service.size
+      @state.update({ %i[ui loading_active] => true,
+                      %i[ui loading_message] => 'Opening book…',
+                      %i[ui loading_progress] => 0.0 })
+
+      render_loading_overlay
+
+      if Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic && @page_calculator
+        # Dynamic: use page calculator with progress callback
+        @page_calculator.build_page_map(width, height, @doc, @state) do |done, total|
+          @state.update({ %i[ui loading_progress] => (done.to_f / [total, 1].max) })
+          render_loading_overlay
+        end
+        # Sync total pages to state for view model
+        @state.update({ %i[reader total_pages] => @page_calculator.total_pages })
+      else
+        # Absolute: compute per-chapter and update progress
+        col_width, content_height = @layout_service.calculate_metrics(width, height,
+                                                                      @state.get(%i[config view_mode]))
+        actual_height = adjust_for_line_spacing(content_height)
+        total = @doc.chapter_count
+        page_map = []
+        total.times do |idx|
+          chapter = @doc.get_chapter(idx)
+          lines = chapter&.lines || []
+          wrapped = wrap_lines(lines, col_width)
+          page_map << (wrapped.size.to_f / [actual_height, 1].max).ceil
+          @state.update({ %i[ui loading_progress] => ((idx + 1).to_f / [total, 1].max) })
+          render_loading_overlay
+        end
+        @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum,
+                        %i[reader last_width] => width, %i[reader last_height] => height })
+        @page_map_cache = { key: "#{width}x#{height}-#{@state.get(%i[config view_mode])}-#{@state.get(%i[config line_spacing])}",
+                            map: page_map, total: page_map.sum }
+      end
+
+      # Clear loading state and render once before entering main loop
+      @state.update({ %i[ui loading_active] => false, %i[ui loading_message] => nil })
+      draw_screen
+    rescue StandardError
+      # Best-effort; ensure we clear loading state to avoid a stuck overlay
+      @state.update({ %i[ui loading_active] => false })
+    end
+
+    def render_loading_overlay
+      height, width = @terminal_service.size
+      @terminal_service.start_frame
+      surface = @terminal_service.create_surface
+      bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
+      surface.fill(bounds, ' ')
+
+      # Minimal progress bar (pip-like): green progressed, grey remaining
+      bar_width = [[width * 0.6, 20].max.to_i, width - 4].min
+      progress = (@state.get(%i[ui loading_progress]) || 0.0).to_f.clamp(0.0, 1.0)
+      filled = (bar_width * progress).round
+      bar_row = [height / 2, 1].max
+      bar_col = [[(width - bar_width) / 2, 1].max, width - bar_width + 1].min
+
+      green = Terminal::ANSI::BG_BRIGHT_GREEN
+      grey  = Terminal::ANSI::BG_GREY
+      reset = Terminal::ANSI::RESET
+      bar_str = (green + (' ' * filled)) + (grey + (' ' * (bar_width - filled))) + reset
+      surface.write(bounds, bar_row, bar_col, bar_str)
+
+      @terminal_service.end_frame
     end
 
     # Override helper to delegate to the DI-backed wrapping service
