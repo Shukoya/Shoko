@@ -60,7 +60,7 @@
 - [x] Extract UIController (mode switching, overlays)  
 - [x] Extract InputController (key handling consolidation)
 - [x] Extract StateController (state updates and persistence)
-- [x] Keep ReaderController as coordinator only (1314→773 lines, ~41% reduction). Further slimming planned (move loading overlay + window orchestration out).
+- [x] Keep ReaderController as coordinator only (currently ~843 LOC; further slimming planned by pushing wrapping/window orchestration fully into services).
 
 ### 3.2 Input System Unification ✅ COMPLETE
 **Issue Resolved**: All core navigation uses Domain Commands, specialized modes retain existing patterns
@@ -71,7 +71,7 @@
 - [x] Navigation commands (:next_page, :prev_page, :next_chapter, :prev_chapter, :scroll_up, :scroll_down) now use NavigationService through Domain layer
 
 ### 3.3 Terminal Access Elimination ✅ COMPLETE (re‑verified)
-**Verified Status**: All rendering constructs surfaces via `TerminalService`. No direct `Terminal` construction remains in UI paths. `TerminalService` is now a singleton.
+**Verified Status**: All rendering constructs surfaces via `TerminalService`. No direct `Terminal` construction remains in UI paths. `TerminalService` is now a singleton. `UI::LoadingOverlay` updated to use `terminal_service.create_surface`.
 - [x] Remove direct Terminal writes from MouseableReader
 - [x] Most component rendering goes through Surface/Component system
 - [x] `TerminalService` abstraction exists and is used in Reader loop
@@ -198,6 +198,14 @@ Goal: Instant subsequent opens by avoiding ZIP inflation and OPF parsing; cache-
 12. ✅ **Debug IO Cleanup** - Removed `/tmp/nav_debug.log` writes from `PageCalculatorService`
 
 **REMAINING PRIORITIES (Updated Priority Order):**
+13. ✅ **Loading Overlay Hygiene** - `UI::LoadingOverlay` now uses `terminal_service.create_surface` (no direct `Terminal`).
+14. ✅ **Persistence via Repositories Only** - Removed controller fallbacks to `ProgressManager`/`BookmarkManager`; controllers use DI repositories exclusively.
+15. ✅ **Legacy Model Aliases Removed** - Deleted `lib/ebook_reader/models/bookmark*` aliases; domain models are the single source of truth.
+16. ✅ **LibraryScanner Layering** - Moved `LibraryScanner` to `infrastructure/` and updated DI registration.
+17. ✅ **Renderer Windowing via Service** - Reading renderers now use `WrappingService#wrap_window` directly (no controller calls) for dynamic/absolute fallbacks.
+
+**Remaining:**
+- ✅ Renderer/controller decoupling complete: renderers build context from DI + state + document, no controller calls.
 1. ✅ HIGH: DI consistency in renderers (single source of services)
    - Implemented: `ViewRendererFactory` passes `controller.dependencies`; `BaseViewRenderer` now requires dependencies (no ad-hoc containers). Also switched rendered_lines to one-shot dispatch per frame from `BaseViewRenderer`.
 2. ✅ HIGH: Remove unused legacy UI scaffolding
@@ -219,11 +227,11 @@ Goal: Instant subsequent opens by avoiding ZIP inflation and OPF parsing; cache-
 
 ## Verification Notes (Claims Re‑checked)
 
-- Phase 2.1 Service Layer Consolidation: Verified no legacy wrappers under `lib/ebook_reader/services/` for coordinate/clipboard/layout; `chapter_cache.rb` remains as an internal helper for `WrappingService`; `library_scanner.rb` remains by design.
+- Phase 2.1 Service Layer Consolidation: Verified no legacy wrappers under `lib/ebook_reader/services/` for coordinate/clipboard/layout; `chapter_cache.rb` remains as an internal helper for `WrappingService`; `LibraryScanner` moved to `infrastructure/` and registered via DI.
 - Phase 2.2 State System Unification: No `GlobalState` class in codebase; `:global_state` DI key resolves to `ObserverStateStore`. Some comments still mention “GlobalState”; update docs/comments only.
 - Phase 3.1 ReaderController Decomposition: Done; controllers exist (`navigation/ui/state/input`), and `ReaderController` now orchestrates.
 - Phase 3.2 Input System Unification: Reader navigation keys route through `DomainCommandBridge` and domain commands (verified in `Input::CommandFactory`, `Input::Commands`).
-- Phase 3.3 Terminal Access Elimination: COMPLETE — all surfaces created via `TerminalService`; frame lifecycle centralized in `ReaderController` (spec verified).
+- Phase 3.3 Terminal Access Elimination: COMPLETE — all surfaces created via `TerminalService`; `UI::LoadingOverlay` uses `terminal_service.create_surface`; frame lifecycle centralized in `ReaderController` (spec verified).
 - Annotation UX Fixes: ESC cancel clears selection (`UIController#cleanup_popup_state` in editor bindings). Selected text extraction uses `SelectionService` in both `UIController` and `MouseableReader` — VERIFIED.
 - Annotations layering: `Components::Screens::AnnotationsScreenComponent` reads from state only (OK). `Components::Sidebar::AnnotationsTabRenderer` does not require `annotation_store` — VERIFIED. No `ReaderModes::AnnotationsMode` found — claim outdated.
 - Component contract: `TooltipOverlayComponent` and `EnhancedPopupMenu` implement `do_render` (OK).

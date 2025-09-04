@@ -4,6 +4,7 @@ require 'digest'
 require 'fileutils'
 require 'json'
 require_relative 'cache_paths'
+require_relative '../serializers'
 
 module EbookReader
   module Infrastructure
@@ -100,16 +101,16 @@ module EbookReader
         mp = File.join(@cache_dir, 'manifest.msgpack')
         js = File.join(@cache_dir, 'manifest.json')
         if File.exist?(mp) && msgpack_available?
-          [mp, MessagePackSerializer.new]
+          [mp, EbookReader::Infrastructure::MessagePackSerializer.new]
         elsif File.exist?(js)
-          [js, JSONSerializer.new]
+          [js, EbookReader::Infrastructure::JSONSerializer.new]
         else
           [nil, nil]
         end
       end
 
       def select_serializer
-        msgpack_available? ? MessagePackSerializer.new : JSONSerializer.new
+        msgpack_available? ? EbookReader::Infrastructure::MessagePackSerializer.new : EbookReader::Infrastructure::JSONSerializer.new
       end
 
       def msgpack_available?
@@ -144,17 +145,6 @@ module EbookReader
       end
     end
 
-    # Simple serializers (MessagePack optional)
-    class JSONSerializer
-      def manifest_filename = 'manifest.json'
-      def dump_file(path, data) = File.write(path, JSON.generate(data))
-      def load_file(path) = JSON.parse(File.read(path))
-    end
-
-    class MessagePackSerializer
-      def manifest_filename = 'manifest.msgpack'
-      def dump_file(path, data) = File.binwrite(path, MessagePack.pack(data))
-      def load_file(path) = MessagePack.unpack(File.binread(path))
-    end
+    # Serializers moved to lib/ebook_reader/serializers.rb (outside infra path)
   end
 end

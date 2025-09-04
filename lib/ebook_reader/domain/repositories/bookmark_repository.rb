@@ -6,6 +6,12 @@ require_relative '../models/bookmark_data'
 module EbookReader
   module Domain
     module Repositories
+      # Backward-compatibility aliases for specs or legacy callers referencing
+      # EbookReader::Models::* instead of Domain::Models::*
+      module ::EbookReader::Models
+        Bookmark = ::EbookReader::Domain::Models::Bookmark unless const_defined?(:Bookmark)
+        BookmarkData = ::EbookReader::Domain::Models::BookmarkData unless const_defined?(:BookmarkData)
+      end
       # Repository for bookmark persistence, abstracting the underlying storage mechanism.
       #
       # This repository provides a clean domain interface for bookmark operations,

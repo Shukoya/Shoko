@@ -7,8 +7,8 @@ module EbookReader
     module Reading
       # Renderer for table of contents display
       class TocRenderer < BaseViewRenderer
-        def initialize(dependencies = nil, controller = nil)
-          super
+        def initialize(dependencies)
+          super(dependencies)
         end
 
         def render_with_context(surface, bounds, context)

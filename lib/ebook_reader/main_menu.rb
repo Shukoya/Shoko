@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative 'services/library_scanner'
+require_relative 'infrastructure/library_scanner'
 require_relative 'mouseable_reader'
 require_relative 'main_menu/actions/file_actions'
 require_relative 'main_menu/actions/search_actions'

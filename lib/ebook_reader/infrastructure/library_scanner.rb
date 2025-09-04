@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 module EbookReader
-  module Services
-    # Handles EPUB library scanning operations
+  module Infrastructure
+    # Handles EPUB library scanning operations (filesystem/OS concerns)
     class LibraryScanner
       attr_accessor :scan_status, :scan_message, :epubs
 
@@ -89,3 +89,4 @@ module EbookReader
     end
   end
 end
+

@@ -170,9 +170,9 @@ module EbookReader
         # IMPORTANT: state_store must resolve to the same ObserverStateStore instance as :global_state
         container.register_factory(:state_store) { |c| c.resolve(:global_state) }
 
-        # Library scanner service
+        # Library scanner service (infrastructure)
         container.register_factory(:library_scanner) do |_c|
-          EbookReader::Services::LibraryScanner.new
+          EbookReader::Infrastructure::LibraryScanner.new
         end
 
         container

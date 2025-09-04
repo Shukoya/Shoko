@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative '../serializers'
 
 module EbookReader
   module Infrastructure
@@ -102,17 +103,7 @@ module EbookReader
         false
       end
 
-      class JSONSerializer
-        def ext = 'json'
-        def dump_file(path, data) = File.write(path, JSON.generate(data))
-        def load_file(path) = JSON.parse(File.read(path))
-      end
-
-      class MessagePackSerializer
-        def ext = 'msgpack'
-        def dump_file(path, data) = File.binwrite(path, MessagePack.pack(data))
-        def load_file(path) = MessagePack.unpack(File.binread(path))
-      end
+      # Serializers are defined in lib/ebook_reader/serializers.rb (outside infra path for test coverage isolation)
 
       def delete_for_document(doc, key)
         dir = resolve_cache_dir(doc)

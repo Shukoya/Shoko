@@ -5,14 +5,13 @@ module EbookReader
     module Reading
       # Factory for creating appropriate view renderers based on configuration
       class ViewRendererFactory
-        def self.create(state, controller = nil)
+        def self.create(state, dependencies)
           case Domain::Selectors::ConfigSelectors.view_mode(state)
           when :split
-            # Always pass the app dependencies to ensure a single DI source
-            SplitViewRenderer.new(controller&.dependencies, controller)
+            SplitViewRenderer.new(dependencies)
           else
             SingleViewRenderer.new(Domain::Selectors::ConfigSelectors.page_numbering_mode(state),
-                                   controller&.dependencies, controller)
+                                   dependencies)
           end
         end
       end

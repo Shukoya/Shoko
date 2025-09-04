@@ -10,6 +10,7 @@ module EbookReader
         @path = path
         @dependencies = dependencies
         @terminal_service = @dependencies.resolve(:terminal_service)
+        # Prefer repositories via DI; fall back to legacy managers for compatibility in tests
         @progress_repository = @dependencies.resolve(:progress_repository) if @dependencies.respond_to?(:resolve)
         @bookmark_repository = @dependencies.resolve(:bookmark_repository) if @dependencies.respond_to?(:resolve)
       end
@@ -83,7 +84,6 @@ module EbookReader
                                               text_snippet: text_snippet)
             bookmarks = @bookmark_repository.find_by_book_path(canonical)
           else
-            # Fallback to manager
             bm = EbookReader::Domain::Models::BookmarkData.new(path: canonical,
                                                                chapter: bookmark_data[:chapter],
                                                                line_offset: line_offset,

@@ -14,9 +14,10 @@ module EbookReader
         super(controller&.dependencies) # Initialize BaseComponent with dependencies
         @controller = controller
         @view_renderer = nil
-        @help_renderer = Reading::HelpRenderer.new(nil, controller)
-        @toc_renderer = Reading::TocRenderer.new(nil, controller)
-        @bookmarks_renderer = Reading::BookmarksRenderer.new(nil, controller)
+        deps = controller&.dependencies
+        @help_renderer = Reading::HelpRenderer.new(deps)
+        @toc_renderer = Reading::TocRenderer.new(deps)
+        @bookmarks_renderer = Reading::BookmarksRenderer.new(deps)
 
         state = @controller.state
         # Observe core fields that affect content rendering via StateStore paths
@@ -66,7 +67,7 @@ module EbookReader
       def view_renderer
         return @view_renderer if @view_renderer
 
-        @view_renderer = Reading::ViewRendererFactory.create(@controller.state, @controller)
+        @view_renderer = Reading::ViewRendererFactory.create(@controller.state, @controller.dependencies)
       end
     end
   end

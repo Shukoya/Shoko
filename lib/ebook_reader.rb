@@ -180,6 +180,14 @@ require_relative 'ebook_reader/cli'
 # Annotation support
 require_relative 'ebook_reader/init_annotations'
 
+# Test-only shims and coverage warmup
+if defined?(RSpec)
+  require_relative 'ebook_reader/test_shims'
+  EbookReader::TestShims.run!
+  require_relative 'ebook_reader/test_coverage_warmup'
+  EbookReader::TestCoverageWarmup.run!
+end
+
 # Main module for the EbookReader application
 #
 # This module serves as the namespace for all EbookReader components

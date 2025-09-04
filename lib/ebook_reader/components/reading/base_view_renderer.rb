@@ -8,24 +8,17 @@ module EbookReader
     module Reading
       # Base class for all view renderers
       class BaseViewRenderer < BaseComponent
-        def initialize(dependencies = nil, controller = nil)
+        def initialize(dependencies)
           super()
-          # Require a single DI source: either provided explicitly or from the controller
-          @dependencies = dependencies || controller&.dependencies
-          unless @dependencies
-            raise ArgumentError,
-                  'Dependencies must be provided to BaseViewRenderer'
-          end
+          @dependencies = dependencies
+          raise ArgumentError, 'Dependencies must be provided to BaseViewRenderer' unless @dependencies
 
           @layout_service = @dependencies.resolve(:layout_service)
-          @controller = controller
         end
 
         # Standard ComponentInterface implementation
         def do_render(surface, bounds)
-          return unless @controller
-
-          context = create_rendering_context(@controller)
+          context = create_rendering_context
           return unless context
 
           # Collect rendered lines for a single, consistent state update per frame
@@ -62,21 +55,20 @@ module EbookReader
 
         private
 
-        def create_rendering_context(controller)
-          return nil unless controller
-
+        def create_rendering_context
+          state = @dependencies.resolve(:global_state)
           Models::RenderingContext.new(
-            document: controller.doc,
-            page_calculator: controller.page_calculator,
-            state: controller.state,
-            config: controller.state,
-            view_model: controller.create_view_model
+            document: safe_resolve(:document),
+            page_calculator: safe_resolve(:page_calculator),
+            state: state,
+            config: state,
+            view_model: nil
           )
         end
 
-        def draw_line(surface, bounds, line:, row:, col:, width:, controller: nil, context: nil)
+        def draw_line(surface, bounds, line:, row:, col:, width:, context:)
           text = line.to_s[0, width]
-          config = context ? context.config : controller&.state
+          config = context&.config
 
           text = highlight_keywords(text) if config&.get(%i[config highlight_keywords])
           text = highlight_quotes(text) if config&.get(%i[config highlight_quotes])
@@ -112,6 +104,11 @@ module EbookReader
           line.gsub(Constants::QUOTE_PATTERNS) do |match|
             Terminal::ANSI::ITALIC + match + Terminal::ANSI::RESET + EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY
           end
+        end
+
+        def safe_resolve(name)
+          return @dependencies.resolve(name) if @dependencies.registered?(name)
+          nil
         end
       end
     end

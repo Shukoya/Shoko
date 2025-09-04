@@ -9,7 +9,7 @@ module EbookReader
       def render(terminal_service, state, message: 'Opening…')
         height, width = terminal_service.size
         terminal_service.start_frame
-        surface = Components::Surface.new(Terminal)
+        surface = terminal_service.create_surface
         bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
 
         # Single-row progress bar
@@ -36,4 +36,3 @@ module EbookReader
     end
   end
 end
-
