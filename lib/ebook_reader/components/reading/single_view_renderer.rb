@@ -46,26 +46,33 @@ module EbookReader
           end
         end
 
-        def calculate_centered_start_row(content_height, lines_count, line_spacing)
-          actual_lines = line_spacing == :relaxed ? [(lines_count * 2) - 1, 0].max : lines_count
-          padding = (content_height - actual_lines)
-          [3 + (padding / 2), 3].max
-        end
-
         # Context-based rendering methods
         def render_dynamic_mode_with_context(surface, bounds, context)
-          page_manager = context.page_manager
-          return unless page_manager
-
-          page_data = page_manager.get_page(context.current_page_index)
-          return unless page_data
-
+          page_manager = context.page_calculator
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :single)
           col_start = [(bounds.width - col_width) / 2, 1].max
-          start_row = calculate_center_start_row(content_height, page_data[:lines].size,
-                                                 EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
+          spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config)
+          displayable = adjust_for_line_spacing(content_height, spacing)
 
-          render_dynamic_lines(surface, bounds, page_data[:lines], start_row, col_start, col_width,
+          if page_manager && (pd = page_manager.get_page(context.current_page_index))
+            start_row = calculate_center_start_row(content_height, pd[:lines].size, spacing)
+            render_dynamic_lines(surface, bounds, pd[:lines], start_row, col_start, col_width,
+                                 context.config, nil, context)
+            return
+          end
+
+          # Fallback when dynamic map not ready yet: use pending precise line_offset if available
+          pending = context.state.get(%i[reader pending_progress]) if context&.state
+          line_offset = pending && (pending[:line_offset] || pending['line_offset'])
+          offset = if line_offset
+                     line_offset.to_i
+                   else
+                     (context.current_page_index || 0) * [displayable, 1].max
+                   end
+          lines = @controller.wrapped_window_for(context.state.get(%i[reader current_chapter]) || 0,
+                                                 col_width, offset, displayable)
+          start_row = calculate_center_start_row(content_height, lines.size, spacing)
+          render_dynamic_lines(surface, bounds, lines, start_row, col_start, col_width,
                                context.config, nil, context)
         end
 
@@ -77,14 +84,13 @@ module EbookReader
           col_start = [(bounds.width - col_width) / 2, 1].max
           displayable = adjust_for_line_spacing(content_height, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
 
-          # Access wrap_lines through controller for now - in full refactor this would be a service
-          wrapped = @controller.wrap_lines(chapter.lines || [], col_width) if @controller
-          return unless wrapped
+          return unless context&.state && @controller
 
-          return unless context&.state
-
-          lines = wrapped.slice(context.state.get(%i[reader single_page]) || 0, displayable) || []
-          start_row = calculate_centered_start_row(content_height, lines.size, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
+          offset = context.state.get(%i[reader single_page]) || 0
+          chapter_index = context.state.get(%i[reader current_chapter]) || 0
+          lines = @controller.wrapped_window_for(chapter_index, col_width, offset, displayable)
+          spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config)
+          start_row = calculate_center_start_row(content_height, lines.size, spacing)
 
           render_absolute_lines(surface, bounds, lines, start_row, col_start, col_width, context.config,
                                 nil, context, displayable)

@@ -41,11 +41,29 @@ module EbookReader
           end
 
           @pages_data = []
+          # Try to load a cached pagination for this layout to get instant totals
+          begin
+            key = pagination_layout_key(terminal_width, terminal_height, config)
+            cached = EbookReader::Infrastructure::PaginationCache.load_for_document(doc, key)
+            if cached && cached.any?
+              @pages_data = cached
+              return @pages_data
+            end
+          rescue StandardError
+            # ignore and compute below
+          end
           layout_metrics = prepare_layout_metrics(terminal_width, terminal_height, config)
           return if layout_metrics[:lines_per_page] <= 0
 
           build_all_chapter_pages(doc, layout_metrics) do |idx, total|
             on_progress&.call(idx, total)
+          end
+          # Persist a compact representation for instant reopen
+          begin
+            key = pagination_layout_key(terminal_width, terminal_height, config)
+            EbookReader::Infrastructure::PaginationCache.save_for_document(doc, key, compact_pages(@pages_data))
+          rescue StandardError
+            # ignore persistence failures
           end
           @pages_data
         end
@@ -56,7 +74,38 @@ module EbookReader
           return @pages_data.first if page_index.negative?
           return @pages_data.last if page_index >= @pages_data.size
 
-          @pages_data[page_index]
+          page = @pages_data[page_index]
+          return page if page[:lines]
+
+          # Lazily populate lines when loaded from cache (compact format)
+          begin
+            width  = @state_store.current_state.dig(:ui, :terminal_width) || 80
+            height = @state_store.current_state.dig(:ui, :terminal_height) || 24
+            config = @state_store
+            col_width, _content_height = calculate_layout_metrics(width, height, config)
+            len = (page[:end_line].to_i - page[:start_line].to_i + 1)
+            wrapper = begin
+              @dependencies&.resolve(:wrapping_service)
+            rescue StandardError
+              nil
+            end
+            doc = begin
+              @dependencies&.resolve(:document)
+            rescue StandardError
+              nil
+            end
+            chapter = doc&.get_chapter(page[:chapter_index].to_i)
+            raw_lines = chapter&.lines || []
+            lines = if wrapper
+                      wrapper.wrap_window(raw_lines, page[:chapter_index].to_i, col_width,
+                                          page[:start_line].to_i, len.to_i)
+                    else
+                      DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[page[:start_line].to_i, len.to_i] || []
+                    end
+            return page.merge(lines: lines)
+          rescue StandardError
+            return page
+          end
         end
 
         # Find page index for chapter and line offset (PageManager compatibility)
@@ -148,6 +197,38 @@ module EbookReader
           chapter_lines = get_chapter_lines(chapter_index, state)
           wrapped_lines = @text_wrapper.wrap_chapter_lines(chapter_lines, calculate_column_width)
           (wrapped_lines.size.to_f / lines_per_page).ceil
+        end
+
+        public
+
+        # Build absolute mode page map (per-chapter pages) with progress callback.
+        # Returns an array of pages per chapter.
+        # @yield [done, total] optional progress callback
+        def build_absolute_page_map(terminal_width, terminal_height, doc, state)
+          # Compute layout metrics based on current config
+          col_width, content_height = calculate_layout_metrics(terminal_width, terminal_height, state)
+          lines_per_page = adjust_for_line_spacing(content_height, state)
+          total_chapters = doc.chapter_count
+
+          page_map = []
+          wrapper = begin
+            @dependencies&.resolve(:wrapping_service)
+          rescue StandardError
+            nil
+          end
+
+          total_chapters.times do |i|
+            chapter = doc.get_chapter(i)
+            lines = chapter&.lines || []
+
+            wrapped = wrapper ? wrapper.wrap_lines(lines, i, col_width) : DefaultTextWrapper.new.wrap_chapter_lines(lines, col_width)
+
+            pages = (wrapped.size.to_f / [lines_per_page, 1].max).ceil
+            page_map << pages
+            yield(i + 1, total_chapters) if block_given?
+          end
+
+          page_map
         end
 
         def calculate_lines_per_page
@@ -384,6 +465,26 @@ module EbookReader
 
         def setup_service_dependencies
           @state_store = resolve(:state_store) if @dependencies
+        end
+
+        private
+
+        def pagination_layout_key(width, height, config)
+          view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(config)
+          line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config)
+          EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode, line_spacing)
+        end
+
+        def compact_pages(pages)
+          pages.map do |p|
+            {
+              'chapter_index' => p[:chapter_index],
+              'page_in_chapter' => p[:page_in_chapter],
+              'total_pages_in_chapter' => p[:total_pages_in_chapter],
+              'start_line' => p[:start_line],
+              'end_line' => p[:end_line],
+            }
+          end
         end
       end
 

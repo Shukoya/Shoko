@@ -38,6 +38,13 @@ module EbookReader
         []
       end
 
+      # Clears the recent files list by removing the recent file.
+      def clear
+        FileUtils.rm_f(RECENT_FILE)
+      rescue Errno::EACCES, Errno::ENOENT
+        # Ignore errors
+      end
+
       private
 
       # Saves the list of recent files to disk.

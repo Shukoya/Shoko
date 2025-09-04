@@ -10,24 +10,53 @@ module EbookReader
         @path = path
         @dependencies = dependencies
         @terminal_service = @dependencies.resolve(:terminal_service)
+        @progress_repository = @dependencies.resolve(:progress_repository) if @dependencies.respond_to?(:resolve)
+        @bookmark_repository = @dependencies.resolve(:bookmark_repository) if @dependencies.respond_to?(:resolve)
       end
 
       def save_progress
         return unless @path && @doc
 
         progress_data = collect_progress_data
-        ProgressManager.save(@path, progress_data[:chapter], progress_data[:line_offset])
+        canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
+
+        if @progress_repository
+          @progress_repository.save_for_book(canonical,
+                                             chapter_index: progress_data[:chapter],
+                                             line_offset: progress_data[:line_offset])
+        else
+          ProgressManager.save(canonical, progress_data[:chapter], progress_data[:line_offset])
+        end
       end
 
       def load_progress
-        progress = ProgressManager.load(@path)
+        canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
+        progress = if @progress_repository
+                     @progress_repository.find_by_book_path(canonical)
+                   else
+                     ProgressManager.load(canonical)
+                   end
+        # Fallback: attempt original open path if canonical not found (for legacy records)
+        if !progress && @path != canonical
+          progress = if @progress_repository
+                       @progress_repository.find_by_book_path(@path)
+                     else
+                       ProgressManager.load(@path)
+                     end
+        end
         return unless progress
 
         apply_progress_data(progress)
       end
 
       def load_bookmarks
-        @state.dispatch(EbookReader::Domain::Actions::UpdateBookmarksAction.new(BookmarkManager.get(@path)))
+        canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
+        bookmarks = if @bookmark_repository
+                      @bookmark_repository.find_by_book_path(canonical)
+                    else
+                      BookmarkManager.get(canonical)
+                    end
+        @state.dispatch(EbookReader::Domain::Actions::UpdateBookmarksAction.new(bookmarks))
       end
 
       def add_bookmark
@@ -38,10 +67,34 @@ module EbookReader
           timestamp: Time.now,
         }
 
-        # Add to bookmarks list in state
-        current_bookmarks = @state.get(%i[reader bookmarks]) || []
-        current_bookmarks << bookmark_data
-        @state.dispatch(EbookReader::Domain::Actions::UpdateBookmarksAction.new(current_bookmarks))
+        # Persist and refresh list
+        canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
+        line_offset = if Domain::Selectors::ConfigSelectors.view_mode(@state) == :split
+                        @state.get(%i[reader left_page])
+                      else
+                        @state.get(%i[reader single_page])
+                      end
+        text_snippet = ''
+        begin
+          if @bookmark_repository
+            @bookmark_repository.add_for_book(canonical,
+                                              chapter_index: bookmark_data[:chapter],
+                                              line_offset: line_offset,
+                                              text_snippet: text_snippet)
+            bookmarks = @bookmark_repository.find_by_book_path(canonical)
+          else
+            # Fallback to manager
+            bm = EbookReader::Domain::Models::BookmarkData.new(path: canonical,
+                                                               chapter: bookmark_data[:chapter],
+                                                               line_offset: line_offset,
+                                                               text: text_snippet)
+            BookmarkManager.add(bm)
+            bookmarks = BookmarkManager.get(canonical)
+          end
+        rescue StandardError
+          bookmarks = @state.get(%i[reader bookmarks]) || []
+        end
+        @state.dispatch(EbookReader::Domain::Actions::UpdateBookmarksAction.new(bookmarks))
 
         set_message("Bookmark added at Chapter #{@state.get(%i[reader
                                                                current_chapter]) + 1}, Page #{@state.get(%i[
@@ -66,7 +119,12 @@ module EbookReader
         bookmark = bookmarks[@state.get(%i[reader bookmark_selected])]
         return unless bookmark
 
-        BookmarkManager.delete(@path, bookmark)
+        canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
+        if @bookmark_repository
+          @bookmark_repository.delete_for_book(canonical, bookmark)
+        else
+          BookmarkManager.delete(canonical, bookmark)
+        end
         load_bookmarks
         if @state.get(%i[reader bookmarks]).any?
           max_selected = [@state.get(%i[reader bookmark_selected]),
@@ -141,20 +199,42 @@ module EbookReader
 
       def apply_progress_data(progress)
         # Set chapter (with validation)
-        chapter = progress['chapter'] || 0
+        chapter = if progress.respond_to?(:chapter_index)
+                    progress.chapter_index
+                  else
+                    progress['chapter'] || progress[:chapter] || 0
+                  end
         @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(chapter >= @doc.chapter_count ? 0 : chapter))
 
         # Set page offset
-        line_offset = progress['line_offset'] || 0
+        line_offset = if progress.respond_to?(:line_offset)
+                        progress.line_offset
+                      else
+                        progress['line_offset'] || progress[:line_offset] || 0
+                      end
         page_calculator = @dependencies.resolve(:page_calculator)
 
         if Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic && page_calculator
-          # Dynamic page mode
-          height, width = @terminal_service.size
-          page_calculator.build_page_map(width, height, @doc, @state)
-          page_index = page_calculator.find_page_index(@state.get(%i[reader current_chapter]),
-                                                       line_offset)
-          @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: page_index))
+          # Dynamic page mode (lazy): estimate index now; compute precisely after background build
+          begin
+            # Use state-known terminal dimensions to avoid relying on TerminalService setup timing
+            width  = (@state.get(%i[ui terminal_width]) || 80).to_i
+            height = (@state.get(%i[ui terminal_height]) || 24).to_i
+            layout = @dependencies.resolve(:layout_service)
+            col_width, content_height = layout.calculate_metrics(width, height,
+                                                                 Domain::Selectors::ConfigSelectors.view_mode(@state))
+            lines_per_page = layout.adjust_for_line_spacing(content_height,
+                                                            Domain::Selectors::ConfigSelectors.line_spacing(@state))
+            est_index = lines_per_page.positive? ? (line_offset.to_f / lines_per_page).floor : 0
+            @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: est_index))
+          rescue StandardError
+            # best-effort; leave index as-is if estimation fails
+          end
+          # Store pending precise restore to be applied after background map build
+          @state.update({ %i[reader pending_progress] => {
+                           chapter_index: @state.get(%i[reader current_chapter]),
+                           line_offset: line_offset,
+                         } })
         else
           # Absolute page mode
           page_offsets = line_offset
@@ -164,15 +244,11 @@ module EbookReader
       end
 
       def set_message(text, duration = 2)
-        @state.dispatch(EbookReader::Domain::Actions::UpdateMessageAction.new(text))
         begin
-          @message_timer&.kill if @message_timer&.alive?
+          notifier = @dependencies.resolve(:notification_service)
+          notifier.set_message(@state, text, duration)
         rescue StandardError
-          # ignore
-        end
-        @message_timer = Thread.new do
-          sleep duration
-          @state.dispatch(EbookReader::Domain::Actions::ClearMessageAction.new)
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMessageAction.new(text))
         end
       end
     end

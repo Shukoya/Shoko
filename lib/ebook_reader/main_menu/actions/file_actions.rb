@@ -24,21 +24,7 @@ module EbookReader
           end
         end
 
-        # Open the currently selected recent book (uses RecentFiles list)
-        def open_selected_recent_book
-          items = RecentFiles.load.select { |r| r && r['path'] && File.exist?(r['path']) }
-          return unless items && !items.empty?
-
-          index = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
-          index = [[index, 0].max, items.length - 1].min
-          path = items[index]['path']
-          if path && File.exist?(path)
-            load_and_open_with_progress(path)
-          else
-            @scanner.scan_message = 'File not found'
-            @scanner.scan_status = :error
-          end
-        end
+        # recent view removed
 
         def open_book(path)
           return file_not_found unless File.exist?(path)
@@ -97,6 +83,15 @@ module EbookReader
             # Load document
             doc_svc = EbookReader::Infrastructure::DocumentService.new(path)
             doc = doc_svc.load_document
+            # If cached, skip precomputation to open instantly
+            if doc.respond_to?(:cached?) && doc.cached?
+              @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
+                                loading_active: false,
+                                loading_path: nil,
+                                loading_index: nil
+                              ))
+              return run_reader(path)
+            end
             # Update total chapters for navigation service expectations
             @state.update({ %i[reader total_chapters] => doc&.chapter_count || 0 })
             # Pre-register for reuse
@@ -115,31 +110,10 @@ module EbookReader
                               ))
             else
               # Absolute mode: compute per-chapter with progress
-              col_w, content_h = layout.calculate_metrics(width, height,
-                                                          @state.get(%i[config view_mode]))
-              lines_per_page = layout.adjust_for_line_spacing(content_h,
-                                                              @state.get(%i[config line_spacing]))
-              total = doc.chapter_count
-              page_map = []
-              total.times do |i|
-                chapter = doc.get_chapter(i)
-                lines = chapter&.lines || []
-                wrapped = if wrapper
-                            wrapper.wrap_lines(lines, i, col_w)
-                          else
-                            # Simple fallback wrap
-                            lines.flat_map do |ln|
-                              if ln.length <= col_w
-                                ln
-                              else
-                                ln.scan(/.{1,#{col_w}}/)
-                              end
-                            end
-                          end
-                pages = (wrapped.size.to_f / [lines_per_page, 1].max).ceil
-                page_map << pages
+              # Absolute: delegate page map building to page_calculator
+              page_map = page_calc.build_absolute_page_map(width, height, doc, @state) do |done, total|
                 @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                                  loading_progress: ((i + 1).to_f / [total, 1].max)
+                                  loading_progress: (done.to_f / [total, 1].max)
                                 ))
                 draw_screen
               end

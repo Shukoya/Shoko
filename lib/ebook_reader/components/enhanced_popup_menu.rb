@@ -70,6 +70,11 @@ module EbookReader
         end
       end
 
+      # Align with ComponentInterface naming; delegate to existing logic
+      def handle_input(key)
+        handle_key(key)
+      end
+
       def handle_click(click_x, click_y)
         return nil unless @visible && contains?(click_x, click_y)
 

@@ -28,7 +28,17 @@ module EbookReader
           context = create_rendering_context(@controller)
           return unless context
 
+          # Collect rendered lines for a single, consistent state update per frame
+          @rendered_lines_buffer = {}
           render_with_context(surface, bounds, context)
+          begin
+            state = context.state
+            state.dispatch(EbookReader::Domain::Actions::UpdateRenderedLinesAction.new(@rendered_lines_buffer)) if state
+          rescue StandardError
+            # best-effort; avoid crashing render on bookkeeping
+          ensure
+            @rendered_lines_buffer = nil
+          end
         end
 
         # New rendering interface using context
@@ -57,7 +67,7 @@ module EbookReader
 
           Models::RenderingContext.new(
             document: controller.doc,
-            page_manager: controller.page_calculator,
+            page_calculator: controller.page_calculator,
             state: controller.state,
             config: controller.state,
             view_model: controller.create_view_model
@@ -76,18 +86,16 @@ module EbookReader
 
           # Store line data in format compatible with mouse selection
           # Use a key that includes both row and column range to distinguish columns
-          state = context ? context.state : controller&.state
-          if state
-            rendered_lines = state.get(%i[reader rendered_lines]) || {}
+          # Buffer rendered lines locally; flushed once per frame in do_render
+          if @rendered_lines_buffer.is_a?(Hash)
             line_key = "#{abs_row}_#{abs_col}_#{abs_col + width - 1}"
-            rendered_lines[line_key] = {
+            @rendered_lines_buffer[line_key] = {
               row: abs_row,
               col: abs_col,
               col_end: abs_col + width - 1,
               text: text,
               width: width,
             }
-            state.set(%i[reader rendered_lines], rendered_lines)
           end
 
           surface.write(bounds, row, col,

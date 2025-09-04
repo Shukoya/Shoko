@@ -9,6 +9,13 @@ module EbookReader
         @epub_path = epub_path
         @document = nil
         @content_cache = {}
+        begin
+          @dependencies = EbookReader::Domain::ContainerFactory.create_default_container
+          @wrapping_service = @dependencies.resolve(:wrapping_service)
+        rescue StandardError
+          @dependencies = nil
+          @wrapping_service = nil
+        end
       end
 
       # Load the EPUB document
@@ -140,37 +147,10 @@ module EbookReader
 
       def wrap_lines(lines, column_width)
         return lines if column_width <= 0
+        return @wrapping_service.wrap_lines(lines, 0, column_width) if @wrapping_service
 
-        wrapped = []
-        lines.each do |line|
-          if line.length <= column_width
-            wrapped << line
-          else
-            wrapped.concat(wrap_long_line(line, column_width))
-          end
-        end
-
-        wrapped
-      end
-
-      def wrap_long_line(line, width)
-        words = line.split(/\s+/)
-        wrapped_lines = []
-        current_line = ''
-
-        words.each do |word|
-          if current_line.empty?
-            current_line = word
-          elsif "#{current_line} #{word}".length <= width
-            current_line += " #{word}"
-          else
-            wrapped_lines << current_line
-            current_line = word
-          end
-        end
-
-        wrapped_lines << current_line unless current_line.empty?
-        wrapped_lines
+        # Minimal fallback for tests/dev without DI
+        lines
       end
     end
 

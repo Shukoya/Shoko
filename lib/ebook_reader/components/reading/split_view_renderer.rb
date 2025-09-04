@@ -43,28 +43,32 @@ module EbookReader
 
         # Context-based rendering methods
         def render_dynamic_mode_with_context(surface, bounds, context)
-          page_manager = context.page_manager
-          return unless page_manager
+          page_manager = context.page_calculator
+          col_width, content_height = layout_metrics(bounds.width, bounds.height, :split)
+          spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config)
+          displayable = adjust_for_line_spacing(content_height, spacing)
 
-          page_data = page_manager.get_page(context.current_page_index)
-          return unless page_data
-
-          # Get the next page for right column
-          right_page_data = page_manager.get_page(context.current_page_index + 1)
-
-          col_width, _content_height = layout_metrics(bounds.width, bounds.height, :split)
-
-          # Render components
           chapter = context.current_chapter
           render_chapter_header_with_context(surface, bounds, context, chapter) if chapter
-          render_dynamic_left_column_with_context(surface, bounds, page_data[:lines], col_width,
-                                                  context)
+
+          if page_manager && (left_pd = page_manager.get_page(context.current_page_index))
+            render_dynamic_left_column_with_context(surface, bounds, left_pd[:lines], col_width, context)
+            render_divider(surface, bounds, col_width)
+            if (right_pd = page_manager.get_page(context.current_page_index + 1))
+              render_dynamic_right_column_with_context(surface, bounds, right_pd[:lines], col_width, context)
+            end
+            return
+          end
+
+          # Fallback when dynamic map not ready yet
+          base_offset = (context.current_page_index || 0) * [displayable, 1].max
+          left_lines = @controller.wrapped_window_for(context.state.get(%i[reader current_chapter]) || 0,
+                                                      col_width, base_offset, displayable)
+          render_column_lines(surface, bounds, left_lines, 1, col_width, context.config, nil, context)
           render_divider(surface, bounds, col_width)
-
-          return unless right_page_data
-
-          render_dynamic_right_column_with_context(surface, bounds, right_page_data[:lines],
-                                                   col_width, context)
+          right_lines = @controller.wrapped_window_for(context.state.get(%i[reader current_chapter]) || 0,
+                                                       col_width, base_offset + displayable, displayable)
+          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width, context.config, nil, context)
         end
 
         def render_absolute_mode_with_context(surface, bounds, context)
@@ -74,17 +78,19 @@ module EbookReader
           col_width, content_height = layout_metrics(bounds.width, bounds.height, :split)
           display_height = adjust_for_line_spacing(content_height, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
 
-          # Access wrap_lines through controller for now - in full refactor this would be a service
-          wrapped = @controller.wrap_lines(chapter.lines || [], col_width) if @controller
-          return unless wrapped
+          return unless @controller && context&.state
+
+          chapter_index = context.state.get(%i[reader current_chapter]) || 0
+          left_offset  = context.state.get(%i[reader left_page]) || 0
+          right_offset = context.state.get(%i[reader right_page]) || display_height
 
           # Render components
           render_chapter_header_with_context(surface, bounds, context, chapter)
-          render_left_column_with_context(surface, bounds, wrapped, context, col_width,
-                                          display_height)
+          left_lines = @controller.wrapped_window_for(chapter_index, col_width, left_offset, display_height)
+          render_column_lines(surface, bounds, left_lines, 1, col_width, context.config, nil, context)
           render_divider(surface, bounds, col_width)
-          render_right_column_with_context(surface, bounds, wrapped, context, col_width,
-                                           display_height)
+          right_lines = @controller.wrapped_window_for(chapter_index, col_width, right_offset, display_height)
+          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width, context.config, nil, context)
         end
 
         def render_chapter_header_with_context(surface, bounds, context, chapter)

@@ -25,10 +25,9 @@ RSpec.describe EbookReader::Domain::Commands::MenuCommand do
     expect(state.get(%i[menu mode])).to eq(:browse)
   end
 
-  it 'browses list up/down and opens recent item' do
+  it 'browses list up/down' do
     EbookReader::Domain::Commands::MenuCommand.new(:browse_up).execute(ctx)
     EbookReader::Domain::Commands::MenuCommand.new(:browse_down).execute(ctx)
     expect(state.get(%i[menu browse_selected])).to be_a(Integer)
-    expect { EbookReader::Domain::Commands::MenuCommand.new(:recent_select).execute(ctx) }.not_to raise_error
   end
 end

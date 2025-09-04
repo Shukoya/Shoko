@@ -50,7 +50,7 @@ module EbookReader
     def handle_menu_selection
       case EbookReader::Domain::Selectors::MenuSelectors.selected(@state)
       when 0 then switch_to_browse
-      when 1 then switch_to_mode(:recent)
+      when 1 then switch_to_mode(:library)
       when 2 then switch_to_mode(:annotations)
       when 3 then open_file_dialog
       when 4 then switch_to_mode(:settings)
@@ -170,7 +170,7 @@ module EbookReader
       case EbookReader::Domain::Selectors::MenuSelectors.mode(@state)
       when :menu
         cleanup_and_exit(0, '')
-      when :browse, :recent, :settings, :annotations, :annotation_editor, :open_file
+      when :browse, :settings, :annotations, :annotation_editor, :open_file
         switch_to_mode(:menu)
       else
         switch_to_mode(:menu)
@@ -218,9 +218,7 @@ module EbookReader
       @main_menu_component.browse_screen
     end
 
-    def recent_screen
-      @main_menu_component.recent_screen
-    end
+    # recent_screen removed
 
     def settings_screen
       @main_menu_component.settings_screen
@@ -308,7 +306,8 @@ module EbookReader
       register_menu_bindings
       register_browse_bindings
       register_search_bindings
-      register_recent_bindings
+      # recent bindings removed
+      register_library_bindings
       register_settings_bindings
       register_open_file_bindings
       register_annotations_bindings
@@ -343,14 +342,12 @@ module EbookReader
       return unless annotation && path
 
       # Prepare in-menu editor state
-      @state.update({
-                      %i[menu selected_annotation] => annotation,
-                      %i[menu selected_annotation_book] => path,
-                      %i[menu
-                         annotation_edit_text] => annotation[:note] || annotation['note'] || '',
-                      %i[menu
-                         annotation_edit_cursor] => (annotation[:note] || annotation['note'] || '').to_s.length,
-                    })
+      @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
+        selected_annotation: annotation,
+        selected_annotation_book: path,
+        annotation_edit_text: (annotation[:note] || annotation['note'] || ''),
+        annotation_edit_cursor: (annotation[:note] || annotation['note'] || '').to_s.length,
+      ))
       switch_to_mode(:annotation_editor)
     end
 
@@ -406,48 +403,7 @@ module EbookReader
 
     private
 
-    def create_menu_navigation_commands(max_value)
-      commands = {}
-      # Up navigation
-      Input::KeyDefinitions::NAVIGATION[:up].each do |key|
-        commands[key] = lambda do |ctx, _|
-          current = EbookReader::Domain::Selectors::MenuSelectors.selected(ctx.state)
-          ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(selected: [current - 1, 0].max))
-          :handled
-        end
-      end
-      # Down navigation
-      Input::KeyDefinitions::NAVIGATION[:down].each do |key|
-        commands[key] = lambda do |ctx, _|
-          current = EbookReader::Domain::Selectors::MenuSelectors.selected(ctx.state)
-          ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(selected: [current + 1, max_value].min))
-          :handled
-        end
-      end
-      commands
-    end
-
-    def create_browse_navigation_commands(max_value_proc)
-      commands = {}
-      # Up navigation
-      Input::KeyDefinitions::NAVIGATION[:up].each do |key|
-        commands[key] = lambda do |ctx, _|
-          current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
-          ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [current - 1, 0].max))
-          :handled
-        end
-      end
-      # Down navigation
-      Input::KeyDefinitions::NAVIGATION[:down].each do |key|
-        commands[key] = lambda do |ctx, _|
-          current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(ctx.state)
-          max_val = max_value_proc.call(ctx)
-          ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [current + 1, max_val].min))
-          :handled
-        end
-      end
-      commands
-    end
+    # Removed unused helper methods (create_menu_navigation_commands, create_browse_navigation_commands)
 
     def register_menu_bindings
       bindings = {}
@@ -501,16 +457,35 @@ module EbookReader
       @dispatcher.register_mode(:recent, bindings)
     end
 
+    def register_library_bindings
+      bindings = {}
+      # Navigate
+      Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :library_up }
+      Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :library_down }
+      # Open
+      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :library_select }
+      # Back
+      Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :back_to_menu }
+      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :back_to_menu }
+      @dispatcher.register_mode(:library, bindings)
+    end
+
     def register_settings_bindings
       bindings = {}
 
       # Number keys for settings toggles
+      # 1: View Mode
       bindings['1'] = :toggle_view_mode
-      bindings['2'] = :toggle_page_numbers
-      bindings['3'] = :cycle_line_spacing
-      bindings['4'] = :toggle_highlight_quotes
-      bindings['5'] = :clear_cache
-      bindings['6'] = :toggle_page_numbering_mode
+      # 2: Line Spacing
+      bindings['2'] = :cycle_line_spacing
+      # 3: Page Numbers
+      bindings['3'] = :toggle_page_numbers
+      # 4: Page Numbering Mode
+      bindings['4'] = :toggle_page_numbering_mode
+      # 5: Highlight Quotes
+      bindings['5'] = :toggle_highlight_quotes
+      # 6: Wipe Cache
+      bindings['6'] = :wipe_cache
 
       # Go back to main menu
       Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :back_to_menu }
@@ -623,19 +598,7 @@ module EbookReader
       @scanner.scan_status = :error
     end
 
-    def sanitize_input_path(input)
-      return '' unless input
-
-      path = input.chomp.strip
-      if (path.start_with?("'") && path.end_with?("'")) ||
-         (path.start_with?('"') && path.end_with?('"'))
-        path = path[1..-2]
-      end
-      path = path.delete('"')
-      File.expand_path(path)
-    end
-
-    # Use Actions::FileActions#handle_file_path
+    # Use Actions::FileActions#sanitize_input_path and #handle_file_path
 
     def load_recent_books
       RecentFiles.load
@@ -654,6 +617,34 @@ module EbookReader
       format_time_ago(seconds, time)
     rescue StandardError
       'unknown'
+    end
+
+    # Library mode helpers
+    public def library_up
+      current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
+      @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [current - 1, 0].max))
+    end
+
+    public def library_down
+      items = if @main_menu_component&.current_screen&.respond_to?(:items)
+                @main_menu_component.current_screen.items
+              else
+                []
+              end
+      max_index = [items.length - 1, 0].max
+      current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
+      @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [current + 1, max_index].min))
+    end
+
+    public def library_select
+      screen = @main_menu_component&.current_screen
+      items = screen&.respond_to?(:items) ? screen.items : []
+      index = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
+      item = items[index]
+      return unless item
+
+      # Open using cache directory for instant open
+      run_reader(item.open_path)
     end
 
     def format_time_ago(seconds, time)

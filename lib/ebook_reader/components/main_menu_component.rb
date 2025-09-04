@@ -4,7 +4,7 @@ require_relative 'base_component'
 require_relative 'layouts/vertical'
 require_relative 'screens/menu_screen_component'
 require_relative 'screens/browse_screen_component'
-require_relative 'screens/recent_screen_component'
+require_relative 'screens/library_screen_component'
 require_relative 'screens/settings_screen_component'
 require_relative 'screens/open_file_screen_component'
 require_relative 'screens/annotations_screen_component'
@@ -52,9 +52,7 @@ module EbookReader
         @screen_components[:browse]
       end
 
-      def recent_screen
-        @screen_components[:recent]
-      end
+      # recent screen removed
 
       def settings_screen
         @screen_components[:settings]
@@ -78,7 +76,7 @@ module EbookReader
         @screen_components = {
           menu: Screens::MenuScreenComponent.new(@state),
           browse: Screens::BrowseScreenComponent.new(@scanner, @state),
-          recent: Screens::RecentScreenComponent.new(@main_menu, @state),
+          library: Screens::LibraryScreenComponent.new(@state),
           settings: Screens::SettingsScreenComponent.new(@state, @scanner),
           open_file: Screens::OpenFileScreenComponent.new(@state),
           annotations: Screens::AnnotationsScreenComponent.new(@state),

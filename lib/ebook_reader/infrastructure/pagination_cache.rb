@@ -1,0 +1,118 @@
+# frozen_string_literal: true
+
+require 'json'
+
+module EbookReader
+  module Infrastructure
+    # Persists dynamic pagination (per-layout) into the book's cache directory.
+    # Stores compact page entries (no text): chapter_index, page_in_chapter,
+    # total_pages_in_chapter, start_line, end_line.
+    module PaginationCache
+      module_function
+
+      def layout_key(width, height, view_mode, line_spacing)
+        "#{width}x#{height}_#{view_mode}_#{line_spacing}"
+      end
+
+      def load_for_document(doc, key)
+        dir = resolve_cache_dir(doc)
+        return nil unless dir
+        path, serializer = locate(dir, key)
+        return nil unless path
+        data = serializer.load_file(path)
+        return nil unless data.is_a?(Array)
+        data.map do |h|
+          {
+            chapter_index: h['chapter_index'] || h[:chapter_index],
+            page_in_chapter: h['page_in_chapter'] || h[:page_in_chapter],
+            total_pages_in_chapter: h['total_pages_in_chapter'] || h[:total_pages_in_chapter],
+            start_line: h['start_line'] || h[:start_line],
+            end_line: h['end_line'] || h[:end_line],
+          }
+        end
+      rescue StandardError
+        nil
+      end
+
+      def save_for_document(doc, key, pages_compact)
+        dir = resolve_cache_dir(doc)
+        return false unless dir
+        FileUtils.mkdir_p(File.join(dir, 'pagination'))
+        serializer = select_serializer
+        final = File.join(dir, 'pagination', "#{key}.#{serializer.ext}")
+        tmp = final + '.tmp'
+        serializer.dump_file(tmp, pages_compact)
+        File.rename(tmp, final)
+        true
+      rescue StandardError
+        false
+      ensure
+        begin
+          FileUtils.rm_f(tmp) if defined?(tmp) && File.exist?(tmp)
+        rescue StandardError
+          # ignore
+        end
+      end
+
+      def resolve_cache_dir(doc)
+        # Prefer cache_dir if document exposes it (cached open)
+        if doc.respond_to?(:cache_dir) && doc.cache_dir && !doc.cache_dir.to_s.empty?
+          return doc.cache_dir
+        end
+        # Fallback: compute cache dir from epub path via EpubCache
+        if doc.respond_to?(:canonical_path) && doc.canonical_path && File.exist?(doc.canonical_path)
+          cache = EbookReader::Infrastructure::EpubCache.new(doc.canonical_path)
+          return cache.cache_dir
+        end
+        nil
+      rescue StandardError
+        nil
+      end
+
+      def locate(dir, key)
+        mp = File.join(dir, 'pagination', "#{key}.msgpack")
+        js = File.join(dir, 'pagination', "#{key}.json")
+        if File.exist?(mp) && msgpack_available?
+          [mp, MessagePackSerializer.new]
+        elsif File.exist?(js)
+          [js, JSONSerializer.new]
+        else
+          [nil, nil]
+        end
+      end
+
+      def exists_for_document?(doc, key)
+        dir = resolve_cache_dir(doc)
+        return false unless dir
+        mp = File.join(dir, 'pagination', "#{key}.msgpack")
+        js = File.join(dir, 'pagination', "#{key}.json")
+        File.exist?(mp) || File.exist?(js)
+      rescue StandardError
+        false
+      end
+
+      def select_serializer
+        msgpack_available? ? MessagePackSerializer.new : JSONSerializer.new
+      end
+
+      def msgpack_available?
+        require 'msgpack'
+        true
+      rescue LoadError
+        false
+      end
+
+      class JSONSerializer
+        def ext = 'json'
+        def dump_file(path, data) = File.write(path, JSON.generate(data))
+        def load_file(path) = JSON.parse(File.read(path))
+      end
+
+      class MessagePackSerializer
+        def ext = 'msgpack'
+        def dump_file(path, data) = File.binwrite(path, MessagePack.pack(data))
+        def load_file(path) = MessagePack.unpack(File.binread(path))
+      end
+    end
+  end
+end

@@ -25,24 +25,9 @@ module EbookReader
         @config = config
       end
 
-      def error_document_for(error_msg)
-        doc = Object.new
-        define_error_doc_methods(doc, error_msg)
-        doc
-      end
-
+      # Error rendering is handled by Infrastructure::DocumentService::ErrorDocument
+      # This presenter no longer fabricates error documents via singleton methods.
       private
-
-      def define_error_doc_methods(doc, error_msg)
-        doc.define_singleton_method(:title) { 'Error Loading EPUB' }
-        doc.define_singleton_method(:language) { 'en_US' }
-        doc.define_singleton_method(:chapter_count) { 1 }
-        doc.define_singleton_method(:chapters) { [{ title: 'Error', lines: [] }] }
-        doc.define_singleton_method(:get_chapter) do |_idx|
-          { number: '1', title: 'Error', lines: error_lines(error_msg) }
-        end
-      end
-
       def error_lines(error_msg)
         ERROR_MESSAGE_LINES.map { |line| line == '%<error>s' ? error_msg : line }
       end

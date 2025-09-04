@@ -3,7 +3,7 @@
 module EbookReader
   module Domain
     module Commands
-      # Menu commands for top-level and browse/recent screens
+      # Menu commands for top-level and browse screens
       class MenuCommand < BaseCommand
         def initialize(action)
           @action = action
@@ -52,11 +52,7 @@ module EbookReader
               context.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(mode: :browse,
                                                                                         search_active: false))
             end
-          when :recent_up then recent_nav(context, -1)
-          when :recent_down then recent_nav(context, +1)
-          when :recent_select then if context.respond_to?(:open_selected_recent_book)
-                                     context.open_selected_recent_book
-                                   end
+          # recent_* actions removed
           # Annotations list (menu) actions
           when :annotations_up
             context.main_menu_component.annotations_screen.navigate(:up) if context.respond_to?(:main_menu_component)
@@ -122,19 +118,7 @@ module EbookReader
           new_val
         end
 
-        def recent_nav(context, delta)
-          state = context.state
-          items = begin
-            EbookReader::RecentFiles.load.select { |r| r && r['path'] && File.exist?(r['path']) }
-          rescue StandardError
-            []
-          end
-          max_idx = [items.length - 1, 0].max
-          current = state.get(%i[menu browse_selected]) || 0
-          new_val = [[current + delta, 0].max, max_idx].min
-          state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: new_val))
-          new_val
-        end
+        # recent navigation removed
       end
     end
   end

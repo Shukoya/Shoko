@@ -7,7 +7,6 @@ require_relative 'annotations/mouse_handler'
 # Removed unused: ui/components/popup_menu
 require_relative 'components/enhanced_popup_menu'
 require_relative 'components/tooltip_overlay_component'
-require_relative 'terminal_mouse_patch'
 
 module EbookReader
   # A Reader that supports mouse interactions for annotations.
@@ -167,10 +166,18 @@ module EbookReader
 
     def copy_to_clipboard(text)
       @clipboard_service.copy_with_feedback(text) do |message|
-        set_message(message)
+        begin
+          @dependencies.resolve(:ui_controller).set_message(message)
+        rescue StandardError
+          # best-effort
+        end
       end
     rescue Domain::Services::ClipboardService::ClipboardError => e
-      set_message("Copy failed: #{e.message}")
+      begin
+        @dependencies.resolve(:ui_controller).set_message("Copy failed: #{e.message}")
+      rescue StandardError
+        # ignore
+      end
       false
     end
 

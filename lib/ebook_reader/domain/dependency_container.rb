@@ -147,9 +147,14 @@ module EbookReader
         container.register_factory(:selection_service) { |c| Domain::Services::SelectionService.new(c) }
         container.register_factory(:layout_service) { |c| Domain::Services::LayoutService.new(c) }
         container.register_factory(:clipboard_service) { |c| Domain::Services::ClipboardService.new(c) }
-        container.register_factory(:terminal_service) { |c| Domain::Services::TerminalService.new(c) }
+        # TerminalService wraps a global Terminal; use a singleton to keep lifecycle consistent
+        container.register_singleton(:terminal_service) { |c| Domain::Services::TerminalService.new(c) }
         container.register_factory(:annotation_service) { |c| Domain::Services::AnnotationService.new(c) }
-        container.register_factory(:wrapping_service) { |c| Domain::Services::WrappingService.new(c) }
+        # WrappingService caches windows/chapters; make it a singleton to share cache
+        container.register_singleton(:wrapping_service) { |c| Domain::Services::WrappingService.new(c) }
+
+        # Notifications
+        container.register_singleton(:notification_service) { |c| Domain::Services::NotificationService.new(c) }
 
         # Infrastructure services
         container.register_factory(:document_service) do |_c|
@@ -158,12 +163,6 @@ module EbookReader
         end
 
         # Focused controllers replacing god class
-
-        # Legacy services (to be migrated to domain)
-        # TODO: Convert to domain service
-        container.register_factory(:chapter_cache) do |_c|
-          EbookReader::Services::ChapterCache.new
-        end
 
         # Unified state management
         container.register_singleton(:global_state) { |c| Infrastructure::ObserverStateStore.new(c.resolve(:event_bus)) }

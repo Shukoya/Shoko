@@ -30,8 +30,8 @@ module EbookReader
           render_setting_option(surface, bounds, 5, '3', 'Page Numbers', format_page_numbers)
           render_setting_option(surface, bounds, 6, '4', 'Page Numbering Mode',
                                 format_page_numbering_mode)
-          render_setting_option(surface, bounds, 7, '5', 'Theme', format_theme)
-          render_setting_option(surface, bounds, 8, '6', 'Highlighting', format_highlighting)
+          render_setting_option(surface, bounds, 7, '5', 'Highlight Quotes', format_highlight_quotes)
+          render_setting_option(surface, bounds, 8, '6', 'Wipe Cache', 'Removes EPUB + scan caches')
 
           # Instructions
           surface.write(bounds, height - 3, 2,
@@ -84,20 +84,8 @@ module EbookReader
           end
         end
 
-        def format_theme
-          case @state.get(%i[config theme])
-          when :dark then 'Dark'
-          when :light then 'Light'
-          else 'Unknown'
-          end
-        end
-
-        def format_highlighting
-          quotes = @state.get(%i[config highlight_quotes]) ? 'Quotes' : ''
-          keywords = @state.get(%i[config highlight_keywords]) ? 'Keywords' : ''
-
-          highlights = [quotes, keywords].compact.reject(&:empty?)
-          highlights.empty? ? 'None' : highlights.join(', ')
+        def format_highlight_quotes
+          @state.get(%i[config highlight_quotes]) ? 'On' : 'Off'
         end
       end
     end

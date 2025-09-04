@@ -49,7 +49,7 @@ module EbookReader
 
       def method_accepts_arg?(context, method)
         arity = context.method(method).arity
-        arity != 0
+        arity < 0 || arity > 0
       rescue NameError
         false
       end

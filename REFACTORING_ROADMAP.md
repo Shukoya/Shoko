@@ -1,9 +1,9 @@
 # EBook Reader Refactoring Roadmap
 
-**Current Status: Phase 4.5 - Documentation + Input Alignment**  
-**Overall Progress: ~88% Complete (audited 2025-09-02)**  
+**Current Status: Phase 4.6 - Documentation + Input Alignment**  
+**Overall Progress: ~90% Complete (audited 2025-09-04)**  
 **Estimated Completion: Phase 4.6**  
-**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation has been aligned (Project Structure + DI examples). Minor menu state API consistency remains. Reader loading flicker has been fixed by keeping the app in the alternate screen. Progress is shown inline during menu-driven open; direct CLI open performs a silent, frame-safe pre-build without flicker.
+**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation has been aligned (Project Structure + DI examples). Minor menu state API consistency remains. Reader loading flicker has been fixed by keeping the app in the alternate screen. Progress is shown inline during menu-driven open; direct CLI open performs a silent, frame-safe pre-build without flicker. Canonical book identity (`EPUBDocument#source_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and first frame now lands on the saved page in dynamic mode.
 
 ## Phase 1: Infrastructure Foundation ✅ COMPLETE
 
@@ -30,7 +30,7 @@
 **Verified Status**: Legacy wrappers for `coordinate_service`, `clipboard_service`, and `layout_service` do NOT exist under `lib/ebook_reader/services/` anymore. All active implementations live under `lib/ebook_reader/domain/services/`.
 - [x] Legacy wrappers removed (`coordinate_service.rb`, `clipboard_service.rb`, `layout_service.rb`) — verified absent
 - [x] All references use `domain/services/` versions only — verified
-- [x] `chapter_cache.rb` remains intentionally in `services/` as legacy infra helper (kept by design)
+- [x] `chapter_cache.rb` retained only as an internal helper to `Domain::Services::WrappingService` (no public DI registration)
 - [x] No stray container registrations for deleted legacy services
 
 ### 2.2 State System Unification ✅ COMPLETE  
@@ -60,7 +60,7 @@
 - [x] Extract UIController (mode switching, overlays)  
 - [x] Extract InputController (key handling consolidation)
 - [x] Extract StateController (state updates and persistence)
-- [x] Keep ReaderController as coordinator only (1314→549 lines, ~58% reduction)
+- [x] Keep ReaderController as coordinator only (1314→773 lines, ~41% reduction). Further slimming planned (move loading overlay + window orchestration out).
 
 ### 3.2 Input System Unification ✅ COMPLETE
 **Issue Resolved**: All core navigation uses Domain Commands, specialized modes retain existing patterns
@@ -71,7 +71,7 @@
 - [x] Navigation commands (:next_page, :prev_page, :next_chapter, :prev_chapter, :scroll_up, :scroll_down) now use NavigationService through Domain layer
 
 ### 3.3 Terminal Access Elimination ✅ COMPLETE (re‑verified)
-**Verified Status**: All rendering constructs surfaces via `TerminalService`. No direct `Terminal` construction remains in UI paths.
+**Verified Status**: All rendering constructs surfaces via `TerminalService`. No direct `Terminal` construction remains in UI paths. `TerminalService` is now a singleton.
 - [x] Remove direct Terminal writes from MouseableReader
 - [x] Most component rendering goes through Surface/Component system
 - [x] `TerminalService` abstraction exists and is used in Reader loop
@@ -111,6 +111,46 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
 - [ ] Make components purely reactive to state events
 - [ ] Remove imperative component updates
 - [ ] Add event sourcing for complex state changes
+
+## Phase 5: EPUB Caching ✅ MOSTLY COMPLETE
+
+Goal: Instant subsequent opens by avoiding ZIP inflation and OPF parsing; cache-backed Library view for instant startup.
+
+### 5.1 Disk Cache Infrastructure ✅ COMPLETE
+- [x] `Infrastructure::EpubCache` with SHA‑256 subdir under `${XDG_CACHE_HOME:-~/.cache}/reader/`
+- [x] Copies `META-INF/container.xml`, OPF, and spine XHTML
+- [x] Manifest write is atomic; MessagePack preferred, JSON fallback
+
+### 5.2 EPUBDocument Integration ✅ COMPLETE
+- [x] Cache-first load (cache dir path or hashed path)
+- [x] Background population of cache on first open
+- [x] Skip heavy precompute on cache hits; build page-map in background
+
+### 5.3 Library Screen ✅ COMPLETE
+- [x] Enumerates cache dirs and opens directly from cache for instant open
+- [x] Uses centralized cache root path helper
+
+### 5.4 Tests ✅ COMPLETE
+- [x] Instant open from Library
+- [x] Wipe cache removes disk cache, scan cache, and recent files
+
+### 5.5 Follow-ups 🔶 OPEN
+- [ ] Manifest schema version for future upgrades; bump to invalidate old schemas
+- [ ] Cache validation helper (`EpubCache.validate!(dir)`) to detect missing/corrupt files and fall back safely
+- [ ] Test coverage for MessagePack manifest path (write+read) and corrupt JSON/MessagePack fallbacks
+- [ ] Documentation note in ARCHITECTURE.md referencing `CachePaths`
+
+### 5.6 Instant-Open Runtime Optimizations ✅ COMPLETE
+- [x] Windowed wrapping for first paint (`WrappingService#wrap_window`) to avoid full chapter wrapping
+- [x] Background prefetch of ±20 pages around visible window to make immediate navigation snappy
+- [x] Library→Reader open uses cache dir directly (bypasses ZIP and OPF parsing entirely)
+- [x] Bookmarks and annotations load on a background thread (no delay before first frame)
+- [x] Direct CLI open sets up the terminal before document load to avoid pre-frame shell delay (uses `TerminalService` session depth)
+- [x] `TerminalService` and `WrappingService` are singletons to stabilize lifecycle and share caches
+
+### 5.7 Remaining Latency Risk (to address) 🔶 OPEN
+- [ ] Prefetch size configurability: expose `config.prefetch_pages` (default 20) and honor it in `ReaderController#wrapped_window_for`.
+- [ ] Window cache memory: add a small LRU or cap per chapter/width to bound growth during long sessions.
 
 ## Critical Path Issues ✅ RESOLVED
 
@@ -159,21 +199,27 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
 
 **REMAINING PRIORITIES (Updated Priority Order):**
 1. ✅ HIGH: DI consistency in renderers (single source of services)
-   - Implemented: `ViewRendererFactory` passes `controller.dependencies`; `BaseViewRenderer` now requires dependencies (no ad-hoc containers).
+   - Implemented: `ViewRendererFactory` passes `controller.dependencies`; `BaseViewRenderer` now requires dependencies (no ad-hoc containers). Also switched rendered_lines to one-shot dispatch per frame from `BaseViewRenderer`.
 2. ✅ HIGH: Remove unused legacy UI scaffolding
    - Implemented: deleted `lib/ebook_reader/ui/base_screen.rb` (no references remained).
 3. ✅ MEDIUM: Styling consistency
    - Implemented: replaced raw `Terminal::ANSI` color codes in components with `Constants::UIConstants` (kept italics and reset codes).
 4. 🔶 LOW: State API consistency (menu)
-   - Remaining: menu-related code still mixes `set`/`update` with direct field edits; prefer dispatching `UpdateMenuAction` for single-field changes to match controllers (e.g., `MainMenu#handle_backspace_input`, `#handle_character_input`).
+   - Verified: menu updates use `UpdateMenuAction`; keep this consistent.
 5. ✅ LOW: Message timeout hygiene
    - Implemented debounced timers in `UIController#set_message` and `StateController#set_message` to avoid thread buildup.
 6. ✅ HIGH: Unify menu annotation editor input
    - Verified: menu `:annotation_editor` bindings use `Domain::Commands::AnnotationEditorCommandFactory` (save/cancel/backspace/enter/insert). No inline lambdas remain for the editor.
+7. ✅ LOW: Message handling centralization
+   - Implemented: `Domain::Services::NotificationService` centralizes set/clear with timers; both UI and State controllers delegate.
+8. ✅ LOW: Rendered lines update consistency
+   - Implemented: `BaseViewRenderer` buffers rendered lines and dispatches `UpdateRenderedLinesAction` once per frame.
+9. 🔶 LOW: Center-row logic unification
+   - Implemented: Both dynamic and absolute renderers use `LayoutService#calculate_center_start_row`.
 
 ## Verification Notes (Claims Re‑checked)
 
-- Phase 2.1 Service Layer Consolidation: Verified no legacy wrappers under `lib/ebook_reader/services/` for coordinate/clipboard/layout; only `chapter_cache.rb` and `library_scanner.rb` remain by design.
+- Phase 2.1 Service Layer Consolidation: Verified no legacy wrappers under `lib/ebook_reader/services/` for coordinate/clipboard/layout; `chapter_cache.rb` remains as an internal helper for `WrappingService`; `library_scanner.rb` remains by design.
 - Phase 2.2 State System Unification: No `GlobalState` class in codebase; `:global_state` DI key resolves to `ObserverStateStore`. Some comments still mention “GlobalState”; update docs/comments only.
 - Phase 3.1 ReaderController Decomposition: Done; controllers exist (`navigation/ui/state/input`), and `ReaderController` now orchestrates.
 - Phase 3.2 Input System Unification: Reader navigation keys route through `DomainCommandBridge` and domain commands (verified in `Input::CommandFactory`, `Input::Commands`).
@@ -181,6 +227,7 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
 - Annotation UX Fixes: ESC cancel clears selection (`UIController#cleanup_popup_state` in editor bindings). Selected text extraction uses `SelectionService` in both `UIController` and `MouseableReader` — VERIFIED.
 - Annotations layering: `Components::Screens::AnnotationsScreenComponent` reads from state only (OK). `Components::Sidebar::AnnotationsTabRenderer` does not require `annotation_store` — VERIFIED. No `ReaderModes::AnnotationsMode` found — claim outdated.
 - Component contract: `TooltipOverlayComponent` and `EnhancedPopupMenu` implement `do_render` (OK).
+ - Popup input: `EnhancedPopupMenu` now exposes `handle_input` for consistency with component interface (delegates to existing logic).
 - Singleton `PageCalculatorService`: Registered as singleton in container; used by nav/render paths.
 - Terminal dimension sync: `StateStore#update_terminal_size` updates both `[:reader, :last_width/height]` and `[:ui, :terminal_width/height]`.
 - Dispatcher duplication: Not present — only `Input::Dispatcher` exists (no `Infrastructure::InputDispatcher`).
@@ -191,6 +238,8 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
 - Annotation editor input: Reader-context editor is routed via `Domain::Commands::AnnotationEditorCommandFactory` (InputController) — VERIFIED.  
   Menu-context editor is also routed via `Domain::Commands::AnnotationEditorCommandFactory` in `MainMenu#register_annotation_editor_bindings` — VERIFIED.
 - Loading UX: Previously, `MainMenu#run_reader` called `@terminal_service.cleanup` before constructing the reader, causing a flicker to the shell while large books loaded. Fixed by removing the pre-reader cleanup and making `TerminalService#setup/cleanup` idempotent (reference-counted). Menu-driven open shows inline progress during precomputation; direct CLI open runs a silent pre-build without flicker.
+ - Progress identity: Previously, progress keyed by the open path failed when opening via cache dir (landing on "Cover"). Fixed by introducing `EPUBDocument#source_path` and switching persistence to use the canonical path.
+ - First-frame accuracy: In dynamic mode, exact page restoration now runs immediately after the initial page-map build, not only when a background build completes.
 
 ## Phase 4: Annotations Unification 🚧 IN PROGRESS
 
@@ -272,21 +321,25 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
 6) Component duplication — RESOLVED  
    - `Components::Screens::AnnotationsScreenComponent` has a single `normalize_list` implementation.
 
-7) Main menu file-open duplication — PARTIAL  
-   - `open_book`/`run_reader`/`handle_file_path` are sourced from `Actions::FileActions` (good).  
-   - `sanitize_input_path` is still duplicated in both `MainMenu` and `Actions::FileActions`. Unify by keeping the implementation only in `Actions::FileActions` and removing it from `MainMenu`.
+7) Main menu file-open duplication — COMPLETE  
+  - `open_book`/`run_reader`/`handle_file_path` and `sanitize_input_path` live in `Actions::FileActions`. `MainMenu` delegates — no duplication.
 
-8) Unused render cache — OPEN  
-   - `Rendering::RenderCache` is instantiated in `ReaderController` but not used anywhere. Remove the instance variable and delete the file if no tests reference it.
+8) Unused render cache — N/A  
+  - No `RenderCache` exists; nothing to remove.
 
-9) Absolute page map duplication — OPEN  
-   - The absolute mode page‑map computation is implemented twice:  
-     • `ReaderController#perform_initial_calculations_with_progress` (absolute branch)  
-     • `MainMenu::Actions::FileActions#load_and_open_with_progress` (absolute branch)  
-   - Centralize into one place. Best path: add a `build_absolute_page_map(width, height, doc, state)` method to `Domain::Services::PageCalculatorService` (or a small `PageMapBuilder` service used by both), delegating wrapping to `WrappingService` and height to `LayoutService`.
+9) Absolute page map duplication — COMPLETE  
+  - Both reader and menu use `Domain::Services::PageCalculatorService#build_absolute_page_map`.
 
-10) Naming consistency — OPEN  
-   - Code and comments still mix `page_manager` vs. `page_calculator`. Standardize on `page_calculator` across all classes and comments.
+10) Naming consistency — COMPLETE  
+   - Standardized on `page_calculator` across rendering context and renderers.
 
-11) Dead helpers in MainMenu — OPEN  
-   - `MainMenu#create_menu_navigation_commands` and `#create_browse_navigation_commands` are not referenced after the dispatcher refactor. Remove them.
+11) Dead helpers in MainMenu — COMPLETE  
+   - Removed `MainMenu#create_menu_navigation_commands` and `#create_browse_navigation_commands`; dispatcher registrations are explicit per mode.
+
+12) Centralize cache paths — COMPLETE  
+   - Introduced `Infrastructure::CachePaths.reader_root` and adopted it in EpubCache, Library screen, and cache wipe.
+ 
+13) Canonicalize book identity — COMPLETE
+   - Introduced `EPUBDocument#source_path` (canonical path) sourced from cache manifest `epub_path` or original `.epub` file path.
+   - `StateController` now uses the canonical path for `ProgressManager` and `BookmarkManager`, ensuring restore consistency across open modes (original file vs cache dir).
+   - After initial dynamic page-map build, pending progress is applied precisely for a correct first frame.

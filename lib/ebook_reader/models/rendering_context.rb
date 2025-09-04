@@ -5,11 +5,11 @@ module EbookReader
     # Context object for rendering operations.
     # Replaces direct controller dependency in renderers with structured data access.
     class RenderingContext
-      attr_reader :document, :page_manager, :state, :config, :view_model
+      attr_reader :document, :page_calculator, :state, :config, :view_model
 
-      def initialize(document:, state:, config:, view_model:, page_manager: nil)
+      def initialize(document:, state:, config:, view_model:, page_calculator: nil)
         @document = document
-        @page_manager = page_manager
+        @page_calculator = page_calculator
         @state = state
         @config = config
         @view_model = view_model
@@ -35,14 +35,14 @@ module EbookReader
 
       # Dynamic mode page data access
       def get_page_data(index)
-        return nil unless @page_manager && page_numbering_mode == :dynamic
+        return nil unless @page_calculator && page_numbering_mode == :dynamic
 
-        @page_manager.get_page(index)
+        @page_calculator.get_page(index)
       end
 
       def total_pages
-        if @page_manager && page_numbering_mode == :dynamic
-          @page_manager.total_pages
+        if @page_calculator && page_numbering_mode == :dynamic
+          @page_calculator.total_pages
         else
           @state.get(%i[reader total_pages])
         end

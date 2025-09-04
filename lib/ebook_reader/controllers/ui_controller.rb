@@ -254,15 +254,12 @@ dependencies: @dependencies)
       end
 
       def set_message(text, duration = 2)
-        @state.dispatch(EbookReader::Domain::Actions::UpdateMessageAction.new(text))
         begin
-          @message_timer&.kill if @message_timer&.alive?
+          notifier = @dependencies.resolve(:notification_service)
+          notifier.set_message(@state, text, duration)
         rescue StandardError
-          # ignore
-        end
-        @message_timer = Thread.new do
-          sleep duration
-          @state.dispatch(EbookReader::Domain::Actions::ClearMessageAction.new)
+          # Fallback to direct dispatch if service not available
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMessageAction.new(text))
         end
       end
 

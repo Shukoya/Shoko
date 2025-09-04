@@ -48,7 +48,6 @@ module EbookReader
       # Menu navigation keys
       MENU = {
         browse: ['f'].freeze,
-        recent: ['r'].freeze,
         open_file: ['o'].freeze,
         settings: ['s'].freeze,
         search: ['S'].freeze,

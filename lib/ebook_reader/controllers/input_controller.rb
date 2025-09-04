@@ -96,6 +96,7 @@ module EbookReader
         register_toc_bindings_new(reader_controller)
         register_bookmarks_bindings_new(reader_controller)
         register_annotation_editor_bindings_new(reader_controller)
+        register_library_bindings_new(reader_controller)
       end
 
       def register_read_bindings(_reader_controller)
@@ -169,6 +170,11 @@ module EbookReader
         bindings['d'] = :delete_selected_bookmark
 
         @dispatcher.register_mode(:bookmarks, bindings)
+      end
+
+      def register_library_bindings_new(_reader_controller)
+        # Keys are registered in MainMenu#register_library_bindings; this hook ensures mode exists
+        # No-op here as dispatcher registration happens in MainMenu.
       end
 
       def register_annotation_editor_bindings_new(_reader_controller)

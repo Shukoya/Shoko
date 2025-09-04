@@ -40,9 +40,17 @@ module EbookReader
       end
 
       def render_single_mode_footer(surface, bounds, view_model, width, height)
-        return unless view_model.show_page_numbers && view_model.page_info[:total].positive?
+        return unless view_model.show_page_numbers
 
-        page_text = "#{view_model.page_info[:current]} / #{view_model.page_info[:total]}"
+        current = view_model.page_info[:current].to_i
+        total = view_model.page_info[:total].to_i
+        return if current <= 0 && total <= 0
+
+        page_text = if total.positive?
+                      "#{current} / #{total}"
+                    else
+                      "Page #{current}"
+                    end
         centered_col = [(width - page_text.length) / 2, 1].max
         surface.write(bounds, height, centered_col,
                       EbookReader::Constants::UIConstants::COLOR_TEXT_DIM + EbookReader::Constants::UIConstants::COLOR_TEXT_SECONDARY + page_text + Terminal::ANSI::RESET)
@@ -50,12 +58,18 @@ module EbookReader
 
       def render_split_mode_footer(surface, bounds, view_model, width, height)
         page_info = view_model.page_info
-        unless view_model.show_page_numbers && page_info[:left] && page_info[:left][:total].positive?
-          return
-        end
+        return unless view_model.show_page_numbers && page_info[:left]
+
+        left_current = page_info[:left][:current].to_i
+        left_total = page_info[:left][:total].to_i
+        return if left_current <= 0 && left_total <= 0
 
         # Left page number
-        left_text = "#{page_info[:left][:current]} / #{page_info[:left][:total]}"
+        left_text = if left_total.positive?
+                      "#{left_current} / #{left_total}"
+                    else
+                      "Page #{left_current}"
+                    end
         left_col = [(width / 4) - (left_text.length / 2), 1].max
         surface.write(bounds, height, left_col,
                       EbookReader::Constants::UIConstants::COLOR_TEXT_DIM + EbookReader::Constants::UIConstants::COLOR_TEXT_SECONDARY + left_text + Terminal::ANSI::RESET)
@@ -63,7 +77,13 @@ module EbookReader
         # Right page number
         return unless page_info[:right]
 
-        right_text = "#{page_info[:right][:current]} / #{page_info[:right][:total]}"
+        right_current = page_info[:right][:current].to_i
+        right_total = page_info[:right][:total].to_i
+        right_text = if right_total.positive?
+                       "#{right_current} / #{right_total}"
+                     else
+                       "Page #{right_current}"
+                     end
         right_col = [(3 * width / 4) - (right_text.length / 2), 1].max
         surface.write(bounds, height, right_col,
                       EbookReader::Constants::UIConstants::COLOR_TEXT_DIM + EbookReader::Constants::UIConstants::COLOR_TEXT_SECONDARY + right_text + Terminal::ANSI::RESET)

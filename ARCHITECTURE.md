@@ -71,3 +71,14 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 - Buffered output: Terminal double-buffering via `TerminalBuffer`.
 - Lazy loading: Chapters loaded on demand.
 - Caching: Library scan and chapter wrapping caches via services.
+
+## EPUB Cache
+
+- Goal: instant subsequent opens by avoiding ZIP inflation and XML parsing.
+- Key: cache directory `${XDG_CACHE_HOME:-~/.cache}/reader/<sha256>/`, where `<sha256>` is the SHA‑256 of the `.epub` file.
+- Implementation: `Infrastructure::EpubCache` manages hashing, directories, copying, and manifest IO.
+- First open (miss): `EPUBDocument` parses normally, then spawns a background thread to:
+  - Copy `META-INF/container.xml`, the OPF file, and all spine XHTML files into the cache (relative paths preserved).
+  - Write manifest atomically (`manifest.msgpack` if `msgpack` is available; otherwise `manifest.json`) with `title`, `author` (string), `authors` (array), `opf_path`, and `spine`.
+- Subsequent opens (hit): `EPUBDocument` loads the manifest and reads XHTML directly from the cache directory; it does not reopen the ZIP or re-parse the OPF.
+- Dependencies: Standard library only; MessagePack used opportunistically if present.

@@ -20,8 +20,16 @@ module EbookReader
       private
 
       def reader_mode
-        # Pass dependencies to MouseableReader
-        MouseableReader.new(@epub_path, nil, @dependencies).run
+        # Ensure alternate screen is entered before any heavy work for instant-open UX
+        term = @dependencies.resolve(:terminal_service)
+        term.setup
+        begin
+          # Pass dependencies to MouseableReader
+          MouseableReader.new(@epub_path, nil, @dependencies).run
+        ensure
+          # Balance setup to avoid lingering session depth
+          term.cleanup
+        end
       end
 
       def menu_mode

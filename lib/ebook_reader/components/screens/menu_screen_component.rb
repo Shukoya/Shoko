@@ -19,7 +19,7 @@ module EbookReader
         MENU_ITEMS = [
           { key: 'f', label: 'Browse Library',
             description: 'Find and open books from your collection' },
-          { key: 'r', label: 'Recent Books', description: 'Quickly access recently opened books' },
+          { key: 'l', label: 'Library', description: 'Open cached/imported books instantly' },
           { key: 'a', label: 'Annotations', description: 'View and manage your annotations' },
           { key: 'o', label: 'Open File', description: 'Open an EPUB file directly' },
           { key: 's', label: 'Settings', description: 'Customize reader preferences' },
