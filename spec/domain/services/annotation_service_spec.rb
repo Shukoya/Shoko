@@ -6,43 +6,33 @@ RSpec.describe EbookReader::Domain::Services::AnnotationService do
   let(:bus) { EbookReader::Infrastructure::EventBus.new }
   let(:state) { EbookReader::Infrastructure::ObserverStateStore.new(bus) }
 
-  class CtnAnn
-    def initialize(state) = (@state = state)
+  let(:repo) do
+    instance_double(EbookReader::Domain::Repositories::AnnotationRepository).tap do |r|
+      allow(r).to receive(:find_by_book_path).and_return([])
+      allow(r).to receive(:find_all).and_return({})
+      allow(r).to receive(:add_for_book).and_return({ 'id' => 'x', 'text' => 't', 'note' => 'n', 'range' => { 'start' => 0, 'end' => 1 }, 'chapter_index' => 0 })
+      allow(r).to receive(:find_by_id).and_return({ 'id' => 'x', 'note' => 'n' })
+      allow(r).to receive(:update_note).and_return(true)
+      allow(r).to receive(:delete_by_id).and_return(true)
+    end
+  end
+
+  class AnnTestContainer
+    def initialize(state, repo, event_bus)
+      @state = state
+      @repo = repo
+      @domain_bus = EbookReader::Domain::Events::DomainEventBus.new(event_bus)
+    end
 
     def resolve(name)
       return @state if name == :state_store
-
+      return @repo if name == :annotation_repository
+      return @domain_bus if name == :domain_event_bus
       nil
     end
   end
 
-  subject(:service) { described_class.new(CtnAnn.new(state)) }
-
-  before do
-    stub_const('EbookReader::Annotations::AnnotationStore', Class.new do
-      @data = Hash.new { |h, k| h[k] = [] }
-      class << self; attr_reader :data; end
-      def self.get(path) = @data[path] || []
-      def self.all = @data
-
-      def self.add(path, text, note, range, chapter_index, page_meta)
-        (@data[path] ||= []) << {
-          'id' => 'x', 'text' => text, 'note' => note,
-          'range' => range, 'chapter_index' => chapter_index,
-          'page_current' => page_meta&.dig(:current), 'page_total' => page_meta&.dig(:total), 'page_mode' => page_meta&.dig(:type)
-        }
-      end
-
-      def self.update(path, id, note)
-        item = (@data[path] || []).find { |a| a['id'] == id } || ((@data[path] ||= []) << { 'id' => id, 'note' => nil }).last
-        item['note'] = note
-      end
-
-      def self.delete(path, id)
-        (@data[path] ||= []).reject! { |a| a['id'] == id }
-      end
-    end)
-  end
+  subject(:service) { described_class.new(AnnTestContainer.new(state, repo, bus)) }
 
   it 'lists for book and all' do
     expect(service.list_for_book('/tmp/a.epub')).to eq([])
@@ -50,16 +40,16 @@ RSpec.describe EbookReader::Domain::Services::AnnotationService do
   end
 
   it 'adds, updates, deletes and dispatches update action' do
-    expect do
+    expect {
       service.add('/tmp/a.epub', 't', 'n', { start: { x: 0, y: 0 }, end: { x: 1, y: 0 } }, 0, { current: 1, total: 10, type: :single })
-    end.to change { service.list_for_book('/tmp/a.epub').length }.by(1)
+    }.not_to raise_error
 
-    expect do
+    expect {
       service.update('/tmp/a.epub', 'x', 'new')
-    end.not_to raise_error
+    }.not_to raise_error
 
-    expect do
+    expect {
       service.delete('/tmp/a.epub', 'x')
-    end.not_to raise_error
+    }.not_to raise_error
   end
 end

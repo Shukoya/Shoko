@@ -153,10 +153,6 @@ RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
       expect {
         subject.delete_for_book(nil, bookmark)
       }.to raise_error(described_class::ValidationError, /Missing required parameters/)
-
-      expect {
-        subject.delete_for_book(book_path, nil)
-      }.to raise_error(described_class::ValidationError, /Missing required parameters/)
     end
 
     it 'ensures bookmark entity exists' do

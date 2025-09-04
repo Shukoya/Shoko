@@ -3,7 +3,7 @@
 **Current Status: Phase 4.5 - Documentation + Input Alignment**  
 **Overall Progress: ~88% Complete (audited 2025-09-02)**  
 **Estimated Completion: Phase 4.6**  
-**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Remaining work is documentation cleanup (Project Structure + DI examples) and minor menu state API consistency. Reader loading flicker has been fixed by keeping the app in the alternate screen and drawing an in-app loading overlay while the book initializes.
+**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation has been aligned (Project Structure + DI examples). Minor menu state API consistency remains. Reader loading flicker has been fixed by keeping the app in the alternate screen. Progress is shown inline during menu-driven open; direct CLI open performs a silent, frame-safe pre-build without flicker.
 
 ## Phase 1: Infrastructure Foundation ✅ COMPLETE
 
@@ -43,7 +43,7 @@
 - [x] Verified :global_state dependency key correctly resolves to ObserverStateStore (GlobalState class completely removed)
 
 ### 2.3 Component Interface Standardization ✅ COMPLETE (updated)
-**Correction**: `do_render` is now the prevailing pattern for active components.
+**Correction**: `do_render` is now the prevailing pattern for active components, including the sidebar tab header component.
 - [x] ComponentInterface defined
 - [x] Reading components extend BaseComponent and implement do_render
 - [x] TooltipOverlayComponent implements do_render (verified)
@@ -190,7 +190,7 @@ Infrastructure Layer (StateStore, EventBus, Terminal)
  - Selection/overlay duplication: Eliminated — column-bounds logic now lives in `CoordinateService`; overlay and selection extraction use it — VERIFIED.
 - Annotation editor input: Reader-context editor is routed via `Domain::Commands::AnnotationEditorCommandFactory` (InputController) — VERIFIED.  
   Menu-context editor is also routed via `Domain::Commands::AnnotationEditorCommandFactory` in `MainMenu#register_annotation_editor_bindings` — VERIFIED.
-- Loading UX: Previously, `MainMenu#run_reader` called `@terminal_service.cleanup` before constructing the reader, causing a flicker to the shell while large books loaded. Fixed by removing the pre-reader cleanup, making `TerminalService#setup/cleanup` idempotent (reference-counted), and drawing an in-app "Opening book…" overlay during initialization.
+- Loading UX: Previously, `MainMenu#run_reader` called `@terminal_service.cleanup` before constructing the reader, causing a flicker to the shell while large books loaded. Fixed by removing the pre-reader cleanup and making `TerminalService#setup/cleanup` idempotent (reference-counted). Menu-driven open shows inline progress during precomputation; direct CLI open runs a silent pre-build without flicker.
 
 ## Phase 4: Annotations Unification 🚧 IN PROGRESS
 
@@ -218,13 +218,13 @@ Goal: One coherent annotations flow with strict layering (Domain Service + Actio
 - [x] `TooltipOverlayComponent` uses `do_render`; keep redraw-based invalidation and remove legacy popup fallbacks.
 - [x] Lightweight tests exist for selection normalization (`SelectionService`) and popup placement (`CoordinateService`).
 
-### 4.5 Documentation Alignment 📖 IN PROGRESS (updated)
+### 4.5 Documentation Alignment 📖 COMPLETE (updated)
 - [x] Update `ARCHITECTURE.md` and README Architecture section to reflect Clean Architecture layering (Infrastructure → Domain (services, actions, selectors, commands) → Application (controllers, UnifiedApplication) → Presentation (components)).
 - [x] Remove or reframe references to `ReaderModes` in docs; the editor is now a screen component and overlays are components.  
   - Verified: `DEVELOPMENT.md` already uses “Dispatcher + Screen Components”.
 - [x] Ensure configuration path casing in README is `~/.config/reader` (matches `Infrastructure::StateStore::CONFIG_DIR`).
-- [ ] Update `DEVELOPMENT.md` Project Structure to match actual layout (`domain`, `application`, `controllers`, `components`, `infrastructure`, `input`, etc.). Current tree references `core/concerns/renderers/services` which no longer exists.
-- [ ] Fix DI examples in docs: avoid creating an unused container in the sample (UnifiedApplication builds its own); add concrete examples for resolving services inside components via provided dependencies.
+- [x] Update `DEVELOPMENT.md` Project Structure to match actual layout (`domain`, `application`, `controllers`, `components`, `infrastructure`, `input`, etc.). Current tree references `core/concerns/renderers/services` which no longer exists.
+- [x] Fix DI examples in docs: avoid creating an unused container in the sample (UnifiedApplication builds its own); add concrete examples for resolving services inside components via provided dependencies.
 
 Outcome: A single, predictable flow — UI reads from state; controllers invoke Domain services; services persist and dispatch actions; the overlay is a proper component; there is no mode/screen duplication for annotations.
 
@@ -272,5 +272,21 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
 6) Component duplication — RESOLVED  
    - `Components::Screens::AnnotationsScreenComponent` has a single `normalize_list` implementation.
 
-7) Main menu file-open duplication — FIXED  
-   - Removed duplicate `open_book/run_reader/sanitize_input_path/handle_file_path` methods from `MainMenu`. The included `Actions::FileActions` module is now the single source.
+7) Main menu file-open duplication — PARTIAL  
+   - `open_book`/`run_reader`/`handle_file_path` are sourced from `Actions::FileActions` (good).  
+   - `sanitize_input_path` is still duplicated in both `MainMenu` and `Actions::FileActions`. Unify by keeping the implementation only in `Actions::FileActions` and removing it from `MainMenu`.
+
+8) Unused render cache — OPEN  
+   - `Rendering::RenderCache` is instantiated in `ReaderController` but not used anywhere. Remove the instance variable and delete the file if no tests reference it.
+
+9) Absolute page map duplication — OPEN  
+   - The absolute mode page‑map computation is implemented twice:  
+     • `ReaderController#perform_initial_calculations_with_progress` (absolute branch)  
+     • `MainMenu::Actions::FileActions#load_and_open_with_progress` (absolute branch)  
+   - Centralize into one place. Best path: add a `build_absolute_page_map(width, height, doc, state)` method to `Domain::Services::PageCalculatorService` (or a small `PageMapBuilder` service used by both), delegating wrapping to `WrappingService` and height to `LayoutService`.
+
+10) Naming consistency — OPEN  
+   - Code and comments still mix `page_manager` vs. `page_calculator`. Standardize on `page_calculator` across all classes and comments.
+
+11) Dead helpers in MainMenu — OPEN  
+   - `MainMenu#create_menu_navigation_commands` and `#create_browse_navigation_commands` are not referenced after the dispatcher refactor. Remove them.

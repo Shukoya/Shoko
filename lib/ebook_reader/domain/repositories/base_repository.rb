@@ -61,7 +61,9 @@ module EbookReader
 
         # Helper to validate required parameters
         def validate_required_params(params, required_keys)
-          missing_keys = required_keys - params.keys
+          missing_keys = required_keys.select do |key|
+            !params.key?(key) || params[key].nil? || (params[key].respond_to?(:empty?) && params[key].empty?)
+          end
           return if missing_keys.empty?
 
           raise ValidationError, "Missing required parameters: #{missing_keys.join(', ')}"

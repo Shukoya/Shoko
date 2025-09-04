@@ -10,20 +10,25 @@ RSpec.describe EbookReader::Controllers::StateController do
   let(:page_calc) { double('PageCalc', get_page: { chapter_index: 0, start_line: 0 }, build_page_map: nil, find_page_index: 0) }
 
   class Ctn
-    def initialize(term, page_calc)
-      (@term = term
-       @pc = page_calc)
+    def initialize(term, page_calc, ann_svc)
+      @term = term
+      @pc = page_calc
+      @ann = ann_svc
     end
 
     def resolve(name)
       return @term if name == :terminal_service
       return @pc if name == :page_calculator
-
+      return @ann if name == :annotation_service
       nil
     end
   end
 
-  subject(:sc) { described_class.new(state, doc, '/tmp/book.epub', Ctn.new(term, page_calc)) }
+  let(:annotation_service) do
+    double('AnnotationService', list_for_book: [{ 'text' => 't', 'note' => 'n' }])
+  end
+
+  subject(:sc) { described_class.new(state, doc, '/tmp/book.epub', Ctn.new(term, page_calc, annotation_service)) }
 
   before do
     stub_const('EbookReader::ProgressManager', Class.new do
@@ -38,9 +43,7 @@ RSpec.describe EbookReader::Controllers::StateController do
       def self.delete(_path, _bm); end
     end)
 
-    stub_const('EbookReader::Annotations::AnnotationStore', Class.new do
-      def self.get(_path) = [{ 'text' => 't', 'note' => 'n' }]
-    end)
+    # Annotation store is no longer used by StateController; using service via DI
   end
 
   it 'saves and loads progress (absolute)' do

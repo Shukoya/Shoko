@@ -19,4 +19,13 @@ RSpec.describe EbookReader::Domain::Services::LayoutService do
     expect(service.adjust_for_line_spacing(20, :normal)).to eq(20)
     expect(service.adjust_for_line_spacing(20, :relaxed)).to eq(10)
   end
+
+  it 'calculates centered start row based on lines and spacing' do
+    # content_height 30 lines, 5 lines of content normal spacing
+    start_row = service.calculate_center_start_row(30, 5, :normal)
+    expect(start_row).to be >= 3
+    # relaxed spacing doubles visual height
+    start_row_relaxed = service.calculate_center_start_row(30, 5, :relaxed)
+    expect(start_row_relaxed).to be_a(Integer)
+  end
 end

@@ -35,4 +35,28 @@ RSpec.describe EbookReader::Domain::Services::CoordinateService do
       expect(pos[:y]).to be <= 20
     end
   end
+
+  it 'normalizes positions and converts line coordinates' do
+    pos = service.normalize_position({ 'x' => 1, 'y' => 2 })
+    expect(pos).to eq({ x: 1, y: 2 })
+    abs = service.line_to_terminal(5, 10, 3)
+    expect(abs).to eq({ x: 15, y: 3 })
+  end
+
+  it 'detects column bounds and overlaps' do
+    rendered = {
+      'k' => { row: 5, col: 10, col_end: 20, text: 'abc', width: 11 },
+    }
+    bounds = service.column_bounds_for({ x: 12, y: 4 }, rendered)
+    expect(bounds).to eq({ start: 10, end: 20 })
+    expect(service.column_overlaps?(0, 5, bounds)).to be false
+    expect(service.column_overlaps?(15, 25, bounds)).to be true
+  end
+
+  it 'validates coordinates and computes distance' do
+    expect(service.validate_coordinates(5, 5, 10, 10)).to be true
+    expect(service.validate_coordinates(0, 5, 10, 10)).to be false
+    d = service.calculate_distance(0, 0, 3, 4)
+    expect(d).to eq(5.0)
+  end
 end

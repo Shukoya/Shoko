@@ -21,9 +21,7 @@ module EbookReader
           @controller = controller
         end
 
-        def render(surface, bounds)
-          @controller.state
-
+        def do_render(surface, bounds)
           # Draw separator line
           draw_separator(surface, bounds)
 

@@ -75,8 +75,9 @@ module EbookReader
         # @param bookmark [Models::Bookmark] The bookmark to delete
         # @return [Boolean] True if deleted successfully
         def delete_for_book(book_path, bookmark)
-          validate_required_params({ book_path: book_path, bookmark: bookmark }, %i[book_path bookmark])
+          # Ensure entity existence takes precedence for clearer error semantics
           ensure_entity_exists(bookmark, "Bookmark")
+          validate_required_params({ book_path: book_path }, %i[book_path])
 
           begin
             @storage.delete(book_path, bookmark)

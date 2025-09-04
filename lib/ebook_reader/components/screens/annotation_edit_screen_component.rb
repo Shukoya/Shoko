@@ -102,8 +102,10 @@ module EbookReader
 
           new_text = text.dup
           new_text.slice!(cur - 1)
-          @state.update({ %i[menu annotation_edit_text] => new_text,
-                          %i[menu annotation_edit_cursor] => cur - 1 })
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
+                           annotation_edit_text: new_text,
+                           annotation_edit_cursor: cur - 1
+                         ))
         end
 
         def handle_enter
@@ -111,8 +113,10 @@ module EbookReader
           cur = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
           new_text = text.dup
           new_text.insert(cur, "\n")
-          @state.update({ %i[menu annotation_edit_text] => new_text,
-                          %i[menu annotation_edit_cursor] => cur + 1 })
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
+                           annotation_edit_text: new_text,
+                           annotation_edit_cursor: cur + 1
+                         ))
         end
 
         def handle_character(char)
@@ -122,8 +126,10 @@ module EbookReader
           cur = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
           new_text = text.dup
           new_text.insert(cur, char)
-          @state.update({ %i[menu annotation_edit_text] => new_text,
-                          %i[menu annotation_edit_cursor] => cur + 1 })
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
+                           annotation_edit_text: new_text,
+                           annotation_edit_cursor: cur + 1
+                         ))
         end
 
         private

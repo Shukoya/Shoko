@@ -186,5 +186,11 @@ RSpec.describe EbookReader::Domain::ContainerFactory do
       expect(state_store).to respond_to(:get)
       expect(logger).to respond_to(:info)
     end
+
+    it 'registers a domain event bus backed by infrastructure bus' do
+      expect(container.registered?(:domain_event_bus)).to be true
+      deb = container.resolve(:domain_event_bus)
+      expect(deb).to be_a(EbookReader::Domain::Events::DomainEventBus)
+    end
   end
 end

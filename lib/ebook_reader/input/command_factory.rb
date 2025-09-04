@@ -14,25 +14,41 @@ module EbookReader
         def navigation_commands(_context, selection_field, max_value_proc)
           commands = {}
 
-          # Map selection fields to state paths
-          field_paths = {
-            selected: %i[menu selected],
-            browse_selected: %i[menu browse_selected],
-            toc_selected: %i[reader toc_selected],
-            bookmark_selected: %i[reader bookmark_selected],
-            sidebar_toc_selected: %i[reader sidebar_toc_selected],
-            sidebar_bookmarks_selected: %i[reader sidebar_bookmarks_selected],
-            sidebar_annotations_selected: %i[reader sidebar_annotations_selected],
-          }
-
-          field_path = field_paths[selection_field.to_sym]
-          return commands unless field_path
+          # Resolve target field and action type for consistent state mutations
+          field = selection_field.to_sym
+          action_type = case field
+                        when :selected, :browse_selected
+                          :menu
+                        when :toc_selected, :bookmark_selected
+                          :selections
+                        when :sidebar_toc_selected, :sidebar_bookmarks_selected, :sidebar_annotations_selected
+                          :sidebar
+                        else
+                          nil
+                        end
+          return commands unless action_type
 
           # Up navigation
           KeyDefinitions::NAVIGATION[:up].each do |key|
             commands[key] = lambda do |ctx, _|
-              current = ctx.state.get(field_path)
-              ctx.state.update(field_path, [current - 1, 0].max)
+              current = case action_type
+                        when :menu
+                          ctx.state.get([:menu, field]) || 0
+                        when :selections
+                          ctx.state.get([:reader, field]) || 0
+                        when :sidebar
+                          ctx.state.get([:reader, field]) || 0
+                        end
+              new_val = [current - 1, 0].max
+
+              case action_type
+              when :menu
+                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(field => new_val))
+              when :selections
+                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(field => new_val))
+              when :sidebar
+                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(field => new_val))
+              end
               :handled
             end
           end
@@ -40,9 +56,25 @@ module EbookReader
           # Down navigation
           KeyDefinitions::NAVIGATION[:down].each do |key|
             commands[key] = lambda do |ctx, _|
-              current = ctx.state.get(field_path)
+              current = case action_type
+                        when :menu
+                          ctx.state.get([:menu, field]) || 0
+                        when :selections
+                          ctx.state.get([:reader, field]) || 0
+                        when :sidebar
+                          ctx.state.get([:reader, field]) || 0
+                        end
               max_val = max_value_proc.call(ctx)
-              ctx.state.update(field_path, [current + 1, max_val].min)
+              new_val = [[current + 1, 0].max, max_val].min
+
+              case action_type
+              when :menu
+                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(field => new_val))
+              when :selections
+                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(field => new_val))
+              when :sidebar
+                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(field => new_val))
+              end
               :handled
             end
           end

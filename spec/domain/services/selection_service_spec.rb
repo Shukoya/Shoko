@@ -21,4 +21,16 @@ RSpec.describe EbookReader::Domain::Services::SelectionService do
     expect(text).to be_a(String)
     expect(text).not_to be_empty
   end
+
+  it 'returns empty string for invalid ranges and handles single-line selection' do
+    rendered_lines = {
+      '5_1_20' => { row: 5, col: 1, col_end: 20, width: 20, text: 'single line content' },
+    }
+    # invalid range
+    expect(service.extract_text(nil, rendered_lines)).to eq('')
+    # single line
+    range = { start: { x: 3, y: 4 }, end: { x: 8, y: 4 } }
+    txt = service.extract_text(range, rendered_lines)
+    expect(txt.length).to be > 0
+  end
 end

@@ -131,16 +131,13 @@ module EbookReader
     def run
       @terminal_service.setup
       if @pending_initial_calculation
-        unless preloaded_page_data?
-          # Build silently if needed but avoid showing a loading overlay
-          height, width = @terminal_service.size
-          if Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic && @page_calculator
-            @page_calculator.build_page_map(width, height, @doc, @state)
-          else
-            update_page_map(width, height)
-          end
+        if preloaded_page_data?
+          @pending_initial_calculation = false
+        else
+          # Use in-app progress overlay for initial calculations on CLI direct-open
+          perform_initial_calculations_with_progress
+          @pending_initial_calculation = false
         end
-        @pending_initial_calculation = false
       end
       main_loop
     ensure

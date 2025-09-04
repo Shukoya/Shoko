@@ -193,6 +193,9 @@ module EbookReader
         container.register(:logger,
                            RSpec::Mocks::Double.new('Logger', info: nil, error: nil, debug: nil))
 
+        # Provide a domain event bus backed by the mocked infrastructure bus
+        container.register(:domain_event_bus, Domain::Events::DomainEventBus.new(container.resolve(:event_bus)))
+
         container
       end
     end

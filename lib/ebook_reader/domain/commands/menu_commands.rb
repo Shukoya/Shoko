@@ -57,6 +57,39 @@ module EbookReader
           when :recent_select then if context.respond_to?(:open_selected_recent_book)
                                      context.open_selected_recent_book
                                    end
+          # Annotations list (menu) actions
+          when :annotations_up
+            context.main_menu_component.annotations_screen.navigate(:up) if context.respond_to?(:main_menu_component)
+          when :annotations_down
+            context.main_menu_component.annotations_screen.navigate(:down) if context.respond_to?(:main_menu_component)
+          when :annotations_select
+            if context.respond_to?(:main_menu_component)
+              ann = context.main_menu_component.annotations_screen.current_annotation
+              path = context.main_menu_component.annotations_screen.current_book_path
+              if ann && path
+                context.state.update({
+                                      %i[menu selected_annotation] => ann,
+                                      %i[menu selected_annotation_book] => path,
+                                    })
+                context.switch_to_mode(:annotation_detail) if context.respond_to?(:switch_to_mode)
+              end
+            end
+          when :annotations_edit
+            context.open_selected_annotation_for_edit if context.respond_to?(:open_selected_annotation_for_edit)
+          when :annotations_delete
+            context.delete_selected_annotation if context.respond_to?(:delete_selected_annotation)
+          # Annotation detail actions
+          when :annotation_detail_open
+            context.open_selected_annotation if context.respond_to?(:open_selected_annotation)
+          when :annotation_detail_edit
+            context.open_selected_annotation_for_edit if context.respond_to?(:open_selected_annotation_for_edit)
+          when :annotation_detail_delete
+            if context.respond_to?(:delete_selected_annotation)
+              context.delete_selected_annotation
+              context.switch_to_mode(:annotations) if context.respond_to?(:switch_to_mode)
+            end
+          when :annotation_detail_back
+            context.switch_to_mode(:annotations) if context.respond_to?(:switch_to_mode)
           else
             :pass
           end

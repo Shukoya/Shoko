@@ -104,4 +104,12 @@ RSpec.describe EbookReader::Domain::Events::DomainEventBus do
       subject.publish(test_event)
     end
   end
+
+  it 'exposes subscriber lists and counts' do
+    h = proc { |e| }
+    subject.subscribe(EbookReader::Domain::Events::BookmarkAdded, h)
+    expect(subject.subscribers_for(EbookReader::Domain::Events::BookmarkAdded)).to include(h)
+    expect(subject.subscriber_count(EbookReader::Domain::Events::BookmarkAdded)).to eq(1)
+    expect(subject.total_subscribers).to be >= 1
+  end
 end

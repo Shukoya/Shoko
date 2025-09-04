@@ -80,17 +80,12 @@ module EbookReader
         annotations = []
         begin
           svc = @dependencies.resolve(:annotation_service) if @dependencies.respond_to?(:resolve)
-          if svc
-            annotations = svc.list_for_book(@path)
-          elsif defined?(EbookReader::Annotations::AnnotationStore)
-            # Fallback to store for test contexts lacking DI registration
-            annotations = EbookReader::Annotations::AnnotationStore.get(@path) || []
-          end
+          annotations = svc ? svc.list_for_book(@path) : []
         rescue StandardError => e
           # Log the error and keep annotations empty
           begin
             @dependencies.resolve(:logger).error('Failed to refresh annotations', error: e.message,
-                                                                                  path: @path)
+                                                                                path: @path)
           rescue StandardError
             # no-op
           end

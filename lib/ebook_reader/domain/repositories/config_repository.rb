@@ -141,6 +141,8 @@ module EbookReader
             @state_store.update(config_hash.transform_keys { |k| [:config, k] })
             true
           rescue => e
+            # Bubble up validation errors directly; wrap others
+            raise e if e.is_a?(BaseRepository::ValidationError)
             handle_storage_error(e, "updating multiple config values")
           end
         end
@@ -171,7 +173,8 @@ module EbookReader
 
         # Get a configuration value with fallback to default
         def get_config_value(key, default_value)
-          @state_store.get([:config, key]) || default_value
+          value = @state_store.get([:config, key])
+          value.nil? ? default_value : value
         rescue => e
           handle_storage_error(e, "getting config value #{key}")
         end

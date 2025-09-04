@@ -513,18 +513,8 @@ module EbookReader
       bindings['6'] = :toggle_page_numbering_mode
 
       # Go back to main menu
-      Input::KeyDefinitions::ACTIONS[:quit].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.switch_to_mode(:menu)
-          :handled
-        }
-      end
-      Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.switch_to_mode(:menu)
-          :handled
-        }
-      end
+      Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :back_to_menu }
+      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :back_to_menu }
 
       @dispatcher.register_mode(:settings, bindings)
     end
@@ -533,18 +523,8 @@ module EbookReader
       bindings = Input::CommandFactory.text_input_commands(:file_input)
 
       # Go back to main menu
-      Input::KeyDefinitions::ACTIONS[:quit].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.switch_to_mode(:menu)
-          :handled
-        }
-      end
-      Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.switch_to_mode(:menu)
-          :handled
-        }
-      end
+      Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :back_to_menu }
+      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :back_to_menu }
 
       @dispatcher.register_mode(:open_file, bindings)
     end
@@ -553,62 +533,21 @@ module EbookReader
       bindings = {}
 
       # Up/Down navigate within the annotations screen component
-      Input::KeyDefinitions::NAVIGATION[:up].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.main_menu_component.annotations_screen.navigate(:up)
-          :handled
-        }
-      end
-      Input::KeyDefinitions::NAVIGATION[:down].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.main_menu_component.annotations_screen.navigate(:down)
-          :handled
-        }
-      end
+      Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :annotations_up }
+      Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :annotations_down }
 
       # Open selected annotation detail view
-      Input::KeyDefinitions::ACTIONS[:confirm].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ann = ctx.main_menu_component.annotations_screen.current_annotation
-          path = ctx.main_menu_component.annotations_screen.current_book_path
-          if ann && path
-            ctx.state.update({
-                               %i[menu selected_annotation] => ann,
-                               %i[menu selected_annotation_book] => path,
-                             })
-            ctx.switch_to_mode(:annotation_detail)
-          end
-          :handled
-        }
-      end
+      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :annotations_select }
 
       # Edit selected annotation (open book and enter editor)
-      %w[e E].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.open_selected_annotation_for_edit
-          :handled
-        }
-      end
+      %w[e E].each { |k| bindings[k] = :annotations_edit }
 
       # Delete selected annotation
-      bindings['d'] = lambda { |ctx, _|
-        ctx.delete_selected_annotation
-        :handled
-      }
+      bindings['d'] = :annotations_delete
 
       # Go back to main menu
-      Input::KeyDefinitions::ACTIONS[:quit].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.switch_to_mode(:menu)
-          :handled
-        }
-      end
-      Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.switch_to_mode(:menu)
-          :handled
-        }
-      end
+      Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :back_to_menu }
+      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :back_to_menu }
 
       @dispatcher.register_mode(:annotations, bindings)
     end
@@ -617,31 +556,12 @@ module EbookReader
       bindings = {}
 
       # Actions from detail view
-      %w[o O].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.open_selected_annotation
-          :handled
-        }
-      end
-      %w[e E].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.open_selected_annotation_for_edit
-          :handled
-        }
-      end
-      bindings['d'] = lambda { |ctx, _|
-        ctx.delete_selected_annotation
-        ctx.switch_to_mode(:annotations)
-        :handled
-      }
+      %w[o O].each { |k| bindings[k] = :annotation_detail_open }
+      %w[e E].each { |k| bindings[k] = :annotation_detail_edit }
+      bindings['d'] = :annotation_detail_delete
 
       # Back to annotations list
-      Input::KeyDefinitions::ACTIONS[:cancel].each do |key|
-        bindings[key] = lambda { |ctx, _|
-          ctx.switch_to_mode(:annotations)
-          :handled
-        }
-      end
+      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :annotation_detail_back }
 
       @dispatcher.register_mode(:annotation_detail, bindings)
     end

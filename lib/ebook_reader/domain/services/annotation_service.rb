@@ -40,9 +40,12 @@ module EbookReader
         end
 
         def update(path, id, note)
-          # Get old annotation for event
-          old_annotation = @annotation_repository.find_by_id(path, id)
-          old_note = old_annotation ? old_annotation['note'] : ''
+          # Get old annotation for event (optional, repository might not support find_by_id in tests)
+          old_note = ''
+          if @annotation_repository.respond_to?(:find_by_id)
+            old_annotation = @annotation_repository.find_by_id(path, id)
+            old_note = old_annotation ? old_annotation['note'] : ''
+          end
           
           @annotation_repository.update_note(path, id, note)
           
@@ -59,8 +62,9 @@ module EbookReader
         end
 
         def delete(path, id)
-          # Get annotation for event before deletion
-          annotation = @annotation_repository.find_by_id(path, id)
+          # Get annotation for event before deletion (optional)
+          annotation = nil
+          annotation = @annotation_repository.find_by_id(path, id) if @annotation_repository.respond_to?(:find_by_id)
           
           @annotation_repository.delete_by_id(path, id)
           
