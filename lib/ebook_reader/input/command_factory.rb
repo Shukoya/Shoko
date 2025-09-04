@@ -192,6 +192,18 @@ module EbookReader
             end
           end
 
+          # Pagination maintenance
+          if KeyDefinitions::READER.key?(:rebuild_pagination)
+            KeyDefinitions::READER[:rebuild_pagination].each do |key|
+              commands[key] = :rebuild_pagination
+            end
+          end
+          if KeyDefinitions::READER.key?(:invalidate_pagination)
+            KeyDefinitions::READER[:invalidate_pagination].each do |key|
+              commands[key] = :invalidate_pagination_cache
+            end
+          end
+
           KeyDefinitions::ACTIONS[:quit].each do |key|
             commands[key] = :quit_to_menu
           end

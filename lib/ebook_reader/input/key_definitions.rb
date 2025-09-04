@@ -43,6 +43,8 @@ module EbookReader
         show_bookmarks: ['B'].freeze,
         show_help: ['?'].freeze,
         show_annotations: ["\u0001"].freeze,
+        rebuild_pagination: ['R'].freeze,
+        invalidate_pagination: ['I'].freeze,
       }.freeze
 
       # Menu navigation keys

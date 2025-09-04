@@ -113,6 +113,22 @@ module EbookReader
         def dump_file(path, data) = File.binwrite(path, MessagePack.pack(data))
         def load_file(path) = MessagePack.unpack(File.binread(path))
       end
+
+      def delete_for_document(doc, key)
+        dir = resolve_cache_dir(doc)
+        return false unless dir
+        mp = File.join(dir, 'pagination', "#{key}.msgpack")
+        js = File.join(dir, 'pagination', "#{key}.json")
+        removed = false
+        [mp, js].each do |p|
+          next unless File.exist?(p)
+          File.delete(p)
+          removed = true
+        end
+        removed
+      rescue StandardError
+        false
+      end
     end
   end
 end

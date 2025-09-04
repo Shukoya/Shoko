@@ -168,6 +168,7 @@ require_relative 'ebook_reader/components/screens/base_screen_component'
 require_relative 'ebook_reader/components/screens/menu_screen_component'
 require_relative 'ebook_reader/components/screens/annotation_detail_screen_component'
 require_relative 'ebook_reader/components/screens/annotation_editor_screen_component'
+require_relative 'ebook_reader/ui/loading_overlay'
 
 # UI components
 require_relative 'ebook_reader/main_menu'

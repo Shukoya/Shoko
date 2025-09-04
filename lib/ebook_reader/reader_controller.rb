@@ -717,32 +717,59 @@ module EbookReader
     end
 
     def render_loading_overlay
+      UI::LoadingOverlay.render(@terminal_service, @state)
+    end
+
+    # Rebuild pagination for current layout and restore position
+    def rebuild_pagination(_key = nil)
+      return unless Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic
       height, width = @terminal_service.size
-      @terminal_service.start_frame
-      surface = @terminal_service.create_surface
-      bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
 
-      # Ultra-minimal progress bar near the top, single-row height
-      bar_row = [2, height - 1].min
-      bar_col = 2
-      bar_width = [[width - (bar_col + 1), 10].max, width - bar_col].min
+      # capture current logical line offset for precise restore
+      prev_idx = @state.get(%i[reader current_page_index]).to_i
+      prev_page = @page_calculator.get_page(prev_idx)
+      line_offset = prev_page ? prev_page[:start_line] : 0
+      chapter_index = @state.get(%i[reader current_chapter]) || 0
 
-      progress = (@state.get(%i[ui loading_progress]) || 0.0).to_f.clamp(0.0, 1.0)
-      filled = (bar_width * progress).round
+      @state.update({ %i[ui loading_active] => true, %i[ui loading_message] => 'Rebuilding pagination…',
+                      %i[ui loading_progress] => 0.0 })
+      UI::LoadingOverlay.render(@terminal_service, @state)
 
-      green_fg = Terminal::ANSI::BRIGHT_GREEN
-      grey_fg  = Terminal::ANSI::GRAY
-      reset    = Terminal::ANSI::RESET
+      @page_calculator.build_page_map(width, height, @doc, @state) do |done, total|
+        @state.update({ %i[ui loading_progress] => (done.to_f / [total, 1].max) })
+        UI::LoadingOverlay.render(@terminal_service, @state)
+      end
+      @state.update({ %i[reader total_pages] => @page_calculator.total_pages })
 
-      # Use thin line glyphs with foreground colors to avoid background bleed
-      track = if bar_width.positive?
-                (green_fg + ('━' * filled)) + (grey_fg + ('━' * (bar_width - filled))) + reset
-              else
-                ''
-              end
-      surface.write(bounds, bar_row, bar_col, track)
+      begin
+        idx = @page_calculator.find_page_index(chapter_index, line_offset.to_i)
+        @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: idx))
+      rescue StandardError
+        # best-effort
+      end
 
-      @terminal_service.end_frame
+      @state.update({ %i[ui loading_active] => false, %i[ui loading_message] => nil })
+      draw_screen
+      :handled
+    end
+
+    # Invalidate cached pagination for current layout and notify user
+    def invalidate_pagination_cache(_key = nil)
+      height, width = @terminal_service.size
+      view_mode = Domain::Selectors::ConfigSelectors.view_mode(@state)
+      line_spacing = Domain::Selectors::ConfigSelectors.line_spacing(@state)
+      key = EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode, line_spacing)
+      if EbookReader::Infrastructure::PaginationCache.exists_for_document?(@doc, key)
+        begin
+          EbookReader::Infrastructure::PaginationCache.delete_for_document(@doc, key)
+          @ui_controller.set_message('Pagination cache cleared')
+        rescue StandardError
+          @ui_controller.set_message('Failed to clear pagination cache')
+        end
+      else
+        @ui_controller.set_message('No pagination cache for this layout')
+      end
+      :handled
     end
 
     def preloaded_page_data?
@@ -775,9 +802,10 @@ module EbookReader
         # Visible window first
         visible = @wrapping_service.wrap_window(chapter.lines || [], chapter_index, col_width,
                                                 start, length)
-        # Prefetch ±20 pages around current offset in background
+        # Prefetch ±N pages around current offset in background
         begin
-          pre_pages = 20
+          pre_pages = (@state.get(%i[config prefetch_pages]) || 20).to_i
+          pre_pages = [[pre_pages, 0].max, 200].min
           prefetch_start = [start - (pre_pages * length), 0].max
           prefetch_end   = start + (pre_pages * length) + (length - 1)
           prefetch_len   = prefetch_end - prefetch_start + 1

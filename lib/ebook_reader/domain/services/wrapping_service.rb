@@ -9,10 +9,11 @@ module EbookReader
       # Service responsible for wrapping chapter lines to a column width.
       # Uses the shared ChapterCache to avoid recomputation across frames.
       class WrappingService < BaseService
+        WINDOW_CACHE_LIMIT = 200
         def initialize(dependencies)
           super
           @chapter_cache = EbookReader::Services::ChapterCache.new
-          @window_cache = Hash.new { |h, k| h[k] = {} }
+          @window_cache = Hash.new { |h, k| h[k] = { store: {}, order: [] } }
         end
         # Wrap raw lines for a chapter to the given width.
         # Falls back to a local wrapper if cache is unavailable.
@@ -46,7 +47,7 @@ module EbookReader
 
           target_end = [start.to_i, 0].max + length.to_i - 1
           key = "#{chapter_index}_#{width}"
-          cached = @window_cache[key][[start.to_i, length.to_i]]
+          cached = @window_cache[key][:store][[start.to_i, length.to_i]]
           return cached if cached
           wrapped = []
 
@@ -77,7 +78,7 @@ module EbookReader
           start_index = [start.to_i, 0].max
           return [] if start_index >= wrapped.length
           slice = wrapped[start_index, length.to_i] || []
-          @window_cache[key][[start.to_i, length.to_i]] = slice
+          cache_put(key, [start.to_i, length.to_i], slice)
           slice
         end
 
@@ -88,11 +89,13 @@ module EbookReader
         # Clear all cached wrapped lines
         def clear_cache
           @chapter_cache = EbookReader::Services::ChapterCache.new
+          @window_cache.clear
         end
 
         # Clear cache entries for a given width
         def clear_cache_for_width(width)
           @chapter_cache.clear_cache_for_width(width)
+          @window_cache.delete_if { |k, _| k.end_with?("_#{width}") }
         end
 
         protected
@@ -104,6 +107,20 @@ module EbookReader
         private
 
         # No-op private helpers retained for compatibility-free interface.
+
+        def cache_put(key, subkey, value)
+          entry = @window_cache[key]
+          store = entry[:store]
+          order = entry[:order]
+          unless store.key?(subkey)
+            order << subkey
+            if order.length > WINDOW_CACHE_LIMIT
+              oldest = order.shift
+              store.delete(oldest)
+            end
+          end
+          store[subkey] = value
+        end
       end
     end
   end
