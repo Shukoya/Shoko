@@ -136,12 +136,12 @@ module EbookReader
         end
 
         def render_dynamic_left_column_with_context(surface, bounds, lines, col_width, context)
-          render_column_lines(surface, bounds, lines, 1, col_width, context.config, nil, context)
+          render_column_lines(surface, bounds, lines, 1, col_width, context.config, context)
         end
 
         def render_dynamic_right_column_with_context(surface, bounds, lines, col_width, context)
           render_column_lines(surface, bounds, lines, col_width + 5, col_width, context.config,
-                              nil, context)
+                              context)
         end
 
         def render_left_column_with_context(surface, bounds, wrapped, context, col_width,
@@ -150,7 +150,7 @@ module EbookReader
 
           left_lines = wrapped.slice(context.state.get(%i[reader left_page]) || 0,
                                      display_height) || []
-          render_column_lines(surface, bounds, left_lines, 1, col_width, context.config, nil,
+          render_column_lines(surface, bounds, left_lines, 1, col_width, context.config,
                               context)
         end
 
@@ -161,7 +161,7 @@ module EbookReader
           right_lines = wrapped.slice(context.state.get(%i[reader right_page]) || 0,
                                       display_height) || []
           render_column_lines(surface, bounds, right_lines, col_width + 5, col_width,
-                              context.config, nil, context)
+                              context.config, context)
         end
       end
     end

@@ -22,6 +22,8 @@ RSpec.describe EbookReader::Controllers::NavigationController do
 
   it 'advances and retreats page in absolute mode' do
     state.set(%i[config page_numbering_mode], :absolute)
+    # Ensure deterministic single-page step regardless of external config file
+    state.set(%i[config view_mode], :single)
     state.set(%i[reader current_page_index], 0)
     state.set(%i[reader total_pages], 10)
     nav.next_page
