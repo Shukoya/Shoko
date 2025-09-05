@@ -3,7 +3,7 @@
 require 'spec_helper'
 
 RSpec.describe EbookReader::UI::LoadingOverlay do
-  class FakeOutput
+  class OverlayFakeOutput
     attr_reader :writes
     def initialize = (@writes = [])
     def write(row, col, text)
@@ -11,7 +11,7 @@ RSpec.describe EbookReader::UI::LoadingOverlay do
     end
   end
 
-  class FakeTerminalService
+  class OverlayFakeTerminalService
     attr_reader :surface_out, :started, :ended
     def initialize(out)
       @surface_out = out
@@ -25,8 +25,8 @@ RSpec.describe EbookReader::UI::LoadingOverlay do
   end
 
   it 'draws a progress bar line with expected characters' do
-    out = FakeOutput.new
-    term = FakeTerminalService.new(out)
+    out = OverlayFakeOutput.new
+    term = OverlayFakeTerminalService.new(out)
     bus = EbookReader::Infrastructure::EventBus.new
     state = EbookReader::Infrastructure::ObserverStateStore.new(bus)
     state.update({ %i[ui loading_progress] => 0.5 })
@@ -41,4 +41,3 @@ RSpec.describe EbookReader::UI::LoadingOverlay do
     expect(written).to include('━')
   end
 end
-

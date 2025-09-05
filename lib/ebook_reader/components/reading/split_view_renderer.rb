@@ -31,14 +31,7 @@ module EbookReader
 
         def render_column_lines(surface, bounds, lines, start_col, col_width, _config,
                                 context = nil)
-          lines.each_with_index do |line, idx|
-            spacing = context ? EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config) : :normal
-            row = 3 + (spacing == :relaxed ? idx * 2 : idx)
-            break if row >= bounds.height - 1
-
-            draw_line(surface, bounds, line: line, row: row, col: start_col, width: col_width,
-                      context: context)
-          end
+          draw_lines(surface, bounds, lines, 3, start_col, col_width, context)
         end
 
         # Context-based rendering methods

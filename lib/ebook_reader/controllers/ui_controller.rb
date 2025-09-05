@@ -194,14 +194,9 @@ dependencies: @dependencies)
         case @state.get(%i[reader sidebar_active_tab])
         when :toc
           index = @state.get(%i[reader sidebar_toc_selected]) || 0
-          # Use domain navigation service to ensure dynamic indexing logic is applied consistently
-          begin
-            nav_service = @dependencies.resolve(:navigation_service)
-            nav_service.jump_to_chapter(index)
-          rescue StandardError
-            # Fallback to controller if service unavailable
-            @dependencies.resolve(:navigation_controller).jump_to_chapter(index)
-          end
+          # Use domain navigation service consistently
+          nav_service = @dependencies.resolve(:navigation_service)
+          nav_service.jump_to_chapter(index)
 
           # Close the sidebar and restore previous view mode if it was stored
           prev_mode = @state.get(%i[reader sidebar_prev_view_mode])

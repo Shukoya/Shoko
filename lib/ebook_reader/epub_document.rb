@@ -117,13 +117,22 @@ module EbookReader
     # the EPUB specification.
     def find_opf_path
       container_xml = @zip.read('META-INF/container.xml')
-      container = REXML::Document.new(container_xml)
-      rootfile = container.elements['//rootfile']
-      return unless rootfile
+      begin
+        container = REXML::Document.new(container_xml)
+        rootfile = container.elements['//rootfile'] || container.elements['//container:rootfile']
+        if rootfile
+          opf_path = rootfile.attributes['full-path']
+          return opf_path if opf_path && @zip.find_entry(opf_path)
+        end
+      rescue StandardError
+        # fall through to regex fallback
+      end
 
-      opf_path = rootfile.attributes['full-path']
-      opf_path if @zip.find_entry(opf_path)
-    rescue StandardError
+      # Fallback: extract via regex in case of namespace quirks
+      if (m = container_xml.to_s.match(/full-path=["']([^"']+)["']/i))
+        path = m[1]
+        return path if @zip.find_entry(path)
+      end
       nil
     end
 

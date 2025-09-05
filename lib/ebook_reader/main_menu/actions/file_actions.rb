@@ -81,7 +81,7 @@ module EbookReader
             page_calc = @dependencies.resolve(:page_calculator)
 
             # Load document
-            doc_svc = EbookReader::Infrastructure::DocumentService.new(path)
+            doc_svc = @dependencies.resolve(:document_service_factory).call(path)
             doc = doc_svc.load_document
             # If cached, skip precomputation to open instantly
             if doc.respond_to?(:cached?) && doc.cached?
@@ -145,11 +145,7 @@ module EbookReader
           puts error.backtrace.join("\n") if EPUBFinder::DEBUG_MODE
         end
 
-        def open_file_dialog
-          @file_input = ''
-          @open_file_screen.input = ''
-          @mode = :open_file
-        end
+        # open_file_dialog handled by MainMenu (uses new state/dispatcher flow)
 
         def sanitize_input_path(input)
           return '' unless input

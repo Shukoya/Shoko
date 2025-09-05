@@ -45,7 +45,8 @@ module ZipTestBuilder
 
     io << central.string
 
-    comment = comment ? String(comment) : ''
+    # Duplicate to avoid modifying frozen string literals passed into builder
+    comment = comment ? String(comment).dup : ''.dup
     comment.force_encoding(Encoding::BINARY)
     # End of Central Directory
     io << [0x06054B50].pack('V')
@@ -75,4 +76,3 @@ module ZipTestBuilder
     m.to_i
   end
 end
-

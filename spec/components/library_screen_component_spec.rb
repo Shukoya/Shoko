@@ -7,7 +7,7 @@ RSpec.describe EbookReader::Components::Screens::LibraryScreenComponent do
   let(:state) { EbookReader::Infrastructure::ObserverStateStore.new(bus) }
 
   # Fake dependencies resolving library_service
-  class Deps
+  class LibraryDeps
     def initialize(ls) = (@ls = ls)
     def resolve(name)
       return @ls if name == :library_service
@@ -16,7 +16,7 @@ RSpec.describe EbookReader::Components::Screens::LibraryScreenComponent do
   end
 
   # Capture writes into an array for assertions
-  class FakeOutput
+  class LibraryFakeOutput
     attr_reader :writes
     def initialize = (@writes = [])
     def write(row, col, text)
@@ -29,9 +29,9 @@ RSpec.describe EbookReader::Components::Screens::LibraryScreenComponent do
       { title: 'Cached One', authors: 'A', year: '2023', last_accessed: nil, size_bytes: 123, open_path: '/cache/1', epub_path: '/src/1.epub' },
       { title: 'Cached Two', authors: 'B', year: '2024', last_accessed: nil, size_bytes: 456, open_path: '/cache/2', epub_path: '/src/2.epub' }
     ])
-    comp = described_class.new(state, Deps.new(fake_ls))
+    comp = described_class.new(state, LibraryDeps.new(fake_ls))
 
-    output = FakeOutput.new
+    output = LibraryFakeOutput.new
     surface = EbookReader::Components::Surface.new(output)
     bounds = EbookReader::Components::Rect.new(x: 1, y: 1, width: 80, height: 20)
 
@@ -45,4 +45,3 @@ RSpec.describe EbookReader::Components::Screens::LibraryScreenComponent do
     expect(item).not_to be_nil
   end
 end
-

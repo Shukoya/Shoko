@@ -15,7 +15,6 @@ RSpec.describe EbookReader::Controllers::UIController do
 
   let(:input_controller) { double('InputController', activate_for_mode: nil) }
   let(:navigation_service) { double('NavService', jump_to_chapter: nil) }
-  let(:navigation_controller) { double('NavCtrl', jump_to_chapter: nil) }
   let(:selection_service) { double('SelectionService', extract_text: 'txt') }
   let(:clipboard) { double('Clipboard', available?: true, copy_with_feedback: true) }
   let(:document) do
@@ -25,7 +24,6 @@ RSpec.describe EbookReader::Controllers::UIController do
     FakeContainer.new(
       input_controller: input_controller,
       navigation_service: navigation_service,
-      navigation_controller: navigation_controller,
       selection_service: selection_service,
       clipboard_service: clipboard,
       document: document

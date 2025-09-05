@@ -157,10 +157,21 @@ module EbookReader
         # Notifications
         container.register_singleton(:notification_service) { |c| Domain::Services::NotificationService.new(c) }
 
-        # Infrastructure services
-        container.register_factory(:document_service) do |_c|
-          # DocumentService will be created per book - requires epub_path parameter
-          nil # Placeholder - will be created with path parameter when needed
+        # Document service factory (per-book instance)
+        container.register_factory(:document_service_factory) do |c|
+          ->(path) do
+            klass = Infrastructure::DocumentService
+            init_arity = begin
+              klass.instance_method(:initialize).arity
+            rescue StandardError
+              1
+            end
+            if init_arity < 0 || init_arity >= 2
+              klass.new(path, c.resolve(:wrapping_service))
+            else
+              klass.new(path)
+            end
+          end
         end
 
         # Focused controllers replacing god class

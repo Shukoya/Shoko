@@ -1,7 +1,7 @@
 # EBook Reader Refactoring Roadmap
 
 **Current Status: Phase 4.6 - Documentation + Input Alignment**  
-**Overall Progress: ~90% Complete (audited 2025-09-05)**  
+**Overall Progress: ~88% Complete (audited 2025-09-05)**  
 **Estimated Completion: Phase 4.6**  
 **Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation has been aligned (Project Structure + DI examples). Minor menu state API consistency remains. Reader loading flicker has been fixed by keeping the app in the alternate screen. Progress is shown inline during menu-driven open; direct CLI open performs a silent, frame-safe pre-build without flicker. Canonical book identity (`EPUBDocument#source_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and first frame now lands on the saved page in dynamic mode.
 
@@ -60,7 +60,7 @@
 - [x] Extract UIController (mode switching, overlays)  
 - [x] Extract InputController (key handling consolidation)
 - [x] Extract StateController (state updates and persistence)
-- [x] Keep ReaderController as coordinator only (currently ~843 LOC; further slimming planned by pushing wrapping/window orchestration fully into services).
+- [x] Keep ReaderController as coordinator only (currently ~810 LOC; further slimming planned by pushing wrapping/window orchestration fully into services).
 
 ### 3.2 Input System Unification ✅ COMPLETE
 **Issue Resolved**: All core navigation uses Domain Commands, specialized modes retain existing patterns
@@ -319,8 +319,8 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
 2) Input controller lambdas using `instance_variable_get` — RESOLVED  
    - No remaining `instance_variable_get(:@dependencies)` patterns found in input/controller code.
 
-3) Consistent menu state updates — PARTIAL  
-   - Remaining: some lambdas still use `state.set` (e.g., menu/browse nav). Convert to dispatching `UpdateMenuAction` for consistency.
+3) Consistent menu state updates — RESOLVED  
+   - Menu/browse interactions already dispatch `UpdateMenuAction`; no remaining `state.set` in menu.
 
 4) Architecture docs — OPEN  
    - Update `DEVELOPMENT.md` Project Structure + DI examples as noted above.
@@ -331,8 +331,9 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
 6) Component duplication — RESOLVED  
    - `Components::Screens::AnnotationsScreenComponent` has a single `normalize_list` implementation.
 
-7) Main menu file-open duplication — COMPLETE  
-  - `open_book`/`run_reader`/`handle_file_path` and `sanitize_input_path` live in `Actions::FileActions`. `MainMenu` delegates — no duplication.
+7) Main menu file-open duplication — PARTIAL  
+  - `open_book`/`run_reader`/`handle_file_path` and `sanitize_input_path` live in `Actions::FileActions` (OK).  
+  - Duplication remains for `open_file_dialog`, `file_not_found`, and `handle_reader_error` (defined in both module and class). Remove the class copies and keep the module’s versions, except keep the class `open_file_dialog` that uses state dispatch.
 
 8) Unused render cache — N/A  
   - No `RenderCache` exists; nothing to remove.
@@ -343,8 +344,9 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
 10) Naming consistency — COMPLETE  
    - Standardized on `page_calculator` across rendering context and renderers.
 
-11) Dead helpers in MainMenu — COMPLETE  
-   - Removed `MainMenu#create_menu_navigation_commands` and `#create_browse_navigation_commands`; dispatcher registrations are explicit per mode.
+11) Dead helpers in MainMenu — PARTIAL  
+   - Removed `MainMenu#create_menu_navigation_commands` and `#create_browse_navigation_commands`; dispatcher registrations are explicit per mode.  
+   - Leftover method `register_recent_bindings` still exists but is no longer used. Remove the method for clarity.
 
 12) Centralize cache paths — COMPLETE  
    - Introduced `Infrastructure::CachePaths.reader_root` and adopted it in EpubCache, Library screen, and cache wipe.
@@ -353,3 +355,16 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
    - Introduced `EPUBDocument#source_path` (canonical path) sourced from cache manifest `epub_path` or original `.epub` file path.
   - `StateController` now uses the canonical path via repositories, ensuring restore consistency across open modes (original file vs cache dir).
    - After initial dynamic page-map build, pending progress is applied precisely for a correct first frame.
+
+14) DocumentService DI boundary — ✅ COMPLETE  
+   - `Infrastructure::DocumentService` now accepts an injected `wrapping_service`.  
+   - Added `:document_service_factory` to the container; all callers use the factory to create per-book instances.
+
+15) Remove unused presenter — ✅ COMPLETE  
+   - Deleted `presenters/reader_presenter.rb` and removed its usage from `ReaderController`.
+
+16) Single navigation path — ✅ COMPLETE  
+   - Removed `Controllers::NavigationController` and all delegations. Input routes to `Domain::NavigationService` exclusively.
+
+17) Renderer helper factoring — ✅ COMPLETE  
+   - Introduced `BaseViewRenderer#draw_lines` and updated Single/Split renderers to use it, reducing duplication.

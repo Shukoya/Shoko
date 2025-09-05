@@ -55,19 +55,19 @@ reader/
 │   └── ebook_reader/
 │       ├── application/         # App entry points (UnifiedApplication)
 │       ├── components/          # Presentation components (screens, reading, sidebar)
-│       ├── controllers/         # Application controllers (ui, navigation, input, state)
+│       ├── controllers/         # Application controllers (ui, input, state)
 │       ├── domain/
 │       │   ├── actions/         # Explicit state mutations
 │       │   ├── commands/        # Input-triggered command objects
 │       │   ├── selectors/       # Read-only projections from state
 │       │   └── services/        # Business logic (navigation, layout, annotations, etc.)
-│       ├── infrastructure/      # Event bus, logger, state store, document service
+│       ├── infrastructure/      # Event bus, logger, state store, document service (factory)
 │       ├── input/               # Dispatcher, key definitions, factories, bindings
-│       ├── presenters/          # View presenters (reader)
-│       ├── rendering/           # Render cache and helpers
+│       ├── presenters/          # (removed)
+│       ├── rendering/           # (not used)
 │       ├── ui/                  # Settings/view-model definitions
 │       ├── validators/          # File and terminal validation
-│       ├── services/            # Legacy helpers (e.g., chapter cache, library scanner)
+│       ├── services/            # Legacy helpers (e.g., chapter cache) used by WrappingService
 │       └── terminal*            # Terminal facade and buffer/output/input
 ├── spec/                        # Tests
 ├── ARCHITECTURE.md              # Architecture notes
@@ -119,6 +119,8 @@ The application follows a layered architecture with clear separation of concerns
 - A single `Domain::DependencyContainer` is created once and threaded through the app.
 - Controllers resolve services via `@dependencies.resolve(:service_name)`.
 - Components do not create containers; they are given dependencies (or a controller that holds them) via constructor when needed.
+ - DocumentService is constructed via `@dependencies.resolve(:document_service_factory).call(path)` (no container creation inside services).
+ - Navigation is handled only via the domain `navigation_service` (no NavigationController).
 
 Examples:
 
@@ -376,3 +378,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 - Open an issue for bugs or features
 - Start a discussion for questions
 - Check the wiki for additional documentation
+# In a controller (creating a document service)
+factory = @dependencies.resolve(:document_service_factory)
+doc = factory.call(path).load_document

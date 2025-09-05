@@ -6,14 +6,14 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
   include FakeFS::SpecHelpers
 
   # Minimal fake chapter and document
-  class FakeChapter
+  class PCP_FakeChapter
     attr_reader :lines
     def initialize(lines)
       @lines = lines
     end
   end
 
-  class FakeDoc
+  class PCP_FakeDoc
     attr_reader :cache_dir
     def initialize(cache_dir, chapters)
       @cache_dir = cache_dir
@@ -41,7 +41,7 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
   it 'loads pagination from cache for matching layout and returns totals and pages immediately' do
     # Build fake document with simple short lines to avoid wrapping changes
     lines = Array.new(100) { |i| "L#{i}" } # each short -> no additional wrapping
-    doc = FakeDoc.new(book_dir, [FakeChapter.new(lines)])
+    doc = PCP_FakeDoc.new(book_dir, [PCP_FakeChapter.new(lines)])
 
     key = EbookReader::Infrastructure::PaginationCache.layout_key(80, 24, :single, :normal)
     compact_pages = [
@@ -79,4 +79,3 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
     expect(p0[:lines].first).to eq('L25')
   end
 end
-

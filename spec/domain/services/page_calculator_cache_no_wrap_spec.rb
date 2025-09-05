@@ -5,14 +5,14 @@ require 'spec_helper'
 RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
   include FakeFS::SpecHelpers
 
-  class FakeChapter
+  class PCCN_FakeChapter
     attr_reader :lines
     def initialize(lines)
       @lines = lines
     end
   end
 
-  class FakeDoc
+  class PCCN_FakeDoc
     attr_reader :cache_dir
     def initialize(cache_dir, chapters)
       @cache_dir = cache_dir
@@ -39,12 +39,12 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
     compact_pages = [
       { 'chapter_index' => 0, 'page_in_chapter' => 0, 'total_pages_in_chapter' => 1, 'start_line' => 0, 'end_line' => 9 },
     ]
-    ok = EbookReader::Infrastructure::PaginationCache.save_for_document(FakeDoc.new(book_dir, []), key, compact_pages)
+    ok = EbookReader::Infrastructure::PaginationCache.save_for_document(PCCN_FakeDoc.new(book_dir, []), key, compact_pages)
     expect(ok).to be true
 
     # Doc and container
     lines = Array.new(10) { |i| "L#{i}" }
-    doc = FakeDoc.new(book_dir, [FakeChapter.new(lines)])
+    doc = PCCN_FakeDoc.new(book_dir, [PCCN_FakeChapter.new(lines)])
     container = EbookReader::Domain::ContainerFactory.create_default_container
     state = container.resolve(:global_state)
     state.update({ %i[config page_numbering_mode] => :dynamic,
@@ -63,4 +63,3 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
     expect(service.total_pages).to eq(1)
   end
 end
-

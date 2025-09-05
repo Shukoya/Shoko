@@ -24,24 +24,12 @@ module EbookReader
 
         def render_dynamic_lines(surface, bounds, lines, start_row, col_start, col_width, _config,
                                  context = nil)
-          lines.each_with_index do |line, idx|
-            spacing = context ? EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config) : :normal
-            row = start_row + (spacing == :relaxed ? idx * 2 : idx)
-            break if row > bounds.height - 2
-
-            draw_line(surface, bounds, line: line, row: row, col: col_start, width: col_width, context: context)
-          end
+          draw_lines(surface, bounds, lines, start_row, col_start, col_width, context)
         end
 
         def render_absolute_lines(surface, bounds, lines, start_row, col_start, col_width, _config,
-                                  context = nil, displayable = nil)
-          lines.each_with_index do |line, idx|
-            spacing = context ? EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config) : :normal
-            row = start_row + (spacing == :relaxed ? idx * 2 : idx)
-            break if row >= (3 + (displayable || bounds.height))
-
-            draw_line(surface, bounds, line: line, row: row, col: col_start, width: col_width, context: context)
-          end
+                                  context = nil, _displayable = nil)
+          draw_lines(surface, bounds, lines, start_row, col_start, col_width, context)
         end
 
         # Context-based rendering methods

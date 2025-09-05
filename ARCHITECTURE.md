@@ -43,7 +43,7 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
   - UI Components: Header, Content, Footer, Sidebar, Overlay (tooltip/popup), Screens (Browse, Library, Settings, Annotations, Annotation Editor).
   - Rendering Surface: `Components::Surface` abstracts writing to Terminal.
 - Application
-  - Controllers: `ReaderController` orchestrates rendering and loop; `UIController` manages modes/overlays; `NavigationController` and `StateController` handle navigation/persistence; `InputController` configures the dispatcher.
+  - Controllers: `ReaderController` orchestrates rendering and loop; `UIController` manages modes/overlays; `StateController` handles persistence; `InputController` configures the dispatcher. Navigation is handled exclusively by the domain `NavigationService` via input commands.
   - UnifiedApplication: decides between menu and reader modes.
 - Domain
   - Services: Navigation, PageCalculator, Selection, Coordinate, Layout, Clipboard, Annotation, Library.
@@ -67,6 +67,7 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 - New Input behavior: add `Domain::Commands` and map via `DomainCommandBridge`.
 - New Domain logic: implement a service; expose actions/selectors as needed.
 - New File format: implement a document parser and plug into `DocumentService`.
+  - DocumentService is created via the DI `:document_service_factory` per book (no container creation inside the service).
 
 ## Performance Considerations
 

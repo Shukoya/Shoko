@@ -15,6 +15,7 @@
 #   reader.run
 
 # Core infrastructure - must be loaded first
+require_relative 'zip'
 require_relative 'ebook_reader/infrastructure/logger'
 require_relative 'ebook_reader/infrastructure/validator'
 require_relative 'ebook_reader/infrastructure/performance_monitor'
@@ -136,7 +137,6 @@ require_relative 'ebook_reader/application/unified_application'
 # Removed unused: reader_application, menu_application
 
 # Controller layer - focused controllers replacing god class
-require_relative 'ebook_reader/controllers/navigation_controller'
 require_relative 'ebook_reader/controllers/ui_controller'
 require_relative 'ebook_reader/controllers/state_controller'
 require_relative 'ebook_reader/controllers/input_controller'

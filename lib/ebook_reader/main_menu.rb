@@ -447,15 +447,7 @@ module EbookReader
       @dispatcher.register_mode(:search, bindings)
     end
 
-    def register_recent_bindings
-      bindings = {}
-      Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :recent_up }
-      Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :recent_down }
-      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :recent_select }
-      Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :back_to_menu }
-      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :back_to_menu }
-      @dispatcher.register_mode(:recent, bindings)
-    end
+    # register_recent_bindings removed (no recent mode)
 
     def register_library_bindings
       bindings = {}
@@ -587,16 +579,7 @@ module EbookReader
       @main_menu_component&.annotation_edit_screen
     end
 
-    def file_not_found
-      @scanner.scan_message = 'File not found'
-      @scanner.scan_status = :error
-    end
-
-    def handle_reader_error(path, error)
-      Infrastructure::Logger.error('Failed to open book', error: error.message, path: path)
-      @scanner.scan_message = "Failed: #{error.class}: #{error.message[0, 60]}"
-      @scanner.scan_status = :error
-    end
+    # file_not_found and handle_reader_error provided by Actions::FileActions
 
     # Use Actions::FileActions#sanitize_input_path and #handle_file_path
 

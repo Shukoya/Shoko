@@ -5,7 +5,7 @@ require 'forwardable'
 require_relative 'constants/ui_constants'
 require_relative 'errors'
 require_relative 'constants/messages'
-require_relative 'presenters/reader_presenter'
+# presenter removed (unused)
 require_relative 'components/surface'
 require_relative 'components/rect'
 require_relative 'components/layouts/vertical'
@@ -41,9 +41,7 @@ module EbookReader
 
     attr_reader :doc, :path, :state, :page_calculator, :dependencies
 
-    # Delegate to focused controllers
-    def_delegators :@navigation_controller, :next_page, :prev_page, :next_chapter, :prev_chapter,
-                   :go_to_start, :go_to_end, :jump_to_chapter, :scroll_down, :scroll_up
+    # Navigation is handled via Domain::NavigationService through input commands
 
     def_delegators :@ui_controller, :switch_mode, :open_toc, :open_bookmarks, :open_annotations,
                    :show_help, :toggle_view_mode, :increase_line_spacing, :decrease_line_spacing,
@@ -85,22 +83,17 @@ module EbookReader
       end
 
       # Initialize focused controllers with proper dependencies including document
-      @navigation_controller = Controllers::NavigationController.new(@state, @doc,
-                                                                     @page_calculator, @dependencies)
       @ui_controller = Controllers::UIController.new(@state, @dependencies)
       @state_controller = Controllers::StateController.new(@state, @doc, epub_path,
                                                            @dependencies)
       @input_controller = Controllers::InputController.new(@state, @dependencies)
 
       # Register controllers in the dependency container for components that resolve them
-      @dependencies.register(:navigation_controller, @navigation_controller)
       @dependencies.register(:ui_controller, @ui_controller)
       @dependencies.register(:state_controller, @state_controller)
       @dependencies.register(:input_controller, @input_controller)
       # Expose reader controller for components/controllers needing cleanup hooks
       @dependencies.register(:reader_controller, self)
-
-      @presenter = Presenters::ReaderPresenter.new(self, @state)
 
       # Do not load saved data synchronously to keep first paint fast.
       # Pending jump application will occur after progress load in run.
@@ -201,12 +194,12 @@ module EbookReader
       # Load bookmarks and annotations in background to avoid delaying first render
       begin
         Thread.new do
-          begin
-            @state_controller.load_bookmarks
-            @state_controller.refresh_annotations
-          rescue StandardError
-            # ignore background failures
-          end
+      begin
+        @state_controller.load_bookmarks
+        @state_controller.refresh_annotations
+      rescue StandardError
+        # ignore background failures
+      end
         end
       rescue StandardError
         # best-effort
@@ -446,7 +439,8 @@ module EbookReader
     private
 
     def load_document
-      document_service = Infrastructure::DocumentService.new(@path)
+      factory = @dependencies.resolve(:document_service_factory)
+      document_service = factory.call(@path)
       @doc = document_service.load_document
 
       # Register document in dependency container for services to access
@@ -474,7 +468,13 @@ module EbookReader
         selection_range = pending[:selection_range] || pending['selection_range']
         edit_flag = pending[:edit] || pending['edit']
         ann = pending[:annotation] || pending['annotation']
-        @navigation_controller.jump_to_chapter(chapter_index) if chapter_index
+        if chapter_index
+          begin
+            @dependencies.resolve(:navigation_service).jump_to_chapter(chapter_index)
+          rescue StandardError
+            # best-effort
+          end
+        end
         if selection_range
           @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection_range))
         end

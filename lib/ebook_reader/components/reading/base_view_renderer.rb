@@ -53,6 +53,18 @@ module EbookReader
           @layout_service.calculate_center_start_row(content_height, lines_count, line_spacing)
         end
 
+        # Shared helper to draw a list of lines with spacing and clipping considerations.
+        # Computes row progression based on current line spacing and stops at bounds.
+        def draw_lines(surface, bounds, lines, start_row, col_start, col_width, context)
+          spacing = context ? EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config) : :normal
+          lines.each_with_index do |line, idx|
+            row = start_row + (spacing == :relaxed ? idx * 2 : idx)
+            break if row > bounds.height - 1
+
+            draw_line(surface, bounds, line: line, row: row, col: col_start, width: col_width, context: context)
+          end
+        end
+
         private
 
         def create_rendering_context
