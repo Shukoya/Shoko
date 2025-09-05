@@ -10,40 +10,41 @@ RSpec.describe EbookReader::Controllers::StateController do
   let(:page_calc) { double('PageCalc', get_page: { chapter_index: 0, start_line: 0 }, build_page_map: nil, find_page_index: 0) }
 
   class Ctn
-    def initialize(term, page_calc, ann_svc)
+    def initialize(term:, page_calc:, ann_svc:, progress_repo:, bookmark_repo:)
       @term = term
       @pc = page_calc
       @ann = ann_svc
+      @prog = progress_repo
+      @bm = bookmark_repo
     end
 
     def resolve(name)
       return @term if name == :terminal_service
       return @pc if name == :page_calculator
       return @ann if name == :annotation_service
+      return @prog if name == :progress_repository
+      return @bm if name == :bookmark_repository
       nil
     end
   end
 
-  let(:annotation_service) do
-    double('AnnotationService', list_for_book: [{ 'text' => 't', 'note' => 'n' }])
+  let(:annotation_service) { double('AnnotationService', list_for_book: [{ 'text' => 't', 'note' => 'n' }]) }
+
+  let(:progress_repo) do
+    double('ProgressRepository', save_for_book: nil,
+                                 find_by_book_path: double('Progress', chapter_index: 1, line_offset: 5, timestamp: Time.now.iso8601))
   end
 
-  subject(:sc) { described_class.new(state, doc, '/tmp/book.epub', Ctn.new(term, page_calc, annotation_service)) }
+  let(:bookmark_repo) do
+    double('BookmarkRepository', find_by_book_path: [{ 'chapter_index' => 1, 'line_offset' => 10 }],
+                                 delete_for_book: true,
+                                 add_for_book: true)
+  end
 
-  before do
-    stub_const('EbookReader::ProgressManager', Class.new do
-      @saved = nil
-      class << self; attr_accessor :saved; end
-      def self.save(path, ch, off) = @saved = [path, ch, off]
-      def self.load(_path) = { 'chapter' => 1, 'line_offset' => 5 }
-    end)
-
-    stub_const('EbookReader::BookmarkManager', Class.new do
-      def self.get(_path) = [{ 'chapter_index' => 1, 'line_offset' => 10 }]
-      def self.delete(_path, _bm); end
-    end)
-
-    # Annotation store is no longer used by StateController; using service via DI
+  subject(:sc) do
+    described_class.new(state, doc, '/tmp/book.epub',
+                        Ctn.new(term: term, page_calc: page_calc, ann_svc: annotation_service,
+                                progress_repo: progress_repo, bookmark_repo: bookmark_repo))
   end
 
   it 'saves and loads progress (absolute)' do

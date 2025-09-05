@@ -587,14 +587,10 @@ module EbookReader
           # ignore
         end
       else
-        col_width, content_height = @layout_service.calculate_metrics(width, height,
-                                                                      @state.get(%i[config view_mode]))
-        actual_height = adjust_for_line_spacing(content_height)
-        return if actual_height <= 0
-
-        cache_key = "#{width}x#{height}-#{@state.get(%i[config view_mode])}-#{@state.get(%i[config line_spacing])}"
-        calculate_page_map(col_width, actual_height, cache_key)
-        @state.update({ %i[reader last_width] => width, %i[reader last_height] => height })
+        # Absolute page numbering: delegate to PageCalculatorService
+        page_map = @page_calculator.build_absolute_page_map(width, height, @doc, @state)
+        @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum,
+                        %i[reader last_width] => width, %i[reader last_height] => height })
       end
       @defer_page_map = false
       force_redraw
@@ -627,39 +623,10 @@ module EbookReader
     def update_page_map(width, height)
       return if @doc.nil?
 
-      # Generate a cache key based on all factors that affect page layout
-      cache_key = "#{width}x#{height}-#{@state.get(%i[config
-                                                      view_mode])}-#{@state.get(%i[config
-                                                                                   line_spacing])}"
-
-      # Use a cached map if it exists for the current configuration
-      if @page_map_cache && @page_map_cache[:key] == cache_key
-        @state.update({ %i[reader page_map] => @page_map_cache[:map],
-                        %i[reader total_pages] => @page_map_cache[:total] })
-        return
-      end
-
-      col_width, content_height = @layout_service.calculate_metrics(width, height,
-                                                                    @state.get(%i[config view_mode]))
-      actual_height = adjust_for_line_spacing(content_height)
-      return if actual_height <= 0
-
-      calculate_page_map(col_width, actual_height, cache_key)
-      @state.update({ %i[reader last_width] => width, %i[reader last_height] => height })
-    end
-
-    def calculate_page_map(col_width, actual_height, cache_key)
-      page_map = Array.new(@doc.chapter_count) do |idx|
-        chapter = @doc.get_chapter(idx)
-        lines = chapter&.lines || []
-        wrapped = wrap_lines(lines, col_width)
-        (wrapped.size.to_f / actual_height).ceil
-      end
-      @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum })
-
-      # Store the newly calculated map and its key in the cache
-      @page_map_cache = { key: cache_key, map: @state.get(%i[reader page_map]),
-                          total: @state.get(%i[reader total_pages]) }
+      # Delegate absolute pagination to the PageCalculatorService for consistency
+      page_map = @page_calculator.build_absolute_page_map(width, height, @doc, @state)
+      @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum,
+                      %i[reader last_width] => width, %i[reader last_height] => height })
     end
 
     # Perform initial heavy page calculations with a visual progress overlay

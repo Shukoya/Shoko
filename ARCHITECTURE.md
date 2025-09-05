@@ -40,17 +40,19 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 ## Key Components
 
 - Presentation
-  - UI Components: Header, Content, Footer, Sidebar, Overlay (tooltip/popup), Screens (Browse, Recent, Settings, Annotations, Annotation Editor).
+  - UI Components: Header, Content, Footer, Sidebar, Overlay (tooltip/popup), Screens (Browse, Library, Settings, Annotations, Annotation Editor).
   - Rendering Surface: `Components::Surface` abstracts writing to Terminal.
 - Application
   - Controllers: `ReaderController` orchestrates rendering and loop; `UIController` manages modes/overlays; `NavigationController` and `StateController` handle navigation/persistence; `InputController` configures the dispatcher.
   - UnifiedApplication: decides between menu and reader modes.
 - Domain
-  - Services: Navigation, PageCalculator, Selection, Coordinate, Layout, Clipboard, Annotation.
+  - Services: Navigation, PageCalculator, Selection, Coordinate, Layout, Clipboard, Annotation, Library.
   - Actions/Selectors: explicit state transitions and read-only projections.
   - Commands: Navigation/Application/Sidebar command objects for input.
 - Infrastructure
-  - StateStore/ObserverStateStore, EventBus, Terminal (buffered output/input/mouse), Logger, DocumentService, Managers (bookmarks, progress, recent files).
+  - StateStore/ObserverStateStore, EventBus, Terminal (buffered output/input/mouse), Logger, DocumentService, Managers (recent files).
+  - Repositories persist via domain file stores: `Storage::BookmarkFileStore`, `Storage::ProgressFileStore`, `Storage::AnnotationFileStore`.
+  - LibraryService wraps cached-library enumeration and is resolved via DI for components (no direct Infra access in components).
 
 ## Data Flow
 
@@ -71,6 +73,7 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 - Buffered output: Terminal double-buffering via `TerminalBuffer`.
 - Lazy loading: Chapters loaded on demand.
 - Caching: Library scan and chapter wrapping caches via services.
+ - Cached Library: `Domain::Services::LibraryService` lists cached books via manifests without coupling UI to Infra.
 
 ## EPUB Cache
 
@@ -80,5 +83,5 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 - First open (miss): `EPUBDocument` parses normally, then spawns a background thread to:
   - Copy `META-INF/container.xml`, the OPF file, and all spine XHTML files into the cache (relative paths preserved).
   - Write manifest atomically (`manifest.msgpack` if `msgpack` is available; otherwise `manifest.json`) with `title`, `author` (string), `authors` (array), `opf_path`, and `spine`.
-- Subsequent opens (hit): `EPUBDocument` loads the manifest and reads XHTML directly from the cache directory; it does not reopen the ZIP or re-parse the OPF.
+- Subsequent opens (hit): `EPUBDocument` loads the manifest and reads XHTML directly from the cache directory; it does not reopen the ZIP or re-parse the OPF. Pagination loads compactly from cache; line content populates lazily on demand for instant open.
 - Dependencies: Standard library only; MessagePack used opportunistically if present.

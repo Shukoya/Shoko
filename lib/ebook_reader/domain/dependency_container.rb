@@ -150,6 +150,7 @@ module EbookReader
         # TerminalService wraps a global Terminal; use a singleton to keep lifecycle consistent
         container.register_singleton(:terminal_service) { |c| Domain::Services::TerminalService.new(c) }
         container.register_factory(:annotation_service) { |c| Domain::Services::AnnotationService.new(c) }
+        container.register_factory(:library_service) { |c| Domain::Services::LibraryService.new(c) }
         # WrappingService caches windows/chapters; make it a singleton to share cache
         container.register_singleton(:wrapping_service) { |c| Domain::Services::WrappingService.new(c) }
 

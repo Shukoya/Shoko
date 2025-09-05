@@ -57,14 +57,10 @@ module EbookReader
               end
             end
             if cached && cached.any?
+              # Fast path: load compact pages from cache and return immediately
+              # Do NOT pre-populate text lines synchronously to keep cached opens instant
               @pages_data = cached
               @doc_ref = doc
-              # Pre-populate lines for stability across environments
-              begin
-                populate_lines_for_cached_pages(doc)
-              rescue StandardError
-                # best-effort
-              end
               return @pages_data
             end
           rescue StandardError
@@ -568,38 +564,6 @@ module EbookReader
     end
   end
 end
-        def populate_lines_for_cached_pages(doc)
-          return if @pages_data.empty? || !doc
-          width  = @state_store.current_state.dig(:ui, :terminal_width) || 80
-          height = @state_store.current_state.dig(:ui, :terminal_height) || 24
-          config = @state_store
-          col_width, _content_height = calculate_layout_metrics(width, height, config)
-          wrapper = begin
-            @dependencies&.resolve(:wrapping_service)
-          rescue StandardError
-            nil
-          end
-          @pages_data.map! do |p|
-            next p if p[:lines]
-            chapter = doc.get_chapter(p[:chapter_index].to_i)
-            raw_lines = chapter&.lines || []
-            len = (p[:end_line].to_i - p[:start_line].to_i + 1)
-            lines = if wrapper
-                      res = wrapper.wrap_window(raw_lines, p[:chapter_index].to_i, col_width,
-                                                p[:start_line].to_i, len.to_i)
-                      if res.nil? || res.empty?
-                        candidate = raw_lines[p[:start_line].to_i, len.to_i] || []
-                        if candidate.empty? && defined?(RSpec)
-                          (p[:start_line].to_i..p[:end_line].to_i).map { |i| "L#{i}" }
-                        else
-                          candidate
-                        end
-                      else
-                        res
-                      end
-                    else
-                      DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[p[:start_line].to_i, len.to_i] || []
-                    end
-            p.merge(lines: lines)
-          end
-        end
+        # NOTE: Former helper that prepopulated lines for cached pages has been
+        # removed to avoid blocking first paint. Lines are populated lazily in
+        # #get_page when needed.

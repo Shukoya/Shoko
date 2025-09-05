@@ -14,26 +14,31 @@ RSpec.describe EbookReader::Domain::Repositories::AnnotationRepository do
     end
   end
 
-  before do
-    stub_const('EbookReader::Annotations::AnnotationStore', Class.new do
-      @data = Hash.new { |h, k| h[k] = [] }
-      class << self; attr_reader :data; end
-      def self.get(path) = @data[path]
-      def self.all = @data
-      def self.add(path, text, note, range, chapter_index, _meta)
+  let(:store) do
+    Class.new do
+      def initialize
+        @data = Hash.new { |h, k| h[k] = [] }
+      end
+      def get(path) = @data[path]
+      def all = @data
+      def add(path, text, note, range, chapter_index, _meta)
         (@data[path] ||= []) << {
-          'id' => SecureRandom.hex(4), 'text' => text, 'note' => note,
+          'id' => 'id1', 'text' => text, 'note' => note,
           'range' => range, 'chapter_index' => chapter_index, 'created_at' => Time.now.iso8601
         }
       end
-      def self.update(path, id, note)
+      def update(path, id, note)
         ann = (@data[path] ||= []).find { |a| a['id'] == id }
         ann['note'] = note if ann
       end
-      def self.delete(path, id)
+      def delete(path, id)
         (@data[path] ||= []).reject! { |a| a['id'] == id }
       end
-    end)
+    end.new
+  end
+
+  before do
+    allow(EbookReader::Domain::Repositories::Storage::AnnotationFileStore).to receive(:new).and_return(store)
   end
 
   subject(:repo) { described_class.new(CtnAnnRepo.new(logger)) }
@@ -59,4 +64,3 @@ RSpec.describe EbookReader::Domain::Repositories::AnnotationRepository do
     expect { repo.delete_by_id(nil, 'id') }.to raise_error(described_class::ValidationError)
   end
 end
-

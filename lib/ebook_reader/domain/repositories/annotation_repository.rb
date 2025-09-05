@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_repository'
+require_relative 'storage/annotation_file_store'
 
 module EbookReader
   module Domain
@@ -25,7 +26,7 @@ module EbookReader
       class AnnotationRepository < BaseRepository
         def initialize(dependencies)
           super(dependencies)
-          @storage = EbookReader::Annotations::AnnotationStore
+          @storage = Storage::AnnotationFileStore.new
         end
 
         # Add a new annotation for a specific book

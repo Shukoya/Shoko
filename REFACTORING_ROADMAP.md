@@ -1,7 +1,7 @@
 # EBook Reader Refactoring Roadmap
 
 **Current Status: Phase 4.6 - Documentation + Input Alignment**  
-**Overall Progress: ~90% Complete (audited 2025-09-04)**  
+**Overall Progress: ~90% Complete (audited 2025-09-05)**  
 **Estimated Completion: Phase 4.6**  
 **Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation has been aligned (Project Structure + DI examples). Minor menu state API consistency remains. Reader loading flicker has been fixed by keeping the app in the alternate screen. Progress is shown inline during menu-driven open; direct CLI open performs a silent, frame-safe pre-build without flicker. Canonical book identity (`EPUBDocument#source_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and first frame now lands on the saved page in dynamic mode.
 
@@ -147,6 +147,7 @@ Goal: Instant subsequent opens by avoiding ZIP inflation and OPF parsing; cache-
 - [x] Bookmarks and annotations load on a background thread (no delay before first frame)
 - [x] Direct CLI open sets up the terminal before document load to avoid pre-frame shell delay (uses `TerminalService` session depth)
 - [x] `TerminalService` and `WrappingService` are singletons to stabilize lifecycle and share caches
+- [x] Removed synchronous pagination prepopulation on cached pagination load; cached books open instantly with lazy page-line population.
 
 ### 5.7 Remaining Latency Risk (to address) 🔶 OPEN
 - [ ] Prefetch size configurability: expose `config.prefetch_pages` (default 20) and honor it in `ReaderController#wrapped_window_for`.
@@ -199,10 +200,11 @@ Goal: Instant subsequent opens by avoiding ZIP inflation and OPF parsing; cache-
 
 **REMAINING PRIORITIES (Updated Priority Order):**
 13. ✅ **Loading Overlay Hygiene** - `UI::LoadingOverlay` now uses `terminal_service.create_surface` (no direct `Terminal`).
-14. ✅ **Persistence via Repositories Only** - Removed controller fallbacks to `ProgressManager`/`BookmarkManager`; controllers use DI repositories exclusively.
+14. ✅ **Persistence via Repositories Only** - Controllers use DI repositories exclusively; fallbacks removed. Repositories persist via domain file stores (no direct manager usage).
 15. ✅ **Legacy Model Aliases Removed** - Deleted `lib/ebook_reader/models/bookmark*` aliases; domain models are the single source of truth.
 16. ✅ **LibraryScanner Layering** - Moved `LibraryScanner` to `infrastructure/` and updated DI registration.
 17. ✅ **Renderer Windowing via Service** - Reading renderers now use `WrappingService#wrap_window` directly (no controller calls) for dynamic/absolute fallbacks.
+18. ✅ **Repositories Backed by Domain Stores** - Bookmark/Progress/Annotation repositories persist via domain file stores (no direct managers/stores in components/controllers).
 
 **Remaining:**
 - ✅ Renderer/controller decoupling complete: renderers build context from DI + state + document, no controller calls.
@@ -349,5 +351,5 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
  
 13) Canonicalize book identity — COMPLETE
    - Introduced `EPUBDocument#source_path` (canonical path) sourced from cache manifest `epub_path` or original `.epub` file path.
-   - `StateController` now uses the canonical path for `ProgressManager` and `BookmarkManager`, ensuring restore consistency across open modes (original file vs cache dir).
+  - `StateController` now uses the canonical path via repositories, ensuring restore consistency across open modes (original file vs cache dir).
    - After initial dynamic page-map build, pending progress is applied precisely for a correct first frame.

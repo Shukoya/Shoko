@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_repository'
+require_relative 'storage/progress_file_store'
 
 module EbookReader
   module Domain
@@ -40,7 +41,7 @@ module EbookReader
 
         def initialize(dependencies)
           super(dependencies)
-          @storage = EbookReader::ProgressManager
+          @storage = Storage::ProgressFileStore.new
         end
 
         # Save reading progress for a specific book

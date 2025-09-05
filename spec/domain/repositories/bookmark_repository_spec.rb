@@ -19,18 +19,18 @@ RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
     end
   end
 
-  let(:mock_storage) { class_double(EbookReader::BookmarkManager) }
+  let(:mock_storage) { instance_double(EbookReader::Domain::Repositories::Storage::BookmarkFileStore) }
   
   let(:book_path) { '/path/to/test.epub' }
   let(:bookmark_data) do
-    instance_double(EbookReader::Models::BookmarkData,
+    instance_double(EbookReader::Domain::Models::BookmarkData,
                     path: book_path,
                     chapter: 2,
                     line_offset: 100,
                     text: 'Test bookmark text')
   end
   let(:bookmark) do
-    instance_double(EbookReader::Models::Bookmark,
+    instance_double(EbookReader::Domain::Models::Bookmark,
                     chapter_index: 2,
                     line_offset: 100,
                     text_snippet: 'Test bookmark text',
@@ -40,20 +40,20 @@ RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
   subject { described_class.new(mock_dependencies) }
 
   before do
-    stub_const('EbookReader::BookmarkManager', mock_storage)
+    allow(EbookReader::Domain::Repositories::Storage::BookmarkFileStore).to receive(:new).and_return(mock_storage)
   end
 
   describe '#add_for_book' do
-    let(:expected_bookmark_data) { instance_double(EbookReader::Models::BookmarkData) }
+    let(:expected_bookmark_data) { instance_double(EbookReader::Domain::Models::BookmarkData) }
 
     before do
-      allow(EbookReader::Models::BookmarkData).to receive(:new).and_return(expected_bookmark_data)
+      allow(EbookReader::Domain::Models::BookmarkData).to receive(:new).and_return(expected_bookmark_data)
       allow(mock_storage).to receive(:add)
       allow(subject).to receive(:find_by_book_path).with(book_path).and_return([bookmark])
     end
 
     it 'creates BookmarkData with correct parameters' do
-      expect(EbookReader::Models::BookmarkData).to receive(:new).with(
+      expect(EbookReader::Domain::Models::BookmarkData).to receive(:new).with(
         path: book_path,
         chapter: 2,
         line_offset: 100,

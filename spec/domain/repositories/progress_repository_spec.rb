@@ -12,17 +12,26 @@ RSpec.describe EbookReader::Domain::Repositories::ProgressRepository do
     end
   end
 
-  before do
-    stub_const('EebookReader', Module.new)
-    stub_const('EbookReader::ProgressManager', Class.new do
-      @store = {}
-      class << self; attr_reader :store; end
-      def self.save(path, chapter, offset)
-        @store[path] = { 'chapter' => chapter, 'line_offset' => offset, 'timestamp' => Time.now.iso8601 }
+  let(:store) do
+    Class.new do
+      def initialize
+        @store = {}
       end
-      def self.load(path) = @store[path]
-      def self.load_all = @store
-    end)
+      def save(path, ch, off)
+        @store[path] = { 'chapter' => ch, 'line_offset' => off, 'timestamp' => Time.now.iso8601 }
+        true
+      end
+      def load(path)
+        @store[path]
+      end
+      def load_all
+        @store
+      end
+    end.new
+  end
+
+  before do
+    allow(EbookReader::Domain::Repositories::Storage::ProgressFileStore).to receive(:new).and_return(store)
   end
 
   subject(:repo) { described_class.new(CtnProg.new(logger)) }

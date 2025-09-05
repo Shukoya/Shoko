@@ -76,7 +76,7 @@ module EbookReader
         @screen_components = {
           menu: Screens::MenuScreenComponent.new(@state),
           browse: Screens::BrowseScreenComponent.new(@scanner, @state),
-          library: Screens::LibraryScreenComponent.new(@state),
+          library: Screens::LibraryScreenComponent.new(@state, @dependencies),
           settings: Screens::SettingsScreenComponent.new(@state, @scanner),
           open_file: Screens::OpenFileScreenComponent.new(@state),
           annotations: Screens::AnnotationsScreenComponent.new(@state),

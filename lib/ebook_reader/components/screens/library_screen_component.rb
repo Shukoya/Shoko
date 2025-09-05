@@ -2,10 +2,6 @@
 
 require_relative 'base_screen_component'
 require_relative '../../constants/ui_constants'
-require_relative '../../infrastructure/epub_cache'
-require_relative '../../infrastructure/cache_paths'
-require_relative '../../helpers/opf_processor'
-require_relative '../../recent_files'
 
 module EbookReader
   module Components
@@ -16,8 +12,8 @@ module EbookReader
         Item = Struct.new(:title, :authors, :year, :last_accessed, :size_bytes, :open_path, :epub_path,
                           keyword_init: true)
 
-        def initialize(state)
-          super()
+        def initialize(state, dependencies)
+          super(dependencies)
           @state = state
           @items = nil
           # Observe selection changes to support scrolling
@@ -45,56 +41,26 @@ module EbookReader
 
         private
 
-        def reader_cache_dir
-          EbookReader::Infrastructure::CachePaths.reader_root
-        end
-
         def load_items
           return @items if @items
-          list = []
-          dir = reader_cache_dir
-          return [] unless File.directory?(dir)
-
-          recent_index = index_recent_by_path
-
-          Dir.children(dir).sort.each do |sha|
-            entry = File.join(dir, sha)
-            next unless File.directory?(entry)
-            manifest = %w[manifest.msgpack manifest.json].map { |f| File.join(entry, f) }.find { |p| File.exist?(p) }
-            next unless manifest
-            data = read_manifest(manifest)
-            next unless data && data['spine'].is_a?(Array)
-
-            title = (data['title'] || 'Unknown').to_s
-            authors = (data['author'] || '').to_s
-            epub_path = (data['epub_path'] || '').to_s
-            year = extract_year_from_opf(entry, data['opf_path'])
-            last_accessed = recent_index[epub_path]
-            size_bytes = calculate_size_bytes(epub_path, entry)
-
-            list << Item.new(title: title, authors: authors, year: year, last_accessed: last_accessed,
-                             size_bytes: size_bytes, open_path: entry, epub_path: epub_path)
+          svc = @services.resolve(:library_service)
+          raw = svc ? (svc.list_cached_books || []) : []
+          @items = raw.map do |h|
+            Item.new(
+              title: h[:title] || h['title'],
+              authors: h[:authors] || h['authors'],
+              year: h[:year] || h['year'],
+              last_accessed: h[:last_accessed] || h['last_accessed'],
+              size_bytes: h[:size_bytes] || h['size_bytes'],
+              open_path: h[:open_path] || h['open_path'],
+              epub_path: h[:epub_path] || h['epub_path']
+            )
           end
-          @items = list
         end
 
         # Public accessor for items to avoid reflective access from MainMenu
         public def items
           load_items
-        end
-
-        def read_manifest(path)
-          if path.end_with?('.msgpack')
-            begin
-              require 'msgpack'
-              return MessagePack.unpack(File.binread(path))
-            rescue LoadError
-              # fall through to JSON attempt
-            end
-          end
-          JSON.parse(File.read(path))
-        rescue StandardError
-          nil
         end
 
         def render_header(surface, bounds)
@@ -217,41 +183,6 @@ module EbookReader
             days == 1 ? 'a day ago' : "#{days} days ago"
           else
             weeks == 1 ? 'a week ago' : "#{weeks} weeks ago"
-          end
-        end
-
-        def calculate_size_bytes(epub_path, cache_dir)
-          return File.size(epub_path) if epub_path && !epub_path.empty? && File.exist?(epub_path)
-          # Fallback: sum cache dir files
-          sum = 0
-          Dir.glob(File.join(cache_dir, '**', '*')).each do |p|
-            sum += File.size(p) if File.file?(p)
-          end
-          sum
-        rescue StandardError
-          0
-        end
-
-        def extract_year_from_opf(cache_dir, opf_rel)
-          return '' unless opf_rel
-          opf = File.join(cache_dir, opf_rel)
-          return '' unless File.exist?(opf)
-          meta = EbookReader::Helpers::OPFProcessor.new(opf).extract_metadata
-          (meta[:year] || '').to_s
-        rescue StandardError
-          ''
-        end
-
-        def index_recent_by_path
-          begin
-            items = EbookReader::RecentFiles.load
-          rescue StandardError
-            items = []
-          end
-          (items || []).each_with_object({}) do |it, h|
-            path = it['path']
-            acc = it['accessed']
-            h[path] = acc if path && acc
           end
         end
 

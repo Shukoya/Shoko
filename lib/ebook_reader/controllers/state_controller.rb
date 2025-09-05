@@ -10,7 +10,7 @@ module EbookReader
         @path = path
         @dependencies = dependencies
         @terminal_service = @dependencies.resolve(:terminal_service)
-        # Prefer repositories via DI; fall back to legacy managers for compatibility in tests
+        # Prefer repositories via DI
         @progress_repository = @dependencies.resolve(:progress_repository) if @dependencies.respond_to?(:resolve)
         @bookmark_repository = @dependencies.resolve(:bookmark_repository) if @dependencies.respond_to?(:resolve)
       end
@@ -21,29 +21,17 @@ module EbookReader
         progress_data = collect_progress_data
         canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
 
-        if @progress_repository
-          @progress_repository.save_for_book(canonical,
-                                             chapter_index: progress_data[:chapter],
-                                             line_offset: progress_data[:line_offset])
-        else
-          ProgressManager.save(canonical, progress_data[:chapter], progress_data[:line_offset])
-        end
+        @progress_repository.save_for_book(canonical,
+                                           chapter_index: progress_data[:chapter],
+                                           line_offset: progress_data[:line_offset])
       end
 
       def load_progress
         canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
-        progress = if @progress_repository
-                     @progress_repository.find_by_book_path(canonical)
-                   else
-                     ProgressManager.load(canonical)
-                   end
+        progress = @progress_repository.find_by_book_path(canonical)
         # Fallback: attempt original open path if canonical not found (for legacy records)
         if !progress && @path != canonical
-          progress = if @progress_repository
-                       @progress_repository.find_by_book_path(@path)
-                     else
-                       ProgressManager.load(@path)
-                     end
+          progress = @progress_repository.find_by_book_path(@path)
         end
         return unless progress
 
@@ -52,11 +40,7 @@ module EbookReader
 
       def load_bookmarks
         canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
-        bookmarks = if @bookmark_repository
-                      @bookmark_repository.find_by_book_path(canonical)
-                    else
-                      BookmarkManager.get(canonical)
-                    end
+        bookmarks = @bookmark_repository.find_by_book_path(canonical)
         @state.dispatch(EbookReader::Domain::Actions::UpdateBookmarksAction.new(bookmarks))
       end
 
@@ -77,20 +61,11 @@ module EbookReader
                       end
         text_snippet = ''
         begin
-          if @bookmark_repository
-            @bookmark_repository.add_for_book(canonical,
-                                              chapter_index: bookmark_data[:chapter],
-                                              line_offset: line_offset,
-                                              text_snippet: text_snippet)
-            bookmarks = @bookmark_repository.find_by_book_path(canonical)
-          else
-            bm = EbookReader::Domain::Models::BookmarkData.new(path: canonical,
-                                                               chapter: bookmark_data[:chapter],
-                                                               line_offset: line_offset,
-                                                               text: text_snippet)
-            BookmarkManager.add(bm)
-            bookmarks = BookmarkManager.get(canonical)
-          end
+          @bookmark_repository.add_for_book(canonical,
+                                            chapter_index: bookmark_data[:chapter],
+                                            line_offset: line_offset,
+                                            text_snippet: text_snippet)
+          bookmarks = @bookmark_repository.find_by_book_path(canonical)
         rescue StandardError
           bookmarks = @state.get(%i[reader bookmarks]) || []
         end
@@ -120,11 +95,7 @@ module EbookReader
         return unless bookmark
 
         canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
-        if @bookmark_repository
-          @bookmark_repository.delete_for_book(canonical, bookmark)
-        else
-          BookmarkManager.delete(canonical, bookmark)
-        end
+        @bookmark_repository.delete_for_book(canonical, bookmark)
         load_bookmarks
         if @state.get(%i[reader bookmarks]).any?
           max_selected = [@state.get(%i[reader bookmark_selected]),
