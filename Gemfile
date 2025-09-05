@@ -4,7 +4,6 @@ source 'https://rubygems.org'
 
 gem 'rake'
 gem 'rexml'
-gem 'rubyzip'
 
 gem 'rubocop', require: false
 gem 'rubocop-performance', require: false

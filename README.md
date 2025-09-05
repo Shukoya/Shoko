@@ -237,7 +237,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - Terminal manipulation inspired by [curses](https://github.com/ruby/curses)
-- EPUB parsing uses [rubyzip](https://github.com/rubyzip/rubyzip)
 - Special thanks to all contributors
 
 ## Support

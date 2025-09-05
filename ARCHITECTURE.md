@@ -84,4 +84,4 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
   - Copy `META-INF/container.xml`, the OPF file, and all spine XHTML files into the cache (relative paths preserved).
   - Write manifest atomically (`manifest.msgpack` if `msgpack` is available; otherwise `manifest.json`) with `title`, `author` (string), `authors` (array), `opf_path`, and `spine`.
 - Subsequent opens (hit): `EPUBDocument` loads the manifest and reads XHTML directly from the cache directory; it does not reopen the ZIP or re-parse the OPF. Pagination loads compactly from cache; line content populates lazily on demand for instant open.
-- Dependencies: Standard library only; MessagePack used opportunistically if present.
+- Dependencies: Standard library only; ZIP reads handled in‑house via a minimal reader using `Zlib` (no external gems). MessagePack used opportunistically if present.

@@ -33,6 +33,7 @@ end
 require_relative '../lib/ebook_reader'
 require 'fakefs/spec_helpers'
 require_relative 'support/test_helpers'
+require_relative 'support/zip_builder'
 
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|
