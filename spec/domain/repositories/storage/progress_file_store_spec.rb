@@ -23,4 +23,3 @@ RSpec.describe EbookReader::Domain::Repositories::Storage::ProgressFileStore do
     expect(all).to have_key('/tmp/a.epub')
   end
 end
-

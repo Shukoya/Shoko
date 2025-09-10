@@ -19,13 +19,18 @@ RSpec.describe EbookReader::Domain::Services::BookmarkService do
 
   class CtnBm
     def initialize(state, bus, repo, domain_bus)
-      @state = state; @bus = bus; @repo = repo; @domain_bus = domain_bus
+      @state = state
+      @bus = bus
+      @repo = repo
+      @domain_bus = domain_bus
     end
+
     def resolve(name)
       return @state if name == :state_store
       return @bus if name == :event_bus
       return @repo if name == :bookmark_repository
       return @domain_bus if name == :domain_event_bus
+
       nil
     end
   end
@@ -49,4 +54,3 @@ RSpec.describe EbookReader::Domain::Services::BookmarkService do
     expect(service.toggle_bookmark('s')).to eq(:removed)
   end
 end
-

@@ -12,7 +12,8 @@ module EbookReader
     # manifest read/write for EPUB caching.
     class EpubCache
       MANIFEST_VERSION = 1
-      Manifest = Struct.new(:title, :author_str, :authors, :opf_path, :spine, :epub_path, keyword_init: true)
+      Manifest = Struct.new(:title, :author_str, :authors, :opf_path, :spine, :epub_path,
+                            keyword_init: true)
 
       def initialize(epub_path)
         @epub_path = epub_path
@@ -27,12 +28,15 @@ module EbookReader
       def load_manifest
         path, serializer = locate_manifest
         return nil unless path
+
         data = serializer.load_file(path)
         return nil unless valid_manifest_data?(data)
         return nil unless validate_files_present(data)
+
         to_manifest(data)
       rescue StandardError => e
-        EbookReader::Infrastructure::Logger.debug('EpubCache: failed to load manifest', error: e.message)
+        EbookReader::Infrastructure::Logger.debug('EpubCache: failed to load manifest',
+                                                  error: e.message)
         nil
       end
 
@@ -41,11 +45,12 @@ module EbookReader
         FileUtils.mkdir_p(@cache_dir)
         serializer = select_serializer
         final = File.join(@cache_dir, serializer.manifest_filename)
-        tmp = final + '.tmp'
+        tmp = "#{final}.tmp"
         serializer.dump_file(tmp, manifest_to_h(meta))
         File.rename(tmp, final)
       rescue StandardError => e
-        EbookReader::Infrastructure::Logger.debug('EpubCache: failed to write manifest', error: e.message)
+        EbookReader::Infrastructure::Logger.debug('EpubCache: failed to write manifest',
+                                                  error: e.message)
       ensure
         begin
           FileUtils.rm_f(tmp) if defined?(tmp) && File.exist?(tmp)
@@ -72,6 +77,7 @@ module EbookReader
 
       def valid_manifest_data?(h)
         return false unless h.is_a?(Hash)
+
         # Accept both versioned and legacy manifests; prefer versioned
         ver = h['version']
         ver.nil? || ver.to_i <= MANIFEST_VERSION
@@ -84,6 +90,7 @@ module EbookReader
         return false if opf.empty? || spine.empty?
         return false unless File.exist?(cache_abs_path('META-INF/container.xml'))
         return false unless File.exist?(cache_abs_path(opf))
+
         spine.all? { |rel| File.exist?(cache_abs_path(rel)) }
       rescue StandardError
         false
@@ -94,7 +101,8 @@ module EbookReader
         FileUtils.mkdir_p(File.dirname(dest))
         File.binwrite(dest, zip.read(rel_path))
       rescue StandardError => e
-        EbookReader::Infrastructure::Logger.debug('EpubCache: copy failed', entry: rel_path, error: e.message)
+        EbookReader::Infrastructure::Logger.debug('EpubCache: copy failed', entry: rel_path,
+                                                                            error: e.message)
       end
 
       def locate_manifest
@@ -122,6 +130,7 @@ module EbookReader
 
       def to_manifest(h)
         return nil unless h.is_a?(Hash)
+
         Manifest.new(
           title: h['title'].to_s,
           author_str: h['author'].to_s,

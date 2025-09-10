@@ -16,17 +16,15 @@ module EbookReader
       class << klass
         unless method_defined?(:__orig_new_for_shim)
           alias_method :__orig_new_for_shim, :new
-          def new(*args, &block)
-            begin
-              __orig_new_for_shim(*args, &block)
-            rescue ArgumentError
-              # Fallback: build a minimal doc compatible with pagination tests
-              if args.length == 2 && args[1].is_a?(Array)
-                cache_dir, chapters = args
-                return EbookReader::TestShims::DocFromChapters.new(cache_dir, chapters)
-              end
-              raise
+          def new(*args, &)
+            __orig_new_for_shim(*args, &)
+          rescue ArgumentError
+            # Fallback: build a minimal doc compatible with pagination tests
+            if args.length == 2 && args[1].is_a?(Array)
+              cache_dir, chapters = args
+              return EbookReader::TestShims::DocFromChapters.new(cache_dir, chapters)
             end
+            raise
           end
         end
       end
@@ -37,10 +35,12 @@ module EbookReader
 
     class DocFromChapters
       attr_reader :cache_dir
+
       def initialize(cache_dir, chapters)
         @cache_dir = cache_dir
         @chapters = chapters
       end
+
       def chapter_count = @chapters.length
       def get_chapter(i) = @chapters[i]
     end
@@ -49,13 +49,9 @@ module EbookReader
       return if defined?(@tracepoint) && @tracepoint
 
       @tracepoint = TracePoint.new(:class) do |tp|
-        begin
-          if tp.self.is_a?(Class) && tp.self.name == 'FakeDoc'
-            install_fakedoc_new_wrapper
-          end
-        rescue StandardError
-          # ignore
-        end
+        install_fakedoc_new_wrapper if tp.self.is_a?(Class) && tp.self.name == 'FakeDoc'
+      rescue StandardError
+        # ignore
       end
       @tracepoint.enable
     end
@@ -66,4 +62,3 @@ module EbookReader
     end
   end
 end
-

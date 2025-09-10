@@ -23,8 +23,6 @@ module EbookReader
                           :selections
                         when :sidebar_toc_selected, :sidebar_bookmarks_selected, :sidebar_annotations_selected
                           :sidebar
-                        else
-                          nil
                         end
           return commands unless action_type
 

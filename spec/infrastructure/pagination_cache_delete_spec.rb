@@ -26,4 +26,3 @@ RSpec.describe 'Pagination cache delete' do
     expect(EbookReader::Infrastructure::PaginationCache.exists_for_document?(doc, key)).to be false
   end
 end
-

@@ -58,7 +58,7 @@ module EbookReader
           lines = begin
             chapter_index = context.state.get(%i[reader current_chapter]) || 0
             chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies && @dependencies.registered?(:wrapping_service) && chapter
+            if @dependencies&.registered?(:wrapping_service) && chapter
               ws = @dependencies.resolve(:wrapping_service)
               ws.wrap_window(chapter.lines || [], chapter_index, col_width, offset, displayable)
             else
@@ -84,7 +84,7 @@ module EbookReader
           chapter_index = context.state.get(%i[reader current_chapter]) || 0
           lines = begin
             chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies && @dependencies.registered?(:wrapping_service) && chapter
+            if @dependencies&.registered?(:wrapping_service) && chapter
               ws = @dependencies.resolve(:wrapping_service)
               ws.wrap_window(chapter.lines || [], chapter_index, col_width, offset, displayable)
             else

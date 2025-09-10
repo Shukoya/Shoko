@@ -15,13 +15,15 @@ module EbookReader
       # Exercise infra code paths to improve line coverage without expanding tracked files
       begin
         Infrastructure::CachePaths.reader_root
-      rescue StandardError; end
+      rescue StandardError
+      end
 
       begin
         Infrastructure::PerformanceMonitor.time('warmup') {}
         Infrastructure::PerformanceMonitor.stats
         Infrastructure::PerformanceMonitor.clear
-      rescue StandardError; end
+      rescue StandardError
+      end
 
       begin
         Infrastructure::Logger.level = :error
@@ -30,7 +32,8 @@ module EbookReader
         Infrastructure::Logger.warn('warmup')
         Infrastructure::Logger.error('warmup')
         Infrastructure::Logger.fatal('warmup')
-      rescue StandardError; end
+      rescue StandardError
+      end
 
       begin
         bus = Infrastructure::EventBus.new
@@ -38,7 +41,8 @@ module EbookReader
         bus.subscribe(:test_event, h)
         bus.emit_event(:test_event, {})
         bus.unsubscribe(h)
-      rescue StandardError; end
+      rescue StandardError
+      end
 
       begin
         st = Infrastructure::StateStore.new(Infrastructure::EventBus.new)
@@ -46,7 +50,8 @@ module EbookReader
         st.terminal_size_changed?(80, 24)
         snap = st.reader_snapshot
         st.restore_reader_from(snap)
-      rescue StandardError; end
+      rescue StandardError
+      end
 
       begin
         obs = Infrastructure::ObserverStateStore.new(Infrastructure::EventBus.new)
@@ -55,19 +60,22 @@ module EbookReader
         end
         obs.add_observer(mod, %i[reader mode])
         obs.remove_observer(mod)
-      rescue StandardError; end
+      rescue StandardError
+      end
 
       begin
         Infrastructure::PaginationCache.msgpack_available?
         Infrastructure::PaginationCache.exists_for_document?(Object.new, '80x24_single_normal')
-      rescue StandardError; end
+      rescue StandardError
+      end
 
       begin
         v = Infrastructure::Validator.new
         v.validate_presence('x')
         v.validate_format('abc', /a/)
         v.validate_range(5, min: 0, max: 10)
-      rescue StandardError; end
+      rescue StandardError
+      end
 
       begin
         # Exercise EpubCache manifest write/read paths
@@ -86,12 +94,14 @@ module EbookReader
         )
         cache.write_manifest!(manifest)
         cache.load_manifest
-      rescue StandardError; end
+      rescue StandardError
+      end
     ensure
       begin
         FileUtils.rm_f(fake_epub) if defined?(fake_epub)
         FileUtils.rm_rf(cache.cache_dir) if defined?(cache) && cache&.cache_dir
-      rescue StandardError; end
+      rescue StandardError
+      end
     end
   end
 end

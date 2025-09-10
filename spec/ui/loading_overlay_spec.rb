@@ -5,7 +5,9 @@ require 'spec_helper'
 RSpec.describe EbookReader::UI::LoadingOverlay do
   class OverlayFakeOutput
     attr_reader :writes
+
     def initialize = (@writes = [])
+
     def write(row, col, text)
       @writes << [row, col, text]
     end
@@ -13,11 +15,13 @@ RSpec.describe EbookReader::UI::LoadingOverlay do
 
   class OverlayFakeTerminalService
     attr_reader :surface_out, :started, :ended
+
     def initialize(out)
       @surface_out = out
       @started = 0
       @ended = 0
     end
+
     def size = [10, 40]
     def start_frame = (@started += 1)
     def end_frame = (@ended += 1)

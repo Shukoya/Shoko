@@ -31,7 +31,7 @@ module EbookReader
           @aggregate_id = aggregate_id
           @version = version
           @attributes = attributes
-          
+
           validate_required_attributes
           validate_attribute_types
         end
@@ -68,7 +68,7 @@ module EbookReader
             occurred_at: @occurred_at.iso8601,
             aggregate_id: @aggregate_id,
             version: @version,
-            data: @attributes
+            data: @attributes,
           }
         end
 
@@ -79,7 +79,8 @@ module EbookReader
         def self.from_h(hash)
           event = allocate
           event.instance_variable_set(:@event_id, hash[:event_id] || hash['event_id'])
-          event.instance_variable_set(:@occurred_at, Time.parse(hash[:occurred_at] || hash['occurred_at']))
+          event.instance_variable_set(:@occurred_at,
+                                      Time.parse(hash[:occurred_at] || hash['occurred_at']))
           event.instance_variable_set(:@aggregate_id, hash[:aggregate_id] || hash['aggregate_id'])
           event.instance_variable_set(:@version, hash[:version] || hash['version'] || 1)
           event.instance_variable_set(:@attributes, hash[:data] || hash['data'] || {})
@@ -131,7 +132,7 @@ module EbookReader
         # @return [Boolean] True if events are equal
         def ==(other)
           return false unless other.is_a?(BaseDomainEvent)
-          
+
           @event_id == other.event_id &&
             event_type == other.event_type &&
             @attributes == other.event_data
@@ -154,7 +155,7 @@ module EbookReader
           self.class.typed_attributes.each do |attr, type|
             value = @attributes[attr]
             next if value.nil? # Allow nil values
-            
+
             unless value.is_a?(type)
               raise TypeError, "Attribute #{attr} must be of type #{type}, got #{value.class}"
             end

@@ -50,15 +50,15 @@ RSpec.describe EbookReader::Domain::Events::DomainEventBus do
   describe '#subscribe' do
     it 'adds subscriber for event type' do
       handler = proc { |event| }
-      
+
       subject.subscribe(EbookReader::Domain::Events::BookmarkAdded, handler)
-      
+
       expect(subject.subscriber_count(EbookReader::Domain::Events::BookmarkAdded)).to eq(1)
     end
 
     it 'accepts block as handler' do
       subject.subscribe(EbookReader::Domain::Events::BookmarkAdded) { |event| }
-      
+
       expect(subject.subscriber_count(EbookReader::Domain::Events::BookmarkAdded)).to eq(1)
     end
   end
@@ -67,18 +67,18 @@ RSpec.describe EbookReader::Domain::Events::DomainEventBus do
     it 'removes specific handler' do
       handler = proc { |event| }
       subject.subscribe(EbookReader::Domain::Events::BookmarkAdded, handler)
-      
+
       subject.unsubscribe(EbookReader::Domain::Events::BookmarkAdded, handler)
-      
+
       expect(subject.subscriber_count(EbookReader::Domain::Events::BookmarkAdded)).to eq(0)
     end
 
     it 'removes all handlers for event type' do
       subject.subscribe(EbookReader::Domain::Events::BookmarkAdded) { |event| }
       subject.subscribe(EbookReader::Domain::Events::BookmarkAdded) { |event| }
-      
+
       subject.unsubscribe(EbookReader::Domain::Events::BookmarkAdded)
-      
+
       expect(subject.subscriber_count(EbookReader::Domain::Events::BookmarkAdded)).to eq(0)
     end
   end
@@ -86,20 +86,20 @@ RSpec.describe EbookReader::Domain::Events::DomainEventBus do
   describe '#add_middleware' do
     it 'applies middleware to events before publishing' do
       processed_events = []
-      
+
       subject.add_middleware do |event|
         processed_events << event
         event # Pass through unchanged
       end
 
       subject.publish(test_event)
-      
+
       expect(processed_events).to include(test_event)
     end
 
     it 'can filter events by returning nil' do
-      subject.add_middleware { |event| nil } # Filter out all events
-      
+      subject.add_middleware { |_event| nil } # Filter out all events
+
       expect(mock_infrastructure_bus).not_to receive(:emit_event)
       subject.publish(test_event)
     end

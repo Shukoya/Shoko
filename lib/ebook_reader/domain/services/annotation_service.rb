@@ -28,13 +28,13 @@ module EbookReader
             chapter_index: chapter_index,
             page_meta: page_meta
           )
-          
+
           # Publish domain event
           @domain_event_bus.publish(Events::AnnotationAdded.new(
-            book_path: path,
-            annotation: annotation
-          ))
-          
+                                      book_path: path,
+                                      annotation: annotation
+                                    ))
+
           notify_updated(path)
           annotation
         end
@@ -46,17 +46,17 @@ module EbookReader
             old_annotation = @annotation_repository.find_by_id(path, id)
             old_note = old_annotation ? old_annotation['note'] : ''
           end
-          
+
           @annotation_repository.update_note(path, id, note)
-          
+
           # Publish domain event
           @domain_event_bus.publish(Events::AnnotationUpdated.new(
-            book_path: path,
-            annotation_id: id,
-            old_note: old_note,
-            new_note: note
-          ))
-          
+                                      book_path: path,
+                                      annotation_id: id,
+                                      old_note: old_note,
+                                      new_note: note
+                                    ))
+
           notify_updated(path)
           true
         end
@@ -64,17 +64,20 @@ module EbookReader
         def delete(path, id)
           # Get annotation for event before deletion (optional)
           annotation = nil
-          annotation = @annotation_repository.find_by_id(path, id) if @annotation_repository.respond_to?(:find_by_id)
-          
+          if @annotation_repository.respond_to?(:find_by_id)
+            annotation = @annotation_repository.find_by_id(path,
+                                                           id)
+          end
+
           @annotation_repository.delete_by_id(path, id)
-          
+
           # Publish domain event
           @domain_event_bus.publish(Events::AnnotationRemoved.new(
-            book_path: path,
-            annotation_id: id,
-            annotation: annotation
-          ))
-          
+                                      book_path: path,
+                                      annotation_id: id,
+                                      annotation: annotation
+                                    ))
+
           notify_updated(path)
           true
         end

@@ -29,13 +29,13 @@ module EbookReader
           )
 
           refresh_bookmarks
-          
+
           # Publish domain event
           @domain_event_bus.publish(Events::BookmarkAdded.new(
-            book_path: book_path,
-            bookmark: bookmark
-          ))
-          
+                                      book_path: book_path,
+                                      bookmark: bookmark
+                                    ))
+
           # Legacy event bus for backward compatibility
           @event_bus.emit_event(:bookmark_added, { bookmark: bookmark })
           bookmark
@@ -53,10 +53,10 @@ module EbookReader
 
           # Publish domain event
           @domain_event_bus.publish(Events::BookmarkRemoved.new(
-            book_path: book_path,
-            bookmark: bookmark
-          ))
-          
+                                      book_path: book_path,
+                                      bookmark: bookmark
+                                    ))
+
           # Legacy event bus for backward compatibility
           @event_bus.emit_event(:bookmark_removed, { bookmark: bookmark })
         end
@@ -82,10 +82,10 @@ module EbookReader
 
           # Publish domain event
           @domain_event_bus.publish(Events::BookmarkNavigated.new(
-            book_path: current_book_path,
-            bookmark: bookmark
-          ))
-          
+                                      book_path: current_book_path,
+                                      bookmark: bookmark
+                                    ))
+
           # Legacy event bus for backward compatibility
           @event_bus.emit_event(:navigated_to_bookmark, { bookmark: bookmark })
         end

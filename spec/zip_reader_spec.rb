@@ -7,9 +7,9 @@ RSpec.describe Zip::File do
 
   it 'reads stored and deflated entries by name', :fakefs do
     data = ZipTestBuilder.build_zip([
-      { name: 'a.txt', data: 'hello', method: :store },
-      { name: 'b/b.txt', data: 'world!', method: :deflate },
-    ], comment: 'tiny comment to exercise EOCD scan')
+                                      { name: 'a.txt', data: 'hello', method: :store },
+                                      { name: 'b/b.txt', data: 'world!', method: :deflate },
+                                    ], comment: 'tiny comment to exercise EOCD scan')
 
     path = '/test.zip'
     FileUtils.mkdir_p(File.dirname(path))
@@ -27,8 +27,8 @@ RSpec.describe Zip::File do
   it 'raises on unsupported compression method', :fakefs do
     # method 99 is arbitrary unsupported
     data = ZipTestBuilder.build_zip([
-      { name: 'x.bin', data: 'data', method: 99 },
-    ])
+                                      { name: 'x.bin', data: 'data', method: 99 },
+                                    ])
 
     path = '/unsupported.zip'
     File.binwrite(path, data)
@@ -39,4 +39,3 @@ RSpec.describe Zip::File do
     end
   end
 end
-

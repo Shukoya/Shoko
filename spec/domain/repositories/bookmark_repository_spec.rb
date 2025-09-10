@@ -20,7 +20,7 @@ RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
   end
 
   let(:mock_storage) { instance_double(EbookReader::Domain::Repositories::Storage::BookmarkFileStore) }
-  
+
   let(:book_path) { '/path/to/test.epub' }
   let(:bookmark_data) do
     instance_double(EbookReader::Domain::Models::BookmarkData,
@@ -76,17 +76,17 @@ RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
     end
 
     it 'validates required parameters' do
-      expect {
+      expect do
         subject.add_for_book(nil, chapter_index: 2, line_offset: 100, text_snippet: 'Test text')
-      }.to raise_error(described_class::ValidationError, /Missing required parameters/)
+      end.to raise_error(described_class::ValidationError, /Missing required parameters/)
     end
 
     it 'handles storage errors' do
       allow(mock_storage).to receive(:add).and_raise(StandardError, 'Storage error')
 
-      expect {
+      expect do
         subject.add_for_book(book_path, chapter_index: 2, line_offset: 100, text_snippet: 'Test text')
-      }.to raise_error(described_class::PersistenceError)
+      end.to raise_error(described_class::PersistenceError)
     end
   end
 
@@ -118,17 +118,17 @@ RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
     end
 
     it 'validates required parameters' do
-      expect {
+      expect do
         subject.find_by_book_path(nil)
-      }.to raise_error(described_class::ValidationError, /Missing required parameters/)
+      end.to raise_error(described_class::ValidationError, /Missing required parameters/)
     end
 
     it 'handles storage errors' do
       allow(mock_storage).to receive(:get).and_raise(StandardError, 'Storage error')
 
-      expect {
+      expect do
         subject.find_by_book_path(book_path)
-      }.to raise_error(described_class::PersistenceError)
+      end.to raise_error(described_class::PersistenceError)
     end
   end
 
@@ -150,23 +150,23 @@ RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
     end
 
     it 'validates required parameters' do
-      expect {
+      expect do
         subject.delete_for_book(nil, bookmark)
-      }.to raise_error(described_class::ValidationError, /Missing required parameters/)
+      end.to raise_error(described_class::ValidationError, /Missing required parameters/)
     end
 
     it 'ensures bookmark entity exists' do
-      expect {
+      expect do
         subject.delete_for_book(book_path, nil)
-      }.to raise_error(described_class::EntityNotFoundError, 'Bookmark not found')
+      end.to raise_error(described_class::EntityNotFoundError, 'Bookmark not found')
     end
 
     it 'handles storage errors' do
       allow(mock_storage).to receive(:delete).and_raise(StandardError, 'Storage error')
 
-      expect {
+      expect do
         subject.delete_for_book(book_path, bookmark)
-      }.to raise_error(described_class::PersistenceError)
+      end.to raise_error(described_class::PersistenceError)
     end
   end
 
@@ -194,9 +194,9 @@ RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
     it 'handles storage errors' do
       allow(subject).to receive(:find_by_book_path).and_raise(StandardError, 'Storage error')
 
-      expect {
+      expect do
         subject.exists_at_position?(book_path, 2, 100)
-      }.to raise_error(described_class::PersistenceError)
+      end.to raise_error(described_class::PersistenceError)
     end
   end
 
@@ -216,9 +216,9 @@ RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
     it 'handles storage errors' do
       allow(subject).to receive(:find_by_book_path).and_raise(StandardError, 'Storage error')
 
-      expect {
+      expect do
         subject.count_for_book(book_path)
-      }.to raise_error(described_class::PersistenceError)
+      end.to raise_error(described_class::PersistenceError)
     end
   end
 
@@ -246,9 +246,9 @@ RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
     it 'handles storage errors' do
       allow(subject).to receive(:find_by_book_path).and_raise(StandardError, 'Storage error')
 
-      expect {
+      expect do
         subject.find_at_position(book_path, 2, 100)
-      }.to raise_error(described_class::PersistenceError)
+      end.to raise_error(described_class::PersistenceError)
     end
   end
 end

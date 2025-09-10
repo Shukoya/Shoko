@@ -25,7 +25,7 @@ module EbookReader
       #   annotations = repo.find_by_book_path('/path/to/book.epub')
       class AnnotationRepository < BaseRepository
         def initialize(dependencies)
-          super(dependencies)
+          super
           @storage = Storage::AnnotationFileStore.new
         end
 
@@ -40,17 +40,20 @@ module EbookReader
         # @return [Hash] The created annotation data
         def add_for_book(book_path, text:, note:, range:, chapter_index:, page_meta: nil)
           validate_required_params(
-            { book_path: book_path, text: text, note: note, range: range, chapter_index: chapter_index },
+            { book_path: book_path, text: text, note: note, range: range,
+              chapter_index: chapter_index },
             %i[book_path text note range chapter_index]
           )
 
           begin
             @storage.add(book_path, text, note, range, chapter_index, page_meta)
-            
+
             # Return the most recently created annotation
             annotations = find_by_book_path(book_path)
-            annotations.max_by { |a| Time.parse(a['created_at'] || a['updated_at'] || Time.now.iso8601) }
-          rescue => e
+            annotations.max_by do |a|
+              Time.parse(a['created_at'] || a['updated_at'] || Time.now.iso8601)
+            end
+          rescue StandardError => e
             handle_storage_error(e, "adding annotation for #{book_path}")
           end
         end
@@ -64,7 +67,7 @@ module EbookReader
 
           begin
             @storage.get(book_path) || []
-          rescue => e
+          rescue StandardError => e
             handle_storage_error(e, "loading annotations for #{book_path}")
           end
         end
@@ -73,11 +76,9 @@ module EbookReader
         #
         # @return [Hash] Hash mapping book paths to annotation arrays
         def find_all
-          begin
-            @storage.all || {}
-          rescue => e
-            handle_storage_error(e, "loading all annotations")
-          end
+          @storage.all || {}
+        rescue StandardError => e
+          handle_storage_error(e, 'loading all annotations')
         end
 
         # Update an existing annotation's note
@@ -95,7 +96,7 @@ module EbookReader
           begin
             @storage.update(book_path, annotation_id, note)
             true
-          rescue => e
+          rescue StandardError => e
             handle_storage_error(e, "updating annotation #{annotation_id} for #{book_path}")
           end
         end
@@ -114,7 +115,7 @@ module EbookReader
           begin
             @storage.delete(book_path, annotation_id)
             true
-          rescue => e
+          rescue StandardError => e
             handle_storage_error(e, "deleting annotation #{annotation_id} for #{book_path}")
           end
         end
@@ -127,7 +128,7 @@ module EbookReader
         def find_by_id(book_path, annotation_id)
           annotations = find_by_book_path(book_path)
           annotations.find { |a| a['id'] == annotation_id }
-        rescue => e
+        rescue StandardError => e
           handle_storage_error(e, "finding annotation #{annotation_id} for #{book_path}")
         end
 
@@ -137,7 +138,7 @@ module EbookReader
         # @return [Integer] Number of annotations for the book
         def count_for_book(book_path)
           find_by_book_path(book_path).size
-        rescue => e
+        rescue StandardError => e
           handle_storage_error(e, "counting annotations for #{book_path}")
         end
 
@@ -149,7 +150,7 @@ module EbookReader
         def find_by_chapter(book_path, chapter_index)
           annotations = find_by_book_path(book_path)
           annotations.select { |a| a['chapter_index'] == chapter_index }
-        rescue => e
+        rescue StandardError => e
           handle_storage_error(e, "finding annotations by chapter for #{book_path}")
         end
 
@@ -173,7 +174,7 @@ module EbookReader
 
             annotation_start < range_end && range_start < annotation_end
           end
-        rescue => e
+        rescue StandardError => e
           handle_storage_error(e, "checking annotation range for #{book_path}")
         end
       end

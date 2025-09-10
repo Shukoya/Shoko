@@ -15,6 +15,7 @@ module EbookReader
           @chapter_cache = EbookReader::Services::ChapterCache.new
           @window_cache = Hash.new { |h, k| h[k] = { store: {}, order: [] } }
         end
+
         # Wrap raw lines for a chapter to the given width.
         # Falls back to a local wrapper if cache is unavailable.
         #
@@ -49,12 +50,14 @@ module EbookReader
           key = "#{chapter_index}_#{width}"
           cached = @window_cache[key][:store][[start.to_i, length.to_i]]
           return cached if cached
+
           wrapped = []
 
           lines.each do |line|
             break if wrapped.length >= (target_end + 1)
 
             next if line.nil?
+
             if line.strip.empty?
               wrapped << ''
               next
@@ -77,6 +80,7 @@ module EbookReader
 
           start_index = [start.to_i, 0].max
           return [] if start_index >= wrapped.length
+
           slice = wrapped[start_index, length.to_i] || []
           cache_put(key, [start.to_i, length.to_i], slice)
           slice

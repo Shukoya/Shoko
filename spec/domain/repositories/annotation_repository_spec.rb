@@ -8,8 +8,10 @@ RSpec.describe EbookReader::Domain::Repositories::AnnotationRepository do
 
   class CtnAnnRepo
     def initialize(logger) = (@logger = logger)
+
     def resolve(name)
       return @logger if name == :logger
+
       nil
     end
   end
@@ -19,18 +21,22 @@ RSpec.describe EbookReader::Domain::Repositories::AnnotationRepository do
       def initialize
         @data = Hash.new { |h, k| h[k] = [] }
       end
+
       def get(path) = @data[path]
       def all = @data
+
       def add(path, text, note, range, chapter_index, _meta)
         (@data[path] ||= []) << {
           'id' => 'id1', 'text' => text, 'note' => note,
           'range' => range, 'chapter_index' => chapter_index, 'created_at' => Time.now.iso8601
         }
       end
+
       def update(path, id, note)
         ann = (@data[path] ||= []).find { |a| a['id'] == id }
         ann['note'] = note if ann
       end
+
       def delete(path, id)
         (@data[path] ||= []).reject! { |a| a['id'] == id }
       end

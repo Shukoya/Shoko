@@ -16,4 +16,3 @@ RSpec.describe EbookReader::Infrastructure::CachePaths do
     expect(described_class.reader_root).to eq('/home/test/.cache/reader')
   end
 end
-

@@ -18,10 +18,13 @@ module EbookReader
       def load_for_document(doc, key)
         dir = resolve_cache_dir(doc)
         return nil unless dir
+
         path, serializer = locate(dir, key)
         return nil unless path
+
         data = serializer.load_file(path)
         return nil unless data.is_a?(Array)
+
         data.map do |h|
           {
             chapter_index: h['chapter_index'] || h[:chapter_index],
@@ -38,10 +41,11 @@ module EbookReader
       def save_for_document(doc, key, pages_compact)
         dir = resolve_cache_dir(doc)
         return false unless dir
+
         FileUtils.mkdir_p(File.join(dir, 'pagination'))
         serializer = select_serializer
         final = File.join(dir, 'pagination', "#{key}.#{serializer.ext}")
-        tmp = final + '.tmp'
+        tmp = "#{final}.tmp"
         serializer.dump_file(tmp, pages_compact)
         File.rename(tmp, final)
         true
@@ -60,6 +64,7 @@ module EbookReader
         if doc.respond_to?(:cache_dir) && doc.cache_dir && !doc.cache_dir.to_s.empty?
           return doc.cache_dir
         end
+
         # Fallback: compute cache dir from epub path via EpubCache
         if doc.respond_to?(:canonical_path) && doc.canonical_path && File.exist?(doc.canonical_path)
           cache = EbookReader::Infrastructure::EpubCache.new(doc.canonical_path)
@@ -85,6 +90,7 @@ module EbookReader
       def exists_for_document?(doc, key)
         dir = resolve_cache_dir(doc)
         return false unless dir
+
         mp = File.join(dir, 'pagination', "#{key}.msgpack")
         js = File.join(dir, 'pagination', "#{key}.json")
         File.exist?(mp) || File.exist?(js)
@@ -108,11 +114,13 @@ module EbookReader
       def delete_for_document(doc, key)
         dir = resolve_cache_dir(doc)
         return false unless dir
+
         mp = File.join(dir, 'pagination', "#{key}.msgpack")
         js = File.join(dir, 'pagination', "#{key}.json")
         removed = false
         [mp, js].each do |p|
           next unless File.exist?(p)
+
           File.delete(p)
           removed = true
         end

@@ -7,9 +7,11 @@ RSpec.describe EbookReader::Components::EnhancedPopupMenu do
     def calculate_popup_position(_end_pos, _w, _h)
       { x: 10, y: 5 }
     end
+
     def within_bounds?(x, y, rect)
       x >= rect.x && x < (rect.x + rect.width) && y >= rect.y && y < (rect.y + rect.height)
     end
+
     def normalize_selection_range(r) = r
   end
 
@@ -20,7 +22,7 @@ RSpec.describe EbookReader::Components::EnhancedPopupMenu do
   let(:selection) do
     {
       start: { x: 1, y: 1 },
-      end: { x: 5, y: 4 }
+      end: { x: 5, y: 4 },
     }
   end
 
@@ -39,4 +41,3 @@ RSpec.describe EbookReader::Components::EnhancedPopupMenu do
     expect(res[:type]).to eq(:cancel)
   end
 end
-

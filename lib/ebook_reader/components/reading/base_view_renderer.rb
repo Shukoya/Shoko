@@ -11,7 +11,10 @@ module EbookReader
         def initialize(dependencies)
           super()
           @dependencies = dependencies
-          raise ArgumentError, 'Dependencies must be provided to BaseViewRenderer' unless @dependencies
+          unless @dependencies
+            raise ArgumentError,
+                  'Dependencies must be provided to BaseViewRenderer'
+          end
 
           @layout_service = @dependencies.resolve(:layout_service)
         end
@@ -26,7 +29,7 @@ module EbookReader
           render_with_context(surface, bounds, context)
           begin
             state = context.state
-            state.dispatch(EbookReader::Domain::Actions::UpdateRenderedLinesAction.new(@rendered_lines_buffer)) if state
+            state&.dispatch(EbookReader::Domain::Actions::UpdateRenderedLinesAction.new(@rendered_lines_buffer))
           rescue StandardError
             # best-effort; avoid crashing render on bookkeeping
           ensure
@@ -61,7 +64,8 @@ module EbookReader
             row = start_row + (spacing == :relaxed ? idx * 2 : idx)
             break if row > bounds.height - 1
 
-            draw_line(surface, bounds, line: line, row: row, col: col_start, width: col_width, context: context)
+            draw_line(surface, bounds, line: line, row: row, col: col_start, width: col_width,
+                                       context: context)
           end
         end
 
@@ -120,6 +124,7 @@ module EbookReader
 
         def safe_resolve(name)
           return @dependencies.resolve(name) if @dependencies.registered?(name)
+
           nil
         end
       end

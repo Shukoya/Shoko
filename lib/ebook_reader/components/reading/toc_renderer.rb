@@ -7,10 +7,6 @@ module EbookReader
     module Reading
       # Renderer for table of contents display
       class TocRenderer < BaseViewRenderer
-        def initialize(dependencies)
-          super(dependencies)
-        end
-
         def render_with_context(surface, bounds, context)
           return unless context&.state && context.document
 

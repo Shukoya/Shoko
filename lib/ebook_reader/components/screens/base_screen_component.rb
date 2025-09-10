@@ -8,7 +8,7 @@ module EbookReader
       # Base component for all screen renderers
       class BaseScreenComponent < BaseComponent
         def initialize(services = nil)
-          super(services)
+          super
           @needs_redraw = true
         end
 

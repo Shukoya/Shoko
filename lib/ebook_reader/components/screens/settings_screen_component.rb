@@ -30,7 +30,8 @@ module EbookReader
           render_setting_option(surface, bounds, 5, '3', 'Page Numbers', format_page_numbers)
           render_setting_option(surface, bounds, 6, '4', 'Page Numbering Mode',
                                 format_page_numbering_mode)
-          render_setting_option(surface, bounds, 7, '5', 'Highlight Quotes', format_highlight_quotes)
+          render_setting_option(surface, bounds, 7, '5', 'Highlight Quotes',
+                                format_highlight_quotes)
           render_setting_option(surface, bounds, 8, '6', 'Wipe Cache', 'Removes EPUB + scan caches')
 
           # Instructions

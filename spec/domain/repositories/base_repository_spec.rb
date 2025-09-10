@@ -23,7 +23,7 @@ RSpec.describe EbookReader::Domain::Repositories::BaseRepository do
     Class.new(described_class) do
       def test_method_with_error
         raise StandardError, 'Test error'
-      rescue => e
+      rescue StandardError => e
         handle_storage_error(e, 'test context')
       end
 
@@ -65,7 +65,7 @@ RSpec.describe EbookReader::Domain::Repositories::BaseRepository do
         Class.new(described_class) do
           def test_no_method_error
             raise NoMethodError, 'Test method error'
-          rescue => e
+          rescue StandardError => e
             handle_storage_error(e, 'test context')
           end
         end
@@ -73,7 +73,7 @@ RSpec.describe EbookReader::Domain::Repositories::BaseRepository do
 
       it 'raises ValidationError for NoMethodError' do
         repo = test_repository_with_no_method_error.new(mock_dependencies)
-        
+
         expect { repo.test_no_method_error }.to raise_error(described_class::ValidationError)
       end
     end

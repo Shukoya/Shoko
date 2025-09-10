@@ -28,13 +28,13 @@ RSpec.describe EbookReader::Domain::Services::LibraryService do
     File.write(File.join(book_dir, 'OPS', 'content.opf'), '<xml/>')
     # Simple manifest.json
     File.write(File.join(book_dir, 'manifest.json'), JSON.generate({
-      'title' => 'Test Book',
-      'author' => 'Tester',
-      'authors' => ['Tester'],
-      'opf_path' => 'OPS/content.opf',
-      'spine' => ['OPS/ch1.xhtml'],
-      'epub_path' => '/tmp/book.epub'
-    }))
+                                                                     'title' => 'Test Book',
+                                                                     'author' => 'Tester',
+                                                                     'authors' => ['Tester'],
+                                                                     'opf_path' => 'OPS/content.opf',
+                                                                     'spine' => ['OPS/ch1.xhtml'],
+                                                                     'epub_path' => '/tmp/book.epub',
+                                                                   }))
     File.write(File.join(book_dir, 'OPS', 'ch1.xhtml'), '<html><body><p>Hi</p></body></html>')
   end
 
@@ -56,8 +56,8 @@ RSpec.describe EbookReader::Domain::Services::LibraryService do
     serializer = instance_double(EbookReader::Infrastructure::MessagePackSerializer)
     allow(EbookReader::Infrastructure::MessagePackSerializer).to receive(:new).and_return(serializer)
     allow(serializer).to receive(:load_file).with(mp_path).and_return({
-      'title' => 'MP', 'author' => 'A', 'authors' => ['A'], 'opf_path' => 'OPS/content.opf', 'spine' => ['OPS/ch1.xhtml'], 'epub_path' => '/x.epub'
-    })
+                                                                        'title' => 'MP', 'author' => 'A', 'authors' => ['A'], 'opf_path' => 'OPS/content.opf', 'spine' => ['OPS/ch1.xhtml'], 'epub_path' => '/x.epub'
+                                                                      })
 
     items = service.list_cached_books
     expect(items.length).to eq(1)

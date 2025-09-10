@@ -12,10 +12,12 @@ RSpec.describe EbookReader::Controllers::UIController do
       @nav = nav
       @input = input
     end
+
     def resolve(name)
       return @doc if name == :document
       return @nav if name == :navigation_service
       return @input if name == :input_controller
+
       nil
     end
   end
@@ -50,4 +52,3 @@ RSpec.describe EbookReader::Controllers::UIController do
     expect(state.get(%i[reader sidebar_visible])).to be false
   end
 end
-

@@ -30,4 +30,3 @@ RSpec.describe EbookReader::Domain::Repositories::Storage::BookmarkFileStore do
     expect(store.get('/tmp/a.epub')).to be_empty
   end
 end
-

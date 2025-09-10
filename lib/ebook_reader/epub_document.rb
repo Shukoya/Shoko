@@ -235,7 +235,7 @@ module EbookReader
     def load_from_cache
       cache = Infrastructure::EpubCache.new(@path)
       manifest = cache.load_manifest
-      return false unless manifest && manifest.spine.any?
+      return false unless manifest&.spine&.any?
 
       @title = manifest.title unless manifest.title.to_s.empty?
       @opf_path = manifest.opf_path
@@ -246,7 +246,9 @@ module EbookReader
       # Validate cached files exist
       return false unless File.exist?(cache.cache_abs_path('META-INF/container.xml'))
       return false unless File.exist?(cache.cache_abs_path(@opf_path))
-      return false unless @spine_relative_paths.all? { |rel| File.exist?(cache.cache_abs_path(rel)) }
+      return false unless @spine_relative_paths.all? do |rel|
+        File.exist?(cache.cache_abs_path(rel))
+      end
 
       # Build chapter refs pointing to cached files
       @chapters = []
@@ -260,6 +262,7 @@ module EbookReader
 
     def load_from_cache_dir(dir)
       return false unless File.directory?(dir)
+
       mp = File.join(dir, 'manifest.msgpack')
       js = File.join(dir, 'manifest.json')
       serializer = nil

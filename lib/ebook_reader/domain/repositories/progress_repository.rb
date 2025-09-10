@@ -24,7 +24,7 @@ module EbookReader
             {
               chapter: chapter_index,
               line_offset: line_offset,
-              timestamp: timestamp
+              timestamp: timestamp,
             }
           end
 
@@ -40,7 +40,7 @@ module EbookReader
         end
 
         def initialize(dependencies)
-          super(dependencies)
+          super
           @storage = Storage::ProgressFileStore.new
         end
 
@@ -58,14 +58,14 @@ module EbookReader
 
           begin
             @storage.save(book_path, chapter_index, line_offset)
-            
+
             # Return the progress data that was saved
             ProgressData.new(
               chapter_index: chapter_index,
               line_offset: line_offset,
               timestamp: Time.now.iso8601
             )
-          rescue => e
+          rescue StandardError => e
             handle_storage_error(e, "saving progress for #{book_path}")
           end
         end
@@ -80,7 +80,7 @@ module EbookReader
           begin
             progress_hash = @storage.load(book_path)
             ProgressData.from_h(progress_hash)
-          rescue => e
+          rescue StandardError => e
             handle_storage_error(e, "loading progress for #{book_path}")
           end
         end
@@ -89,12 +89,10 @@ module EbookReader
         #
         # @return [Hash<String, ProgressData>] Hash mapping book paths to progress data
         def find_all
-          begin
-            all_progress = @storage.load_all
-            all_progress.transform_values { |progress_hash| ProgressData.from_h(progress_hash) }
-          rescue => e
-            handle_storage_error(e, "loading all progress data")
-          end
+          all_progress = @storage.load_all
+          all_progress.transform_values { |progress_hash| ProgressData.from_h(progress_hash) }
+        rescue StandardError => e
+          handle_storage_error(e, 'loading all progress data')
         end
 
         # Check if progress exists for a book
@@ -103,7 +101,7 @@ module EbookReader
         # @return [Boolean] True if progress data exists for the book
         def exists_for_book?(book_path)
           !find_by_book_path(book_path).nil?
-        rescue => e
+        rescue StandardError => e
           handle_storage_error(e, "checking progress existence for #{book_path}")
         end
 
@@ -116,7 +114,7 @@ module EbookReader
           return nil unless progress&.timestamp
 
           Time.parse(progress.timestamp)
-        rescue => e
+        rescue StandardError => e
           handle_storage_error(e, "getting last update time for #{book_path}")
         end
 
@@ -131,8 +129,8 @@ module EbookReader
           end.reverse.map(&:first)
 
           limit ? sorted_paths.take(limit) : sorted_paths
-        rescue => e
-          handle_storage_error(e, "getting recent books")
+        rescue StandardError => e
+          handle_storage_error(e, 'getting recent books')
         end
 
         # Update progress only if the new position is further than current
@@ -143,9 +141,12 @@ module EbookReader
         # @return [ProgressData] The saved progress data
         def save_if_further(book_path, chapter_index:, line_offset:)
           current_progress = find_by_book_path(book_path)
-          
+
           # Always save if no current progress
-          return save_for_book(book_path, chapter_index: chapter_index, line_offset: line_offset) unless current_progress
+          unless current_progress
+            return save_for_book(book_path, chapter_index: chapter_index,
+                                            line_offset: line_offset)
+          end
 
           # Compare positions
           if chapter_index > current_progress.chapter_index ||
@@ -154,7 +155,7 @@ module EbookReader
           else
             current_progress
           end
-        rescue => e
+        rescue StandardError => e
           handle_storage_error(e, "conditionally saving progress for #{book_path}")
         end
       end

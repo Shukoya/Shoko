@@ -76,8 +76,8 @@ module EbookReader
           begin
             height, width = @terminal_service.size
             # Prepare services
-            layout = @dependencies.resolve(:layout_service)
-            wrapper = @dependencies.registered?(:wrapping_service) ? @dependencies.resolve(:wrapping_service) : nil
+            @dependencies.resolve(:layout_service)
+            @dependencies.registered?(:wrapping_service) ? @dependencies.resolve(:wrapping_service) : nil
             page_calc = @dependencies.resolve(:page_calculator)
 
             # Load document
@@ -111,7 +111,8 @@ module EbookReader
             else
               # Absolute mode: compute per-chapter with progress
               # Absolute: delegate page map building to page_calculator
-              page_map = page_calc.build_absolute_page_map(width, height, doc, @state) do |done, total|
+              page_map = page_calc.build_absolute_page_map(width, height, doc,
+                                                           @state) do |done, total|
                 @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
                                   loading_progress: (done.to_f / [total, 1].max)
                                 ))

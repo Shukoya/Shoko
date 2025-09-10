@@ -12,7 +12,6 @@ module EbookReader
         # File-backed annotation storage under Domain.
         # Persists annotations to ~/.config/reader/annotations.json
         class AnnotationFileStore
-
           def all
             load_all
           rescue StandardError
@@ -57,6 +56,7 @@ module EbookReader
             list = data[key] || []
             ann = list.find { |a| a['id'] == id }
             return false unless ann
+
             ann['note'] = note
             ann['updated_at'] = Time.now.iso8601
             data[key] = list
@@ -82,6 +82,7 @@ module EbookReader
 
           def load_all
             return {} unless File.exist?(file_path)
+
             JSON.parse(File.read(file_path))
           end
 

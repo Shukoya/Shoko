@@ -28,11 +28,11 @@ module EbookReader
           input_debounce_ms: 100,
           search_highlight_timeout: 2000,
           auto_save_interval: 30,
-          theme: :default
+          theme: :default,
         }.freeze
 
         def initialize(dependencies)
-          super(dependencies)
+          super
           @state_store = dependencies.resolve(:global_state)
         end
 
@@ -140,10 +140,11 @@ module EbookReader
             # Apply updates as a single state transaction
             @state_store.update(config_hash.transform_keys { |k| [:config, k] })
             true
-          rescue => e
+          rescue StandardError => e
             # Bubble up validation errors directly; wrap others
             raise e if e.is_a?(BaseRepository::ValidationError)
-            handle_storage_error(e, "updating multiple config values")
+
+            handle_storage_error(e, 'updating multiple config values')
           end
         end
 
@@ -151,12 +152,10 @@ module EbookReader
         #
         # @return [Boolean] True if reset successfully
         def reset_to_defaults
-          begin
-            @state_store.update(DEFAULT_CONFIG.transform_keys { |k| [:config, k] })
-            true
-          rescue => e
-            handle_storage_error(e, "resetting configuration to defaults")
-          end
+          @state_store.update(DEFAULT_CONFIG.transform_keys { |k| [:config, k] })
+          true
+        rescue StandardError => e
+          handle_storage_error(e, 'resetting configuration to defaults')
         end
 
         # Check if a configuration key has been customized from default
@@ -175,25 +174,24 @@ module EbookReader
         def get_config_value(key, default_value)
           value = @state_store.get([:config, key])
           value.nil? ? default_value : value
-        rescue => e
+        rescue StandardError => e
           handle_storage_error(e, "getting config value #{key}")
         end
 
         # Update a single configuration value
         def update_config_value(key, value)
-          begin
-            @state_store.update({ [:config, key] => value })
-            true
-          rescue => e
-            handle_storage_error(e, "updating config value #{key}")
-          end
+          @state_store.update({ [:config, key] => value })
+          true
+        rescue StandardError => e
+          handle_storage_error(e, "updating config value #{key}")
         end
 
         # Validate that a value is one of the allowed enum values
         def validate_enum_value(key, value, allowed_values)
           return if allowed_values.include?(value)
 
-          raise ValidationError, "Invalid #{key}: #{value}. Must be one of: #{allowed_values.join(', ')}"
+          raise ValidationError,
+                "Invalid #{key}: #{value}. Must be one of: #{allowed_values.join(', ')}"
         end
 
         # Validate that a value is a boolean
@@ -205,7 +203,7 @@ module EbookReader
 
         # Validate that a value is a positive integer
         def validate_positive_integer(key, value)
-          return if value.is_a?(Integer) && value > 0
+          return if value.is_a?(Integer) && value.positive?
 
           raise ValidationError, "Invalid #{key}: #{value}. Must be a positive integer"
         end
@@ -225,7 +223,10 @@ module EbookReader
             validate_positive_integer(key, value)
           when :theme
             # Allow any symbol for theme for extensibility
-            raise ValidationError, "Invalid #{key}: #{value}. Must be a symbol" unless value.is_a?(Symbol)
+            unless value.is_a?(Symbol)
+              raise ValidationError,
+                    "Invalid #{key}: #{value}. Must be a symbol"
+            end
           else
             # Unknown keys are allowed for forward compatibility
             logger.debug("Unknown config key: #{key}")

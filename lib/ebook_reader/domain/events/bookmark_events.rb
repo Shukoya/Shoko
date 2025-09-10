@@ -10,12 +10,12 @@ module EbookReader
         required_attributes :book_path, :bookmark
         typed_attributes book_path: String
 
-        def initialize(book_path:, bookmark:, **options)
+        def initialize(book_path:, bookmark:, **)
           super(
             aggregate_id: book_path,
             book_path: book_path,
             bookmark: bookmark,
-            **options
+            **
           )
         end
 
@@ -33,12 +33,12 @@ module EbookReader
         required_attributes :book_path, :bookmark
         typed_attributes book_path: String
 
-        def initialize(book_path:, bookmark:, **options)
+        def initialize(book_path:, bookmark:, **)
           super(
             aggregate_id: book_path,
             book_path: book_path,
             bookmark: bookmark,
-            **options
+            **
           )
         end
 
@@ -56,12 +56,12 @@ module EbookReader
         required_attributes :book_path, :bookmark
         typed_attributes book_path: String
 
-        def initialize(book_path:, bookmark:, **options)
+        def initialize(book_path:, bookmark:, **)
           super(
             aggregate_id: book_path,
             book_path: book_path,
             bookmark: bookmark,
-            **options
+            **
           )
         end
 

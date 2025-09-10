@@ -13,9 +13,10 @@ module EbookReader
         # File-backed bookmark storage isolated under Domain.
         # Persists bookmarks to ~/.config/reader/bookmarks.json
         class BookmarkFileStore
-
           def add(bookmark_data)
-            raise ArgumentError, 'bookmark_data must be BookmarkData' unless bookmark_data.is_a?(EbookReader::Domain::Models::BookmarkData)
+            unless bookmark_data.is_a?(EbookReader::Domain::Models::BookmarkData)
+              raise ArgumentError, 'bookmark_data must be BookmarkData'
+            end
 
             all = load_all
             path = bookmark_data.path.to_s
@@ -71,6 +72,7 @@ module EbookReader
 
           def load_all
             return {} unless File.exist?(file_path)
+
             JSON.parse(File.read(file_path))
           rescue StandardError
             {}

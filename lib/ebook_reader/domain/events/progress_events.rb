@@ -10,7 +10,8 @@ module EbookReader
         required_attributes :book_path, :chapter_index, :line_offset
         typed_attributes book_path: String, chapter_index: Integer, line_offset: Integer
 
-        def initialize(book_path:, chapter_index:, line_offset:, previous_chapter: nil, previous_line: nil, **options)
+        def initialize(book_path:, chapter_index:, line_offset:, previous_chapter: nil,
+                       previous_line: nil, **)
           super(
             aggregate_id: book_path,
             book_path: book_path,
@@ -18,7 +19,7 @@ module EbookReader
             line_offset: line_offset,
             previous_chapter: previous_chapter,
             previous_line: previous_line,
-            **options
+            **
           )
         end
 
@@ -56,11 +57,11 @@ module EbookReader
         required_attributes :book_path
         typed_attributes book_path: String
 
-        def initialize(book_path:, **options)
+        def initialize(book_path:, **)
           super(
             aggregate_id: book_path,
             book_path: book_path,
-            **options
+            **
           )
         end
 
@@ -74,14 +75,15 @@ module EbookReader
         required_attributes :book_path, :duration_seconds
         typed_attributes book_path: String, duration_seconds: Integer
 
-        def initialize(book_path:, duration_seconds:, final_chapter: nil, final_line: nil, **options)
+        def initialize(book_path:, duration_seconds:, final_chapter: nil, final_line: nil,
+                       **)
           super(
             aggregate_id: book_path,
             book_path: book_path,
             duration_seconds: duration_seconds,
             final_chapter: final_chapter,
             final_line: final_line,
-            **options
+            **
           )
         end
 

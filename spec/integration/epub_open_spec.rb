@@ -41,10 +41,10 @@ RSpec.describe 'EPUB open via stdlib ZIP', :fakefs do
     HTML
 
     ZipTestBuilder.build_zip([
-      { name: 'META-INF/container.xml', data: container_xml, method: :deflate },
-      { name: 'OEBPS/content.opf', data: opf, method: :deflate },
-      { name: 'OEBPS/ch1.xhtml', data: chapter, method: :deflate },
-    ], comment: 'minimal epub')
+                               { name: 'META-INF/container.xml', data: container_xml, method: :deflate },
+                               { name: 'OEBPS/content.opf', data: opf, method: :deflate },
+                               { name: 'OEBPS/ch1.xhtml', data: chapter, method: :deflate },
+                             ], comment: 'minimal epub')
   end
 
   it 'parses metadata and first chapter' do
@@ -62,4 +62,3 @@ RSpec.describe 'EPUB open via stdlib ZIP', :fakefs do
     expect(ch.lines.join("\n")).to include('Hello world')
   end
 end
-

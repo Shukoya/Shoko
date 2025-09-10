@@ -7,10 +7,15 @@ RSpec.describe EbookReader::Domain::Repositories::ConfigRepository do
   let(:test_logger) { double('Logger', error: nil, debug: nil, info: nil) }
 
   class CtnCfg
-    def initialize(state, logger) = (@state = state; @logger = logger)
+    def initialize(state, logger)
+      (@state = state
+       @logger = logger)
+    end
+
     def resolve(name)
       return @state if name == :global_state
       return @logger if name == :logger
+
       nil
     end
   end

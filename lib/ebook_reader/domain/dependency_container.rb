@@ -127,7 +127,7 @@ module EbookReader
         # Infrastructure services
         container.register_singleton(:event_bus) { Infrastructure::EventBus.new }
         container.register_singleton(:logger) { Infrastructure::Logger }
-        
+
         # Domain event bus
         container.register_singleton(:domain_event_bus) do |c|
           Domain::Events::DomainEventBus.new(c.resolve(:event_bus))
@@ -159,14 +159,14 @@ module EbookReader
 
         # Document service factory (per-book instance)
         container.register_factory(:document_service_factory) do |c|
-          ->(path) do
+          lambda do |path|
             klass = Infrastructure::DocumentService
             init_arity = begin
               klass.instance_method(:initialize).arity
             rescue StandardError
               1
             end
-            if init_arity < 0 || init_arity >= 2
+            if init_arity.negative? || init_arity >= 2
               klass.new(path, c.resolve(:wrapping_service))
             else
               klass.new(path)

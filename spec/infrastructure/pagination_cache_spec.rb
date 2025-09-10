@@ -33,4 +33,3 @@ RSpec.describe EbookReader::Infrastructure::PaginationCache do
     expect(loaded.last[:end_line]).to eq(49)
   end
 end
-

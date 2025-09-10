@@ -65,6 +65,7 @@ module EbookReader
             end
           end
           return EbookReader::Infrastructure::JSONSerializer.new.load_file(js) if File.exist?(js)
+
           nil
         rescue StandardError
           nil
@@ -72,8 +73,10 @@ module EbookReader
 
         def extract_year_from_opf(cache_dir, opf_rel)
           return '' unless opf_rel
+
           opf = File.join(cache_dir, opf_rel.to_s)
           return '' unless File.exist?(opf)
+
           meta = EbookReader::Helpers::OPFProcessor.new(opf).extract_metadata
           (meta[:year] || '').to_s
         rescue StandardError
@@ -82,6 +85,7 @@ module EbookReader
 
         def calculate_size_bytes(epub_path, cache_dir)
           return File.size(epub_path) if epub_path && !epub_path.empty? && File.exist?(epub_path)
+
           sum = 0
           Dir.glob(File.join(cache_dir, '**', '*')).each do |p|
             sum += File.size(p) if File.file?(p)

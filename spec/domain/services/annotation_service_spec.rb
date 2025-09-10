@@ -28,6 +28,7 @@ RSpec.describe EbookReader::Domain::Services::AnnotationService do
       return @state if name == :state_store
       return @repo if name == :annotation_repository
       return @domain_bus if name == :domain_event_bus
+
       nil
     end
   end
@@ -40,16 +41,16 @@ RSpec.describe EbookReader::Domain::Services::AnnotationService do
   end
 
   it 'adds, updates, deletes and dispatches update action' do
-    expect {
+    expect do
       service.add('/tmp/a.epub', 't', 'n', { start: { x: 0, y: 0 }, end: { x: 1, y: 0 } }, 0, { current: 1, total: 10, type: :single })
-    }.not_to raise_error
+    end.not_to raise_error
 
-    expect {
+    expect do
       service.update('/tmp/a.epub', 'x', 'new')
-    }.not_to raise_error
+    end.not_to raise_error
 
-    expect {
+    expect do
       service.delete('/tmp/a.epub', 'x')
-    }.not_to raise_error
+    end.not_to raise_error
   end
 end

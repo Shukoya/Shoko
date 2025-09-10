@@ -24,6 +24,7 @@ RSpec.describe EbookReader::Controllers::StateController do
       return @ann if name == :annotation_service
       return @prog if name == :progress_repository
       return @bm if name == :bookmark_repository
+
       nil
     end
   end

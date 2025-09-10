@@ -7,6 +7,7 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
 
   class PCCN_FakeChapter
     attr_reader :lines
+
     def initialize(lines)
       @lines = lines
     end
@@ -14,10 +15,12 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
 
   class PCCN_FakeDoc
     attr_reader :cache_dir
+
     def initialize(cache_dir, chapters)
       @cache_dir = cache_dir
       @chapters = chapters
     end
+
     def chapter_count = @chapters.length
     def get_chapter(idx) = @chapters[idx]
   end

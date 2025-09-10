@@ -45,7 +45,8 @@ module EbookReader
           begin
             # Try both config.view_mode and reader.view_mode keys for robustness
             key_primary = pagination_layout_key(terminal_width, terminal_height, config)
-            cached = EbookReader::Infrastructure::PaginationCache.load_for_document(doc, key_primary)
+            cached = EbookReader::Infrastructure::PaginationCache.load_for_document(doc,
+                                                                                    key_primary)
             if (!cached || cached.empty?) && config.respond_to?(:get)
               view_mode_reader = config.get(%i[reader view_mode])
               if view_mode_reader
@@ -53,10 +54,11 @@ module EbookReader
                   terminal_width, terminal_height, view_mode_reader,
                   EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config)
                 )
-                cached = EbookReader::Infrastructure::PaginationCache.load_for_document(doc, key_alt)
+                cached = EbookReader::Infrastructure::PaginationCache.load_for_document(doc,
+                                                                                        key_alt)
               end
             end
-            if cached && cached.any?
+            if cached&.any?
               # Fast path: load compact pages from cache and return immediately
               # Do NOT pre-populate text lines synchronously to keep cached opens instant
               @pages_data = cached
@@ -76,7 +78,8 @@ module EbookReader
           # Persist a compact representation for instant reopen
           begin
             key = pagination_layout_key(terminal_width, terminal_height, config)
-            EbookReader::Infrastructure::PaginationCache.save_for_document(doc, key, compact_pages(@pages_data))
+            EbookReader::Infrastructure::PaginationCache.save_for_document(doc, key,
+                                                                           compact_pages(@pages_data))
           rescue StandardError
             # ignore persistence failures
           end
@@ -130,11 +133,12 @@ module EbookReader
                         res
                       end
                     else
-                      DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[page[:start_line].to_i, len.to_i] || []
+                      DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[page[:start_line].to_i,
+                                                                                      len.to_i] || []
                     end
-            return page.merge(lines: lines)
+            page.merge(lines: lines)
           rescue StandardError
-            return page
+            page
           end
         end
 
@@ -236,7 +240,8 @@ module EbookReader
         # @yield [done, total] optional progress callback
         def build_absolute_page_map(terminal_width, terminal_height, doc, state)
           # Compute layout metrics based on current config
-          col_width, content_height = calculate_layout_metrics(terminal_width, terminal_height, state)
+          col_width, content_height = calculate_layout_metrics(terminal_width, terminal_height,
+                                                               state)
           lines_per_page = adjust_for_line_spacing(content_height, state)
           total_chapters = doc.chapter_count
 
@@ -251,7 +256,14 @@ module EbookReader
             chapter = doc.get_chapter(i)
             lines = chapter&.lines || []
 
-            wrapped = wrapper ? wrapper.wrap_lines(lines, i, col_width) : DefaultTextWrapper.new.wrap_chapter_lines(lines, col_width)
+            wrapped = if wrapper
+                        wrapper.wrap_lines(lines, i,
+                                           col_width)
+                      else
+                        DefaultTextWrapper.new.wrap_chapter_lines(
+                          lines, col_width
+                        )
+                      end
 
             pages = (wrapped.size.to_f / [lines_per_page, 1].max).ceil
             page_map << pages
@@ -507,7 +519,8 @@ module EbookReader
           end
           view_mode ||= (config.respond_to?(:get) ? config.get(%i[reader view_mode]) : :single)
           line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config)
-          EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode, line_spacing)
+          EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode,
+                                                                  line_spacing)
         end
 
         def compact_pages(pages)
@@ -564,6 +577,6 @@ module EbookReader
     end
   end
 end
-        # NOTE: Former helper that prepopulated lines for cached pages has been
-        # removed to avoid blocking first paint. Lines are populated lazily in
-        # #get_page when needed.
+# NOTE: Former helper that prepopulated lines for cached pages has been
+# removed to avoid blocking first paint. Lines are populated lazily in
+# #get_page when needed.

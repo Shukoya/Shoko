@@ -152,7 +152,8 @@ module EbookReader
            EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic
           view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(@state)
           line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(@state)
-          key = EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode, line_spacing)
+          key = EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode,
+                                                                        line_spacing)
           if EbookReader::Infrastructure::PaginationCache.exists_for_document?(@doc, key)
             @page_calculator.build_page_map(width, height, @doc, @state)
             @state.update({ %i[reader total_pages] => @page_calculator.total_pages })
@@ -175,13 +176,11 @@ module EbookReader
         # ignore; fall back to deferred build
       end
       if @pending_initial_calculation
-        if preloaded_page_data?
-          @pending_initial_calculation = false
-        else
+        unless preloaded_page_data?
           # Use in-app progress overlay for initial calculations on CLI direct-open
           perform_initial_calculations_with_progress
-          @pending_initial_calculation = false
         end
+        @pending_initial_calculation = false
       end
       # Schedule background page map build if deferred for instant-open UX
       if @defer_page_map
@@ -194,12 +193,10 @@ module EbookReader
       # Load bookmarks and annotations in background to avoid delaying first render
       begin
         Thread.new do
-      begin
-        @state_controller.load_bookmarks
-        @state_controller.refresh_annotations
-      rescue StandardError
-        # ignore background failures
-      end
+          @state_controller.load_bookmarks
+          @state_controller.refresh_annotations
+        rescue StandardError
+          # ignore background failures
         end
       rescue StandardError
         # best-effort
@@ -219,7 +216,7 @@ module EbookReader
         # Clear wrapped-lines cache for prior width via WrappingService (if available)
         begin
           prior_width = @state.get(%i[reader last_width])
-          @wrapping_service&.clear_cache_for_width(prior_width) if prior_width && prior_width > 0
+          @wrapping_service&.clear_cache_for_width(prior_width) if prior_width&.positive?
         rescue StandardError
           # best-effort cache clear
         end
@@ -285,6 +282,7 @@ module EbookReader
 
       if @state.get(%i[config page_numbering_mode]) == :dynamic
         return { current: 0, total: 0 } unless @page_calculator
+
         current = (@state.get(%i[reader current_page_index]) || 0) + 1
         total = @page_calculator.total_pages.to_i
         # If dynamic map not ready yet, return current with unknown total
@@ -299,7 +297,8 @@ module EbookReader
         return { current: 0, total: 0 } if actual_height <= 0
 
         # Avoid heavy page-map build on first frame when deferred
-        if !@defer_page_map && (size_changed?(width, height) || @state.get(%i[reader page_map]).empty?)
+        if !@defer_page_map && (size_changed?(width,
+                                              height) || @state.get(%i[reader page_map]).empty?)
           update_page_map(width, height)
         end
 
@@ -665,13 +664,16 @@ module EbookReader
         end
       else
         # Absolute: delegate per-chapter page map to page_calculator
-        page_map = @page_calculator.build_absolute_page_map(width, height, @doc, @state) do |done, total|
+        page_map = @page_calculator.build_absolute_page_map(width, height, @doc,
+                                                            @state) do |done, total|
           @state.update({ %i[ui loading_progress] => (done.to_f / [total, 1].max) })
           render_loading_overlay
         end
         @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum,
                         %i[reader last_width] => width, %i[reader last_height] => height })
-        cache_key = "#{width}x#{height}-#{@state.get(%i[config view_mode])}-#{@state.get(%i[config line_spacing])}"
+        cache_key = "#{width}x#{height}-#{@state.get(%i[config
+                                                        view_mode])}-#{@state.get(%i[config
+                                                                                     line_spacing])}"
         @page_map_cache = { key: cache_key, map: page_map, total: page_map.sum }
       end
 
@@ -690,6 +692,7 @@ module EbookReader
     # Rebuild pagination for current layout and restore position
     def rebuild_pagination(_key = nil)
       return unless Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic
+
       height, width = @terminal_service.size
 
       # capture current logical line offset for precise restore
@@ -725,7 +728,8 @@ module EbookReader
       height, width = @terminal_service.size
       view_mode = Domain::Selectors::ConfigSelectors.view_mode(@state)
       line_spacing = Domain::Selectors::ConfigSelectors.line_spacing(@state)
-      key = EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode, line_spacing)
+      key = EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode,
+                                                                    line_spacing)
       if EbookReader::Infrastructure::PaginationCache.exists_for_document?(@doc, key)
         begin
           EbookReader::Infrastructure::PaginationCache.delete_for_document(@doc, key)
@@ -760,10 +764,11 @@ module EbookReader
     # Fetch only the wrapped lines needed for immediate display (windowed wrapping)
     def wrapped_window_for(chapter_index, col_width, offset, display_height)
       return [] unless @doc
+
       chapter = @doc.get_chapter(chapter_index)
       return [] unless chapter
 
-      if @wrapping_service && display_height.to_i > 0
+      if @wrapping_service && display_height.to_i.positive?
         start = [offset.to_i, 0].max
         length = display_height.to_i
         # Visible window first
@@ -777,12 +782,10 @@ module EbookReader
           prefetch_end   = start + (pre_pages * length) + (length - 1)
           prefetch_len   = prefetch_end - prefetch_start + 1
           Thread.new do
-            begin
-              @wrapping_service.prefetch_windows(chapter.lines || [], chapter_index, col_width,
-                                                 prefetch_start, prefetch_len)
-            rescue StandardError
-              # ignore background failures
-            end
+            @wrapping_service.prefetch_windows(chapter.lines || [], chapter_index, col_width,
+                                               prefetch_start, prefetch_len)
+          rescue StandardError
+            # ignore background failures
           end
         rescue StandardError
           # best-effort prefetch

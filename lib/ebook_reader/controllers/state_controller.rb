@@ -11,8 +11,12 @@ module EbookReader
         @dependencies = dependencies
         @terminal_service = @dependencies.resolve(:terminal_service)
         # Prefer repositories via DI
-        @progress_repository = @dependencies.resolve(:progress_repository) if @dependencies.respond_to?(:resolve)
-        @bookmark_repository = @dependencies.resolve(:bookmark_repository) if @dependencies.respond_to?(:resolve)
+        if @dependencies.respond_to?(:resolve)
+          @progress_repository = @dependencies.resolve(:progress_repository)
+        end
+        return unless @dependencies.respond_to?(:resolve)
+
+        @bookmark_repository = @dependencies.resolve(:bookmark_repository)
       end
 
       def save_progress
@@ -30,9 +34,7 @@ module EbookReader
         canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
         progress = @progress_repository.find_by_book_path(canonical)
         # Fallback: attempt original open path if canonical not found (for legacy records)
-        if !progress && @path != canonical
-          progress = @progress_repository.find_by_book_path(@path)
-        end
+        progress = @progress_repository.find_by_book_path(@path) if !progress && @path != canonical
         return unless progress
 
         apply_progress_data(progress)
@@ -114,7 +116,7 @@ module EbookReader
           # Log the error and keep annotations empty
           begin
             @dependencies.resolve(:logger).error('Failed to refresh annotations', error: e.message,
-                                                                                path: @path)
+                                                                                  path: @path)
           rescue StandardError
             # no-op
           end
@@ -192,8 +194,8 @@ module EbookReader
             width  = (@state.get(%i[ui terminal_width]) || 80).to_i
             height = (@state.get(%i[ui terminal_height]) || 24).to_i
             layout = @dependencies.resolve(:layout_service)
-            col_width, content_height = layout.calculate_metrics(width, height,
-                                                                 Domain::Selectors::ConfigSelectors.view_mode(@state))
+            _, content_height = layout.calculate_metrics(width, height,
+                                                         Domain::Selectors::ConfigSelectors.view_mode(@state))
             lines_per_page = layout.adjust_for_line_spacing(content_height,
                                                             Domain::Selectors::ConfigSelectors.line_spacing(@state))
             est_index = lines_per_page.positive? ? (line_offset.to_f / lines_per_page).floor : 0
@@ -203,9 +205,9 @@ module EbookReader
           end
           # Store pending precise restore to be applied after background map build
           @state.update({ %i[reader pending_progress] => {
-                           chapter_index: @state.get(%i[reader current_chapter]),
-                           line_offset: line_offset,
-                         } })
+                          chapter_index: @state.get(%i[reader current_chapter]),
+                          line_offset: line_offset,
+                        } })
         else
           # Absolute page mode
           page_offsets = line_offset
@@ -215,12 +217,10 @@ module EbookReader
       end
 
       def set_message(text, duration = 2)
-        begin
-          notifier = @dependencies.resolve(:notification_service)
-          notifier.set_message(@state, text, duration)
-        rescue StandardError
-          @state.dispatch(EbookReader::Domain::Actions::UpdateMessageAction.new(text))
-        end
+        notifier = @dependencies.resolve(:notification_service)
+        notifier.set_message(@state, text, duration)
+      rescue StandardError
+        @state.dispatch(EbookReader::Domain::Actions::UpdateMessageAction.new(text))
       end
     end
   end

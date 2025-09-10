@@ -10,7 +10,7 @@ RSpec.describe EbookReader::Domain::Services::WrappingService do
     lines = [
       'This is a long line that should be wrapped properly',
       '',
-      'short'
+      'short',
     ]
     wrapped = service.wrap_lines(lines, 0, 10)
     expect(wrapped).to be_an(Array)

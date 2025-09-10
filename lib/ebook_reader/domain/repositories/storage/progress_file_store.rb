@@ -12,7 +12,6 @@ module EbookReader
         # File-backed progress storage under Domain.
         # Persists progress to ~/.config/reader/progress.json
         class ProgressFileStore
-
           def save(path, chapter_index, line_offset)
             all = load_all
             all[path.to_s] = {
@@ -35,6 +34,7 @@ module EbookReader
 
           def load_all
             return {} unless File.exist?(file_path)
+
             JSON.parse(File.read(file_path))
           rescue StandardError
             {}

@@ -8,10 +8,6 @@ module EbookReader
       # Renderer for split-view (two-column) reading mode
       # Supports both dynamic and absolute page numbering modes
       class SplitViewRenderer < BaseViewRenderer
-        def initialize(dependencies)
-          super(dependencies)
-        end
-
         def render_with_context(surface, bounds, context)
           if context.page_numbering_mode == :dynamic
             render_dynamic_mode_with_context(surface, bounds, context)
@@ -45,10 +41,12 @@ module EbookReader
           render_chapter_header_with_context(surface, bounds, context, chapter) if chapter
 
           if page_manager && (left_pd = page_manager.get_page(context.current_page_index))
-            render_dynamic_left_column_with_context(surface, bounds, left_pd[:lines], col_width, context)
+            render_dynamic_left_column_with_context(surface, bounds, left_pd[:lines], col_width,
+                                                    context)
             render_divider(surface, bounds, col_width)
             if (right_pd = page_manager.get_page(context.current_page_index + 1))
-              render_dynamic_right_column_with_context(surface, bounds, right_pd[:lines], col_width, context)
+              render_dynamic_right_column_with_context(surface, bounds, right_pd[:lines],
+                                                       col_width, context)
             end
             return
           end
@@ -58,9 +56,10 @@ module EbookReader
           left_lines = begin
             chapter_index = context.state.get(%i[reader current_chapter]) || 0
             chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies && @dependencies.registered?(:wrapping_service) && chapter
+            if @dependencies&.registered?(:wrapping_service) && chapter
               ws = @dependencies.resolve(:wrapping_service)
-              ws.wrap_window(chapter.lines || [], chapter_index, col_width, base_offset, displayable)
+              ws.wrap_window(chapter.lines || [], chapter_index, col_width, base_offset,
+                             displayable)
             else
               (chapter&.lines || [])[base_offset, displayable] || []
             end
@@ -70,15 +69,16 @@ module EbookReader
           right_lines = begin
             chapter_index = context.state.get(%i[reader current_chapter]) || 0
             chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies && @dependencies.registered?(:wrapping_service) && chapter
+            if @dependencies&.registered?(:wrapping_service) && chapter
               ws = @dependencies.resolve(:wrapping_service)
               ws.wrap_window(chapter.lines || [], chapter_index, col_width,
-                              base_offset + displayable, displayable)
+                             base_offset + displayable, displayable)
             else
               (chapter&.lines || [])[base_offset + displayable, displayable] || []
             end
           end
-          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width, context.config, context)
+          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width,
+                              context.config, context)
         end
 
         def render_absolute_mode_with_context(surface, bounds, context)
@@ -98,9 +98,10 @@ module EbookReader
           render_chapter_header_with_context(surface, bounds, context, chapter)
           left_lines = begin
             chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies && @dependencies.registered?(:wrapping_service) && chapter
+            if @dependencies&.registered?(:wrapping_service) && chapter
               ws = @dependencies.resolve(:wrapping_service)
-              ws.wrap_window(chapter.lines || [], chapter_index, col_width, left_offset, display_height)
+              ws.wrap_window(chapter.lines || [], chapter_index, col_width, left_offset,
+                             display_height)
             else
               (chapter&.lines || [])[left_offset, display_height] || []
             end
@@ -109,14 +110,16 @@ module EbookReader
           render_divider(surface, bounds, col_width)
           right_lines = begin
             chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies && @dependencies.registered?(:wrapping_service) && chapter
+            if @dependencies&.registered?(:wrapping_service) && chapter
               ws = @dependencies.resolve(:wrapping_service)
-              ws.wrap_window(chapter.lines || [], chapter_index, col_width, right_offset, display_height)
+              ws.wrap_window(chapter.lines || [], chapter_index, col_width, right_offset,
+                             display_height)
             else
               (chapter&.lines || [])[right_offset, display_height] || []
             end
           end
-          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width, context.config, context)
+          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width,
+                              context.config, context)
         end
 
         def render_chapter_header_with_context(surface, bounds, context, chapter)

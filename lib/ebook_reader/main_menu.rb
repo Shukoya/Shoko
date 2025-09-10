@@ -213,6 +213,38 @@ module EbookReader
 
     public
 
+    # Library mode helpers
+    def library_up
+      current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
+      @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [
+        current - 1, 0
+      ].max))
+    end
+
+    def library_down
+      items = if @main_menu_component&.current_screen.respond_to?(:items)
+                @main_menu_component.current_screen.items
+              else
+                []
+              end
+      max_index = [items.length - 1, 0].max
+      current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
+      @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [
+        current + 1, max_index
+      ].min))
+    end
+
+    def library_select
+      screen = @main_menu_component&.current_screen
+      items = screen.respond_to?(:items) ? screen.items : []
+      index = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
+      item = items[index]
+      return unless item
+
+      # Open using cache directory for instant open
+      run_reader(item.open_path)
+    end
+
     # Legacy compatibility methods
     def browse_screen
       @main_menu_component.browse_screen
@@ -343,11 +375,11 @@ module EbookReader
 
       # Prepare in-menu editor state
       @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-        selected_annotation: annotation,
-        selected_annotation_book: path,
-        annotation_edit_text: (annotation[:note] || annotation['note'] || ''),
-        annotation_edit_cursor: (annotation[:note] || annotation['note'] || '').to_s.length,
-      ))
+                        selected_annotation: annotation,
+                        selected_annotation_book: path,
+                        annotation_edit_text: annotation[:note] || annotation['note'] || '',
+                        annotation_edit_cursor: (annotation[:note] || annotation['note'] || '').to_s.length
+                      ))
       switch_to_mode(:annotation_editor)
     end
 
@@ -600,34 +632,6 @@ module EbookReader
       format_time_ago(seconds, time)
     rescue StandardError
       'unknown'
-    end
-
-    # Library mode helpers
-    public def library_up
-      current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
-      @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [current - 1, 0].max))
-    end
-
-    public def library_down
-      items = if @main_menu_component&.current_screen&.respond_to?(:items)
-                @main_menu_component.current_screen.items
-              else
-                []
-              end
-      max_index = [items.length - 1, 0].max
-      current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
-      @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [current + 1, max_index].min))
-    end
-
-    public def library_select
-      screen = @main_menu_component&.current_screen
-      items = screen&.respond_to?(:items) ? screen.items : []
-      index = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
-      item = items[index]
-      return unless item
-
-      # Open using cache directory for instant open
-      run_reader(item.open_path)
     end
 
     def format_time_ago(seconds, time)

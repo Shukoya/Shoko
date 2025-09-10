@@ -5,7 +5,7 @@ module EbookReader
     module Repositories
       # Base class for all repository implementations in the domain layer.
       #
-      # Repositories provide an abstraction layer between domain services and 
+      # Repositories provide an abstraction layer between domain services and
       # infrastructure storage mechanisms, following the Repository pattern from
       # Domain-Driven Design.
       #
@@ -50,7 +50,7 @@ module EbookReader
         def handle_storage_error(error, context = nil)
           message = context ? "#{context}: #{error.message}" : error.message
           logger.error("Repository error - #{message}")
-          
+
           case error
           when NoMethodError, ArgumentError
             raise ValidationError, message
@@ -70,7 +70,7 @@ module EbookReader
         end
 
         # Helper to ensure entity exists before operations
-        def ensure_entity_exists(entity, entity_name = "Entity")
+        def ensure_entity_exists(entity, entity_name = 'Entity')
           return if entity
 
           raise EntityNotFoundError, "#{entity_name} not found"

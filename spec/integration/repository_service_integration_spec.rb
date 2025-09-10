@@ -7,7 +7,7 @@ RSpec.describe 'Repository Service Integration' do
   let(:mock_event_bus) { dependencies.resolve(:event_bus) }
   let(:mock_state_store) { dependencies.resolve(:state_store) }
   let(:book_path) { '/path/to/integration_test.epub' }
-  
+
   before do
     # Register test repositories with mocked storage
     dependencies.register(:bookmark_repository, test_bookmark_repository)
@@ -32,7 +32,7 @@ RSpec.describe 'Repository Service Integration' do
       allow(repo).to receive(:find_by_book_path).and_return([test_annotation])
       allow(repo).to receive(:update_note).and_return(true)
       allow(repo).to receive(:delete_by_id).and_return(true)
-      allow(repo).to receive(:find_all).and_return({book_path => [test_annotation]})
+      allow(repo).to receive(:find_all).and_return({ book_path => [test_annotation] })
     end
   end
 
@@ -40,7 +40,7 @@ RSpec.describe 'Repository Service Integration' do
     instance_double(EbookReader::Domain::Repositories::ProgressRepository).tap do |repo|
       allow(repo).to receive(:save_for_book).and_return(test_progress)
       allow(repo).to receive(:find_by_book_path).and_return(test_progress)
-      allow(repo).to receive(:find_all).and_return({book_path => test_progress})
+      allow(repo).to receive(:find_all).and_return({ book_path => test_progress })
       allow(repo).to receive(:exists_for_book?).and_return(true)
     end
   end
@@ -69,7 +69,7 @@ RSpec.describe 'Repository Service Integration' do
       'note' => 'Test annotation note',
       'range' => { 'start' => 100, 'end' => 120 },
       'chapter_index' => 2,
-      'created_at' => Time.now.iso8601
+      'created_at' => Time.now.iso8601,
     }
   end
 
@@ -86,7 +86,7 @@ RSpec.describe 'Repository Service Integration' do
       view_mode: :split,
       line_spacing: :normal,
       show_page_numbers: true,
-      page_numbering_mode: :absolute
+      page_numbering_mode: :absolute,
     }
   end
 
@@ -94,17 +94,17 @@ RSpec.describe 'Repository Service Integration' do
     let(:bookmark_service) { EbookReader::Domain::Services::BookmarkService.new(dependencies) }
 
     before do
-      allow(mock_state_store).to receive(:get).with([:reader, :book_path]).and_return(book_path)
+      allow(mock_state_store).to receive(:get).with(%i[reader book_path]).and_return(book_path)
       allow(mock_state_store).to receive(:current_state).and_return({
-        reader: {
-          book_path: book_path,
-          current_chapter: 2,
-          left_page: 100
-        },
-        config: {
-          view_mode: :split
-        }
-      })
+                                                                      reader: {
+                                                                        book_path: book_path,
+                                                                        current_chapter: 2,
+                                                                        left_page: 100,
+                                                                      },
+                                                                      config: {
+                                                                        view_mode: :split,
+                                                                      },
+                                                                    })
       allow(mock_state_store).to receive(:update)
     end
 
@@ -199,7 +199,7 @@ RSpec.describe 'Repository Service Integration' do
       expect(test_annotation_repository).to receive(:find_all)
 
       result = annotation_service.list_all
-      expect(result).to eq({book_path => [test_annotation]})
+      expect(result).to eq({ book_path => [test_annotation] })
     end
   end
 
@@ -208,17 +208,17 @@ RSpec.describe 'Repository Service Integration' do
     let(:annotation_service) { EbookReader::Domain::Services::AnnotationService.new(dependencies) }
 
     before do
-      allow(mock_state_store).to receive(:get).with([:reader, :book_path]).and_return(book_path)
+      allow(mock_state_store).to receive(:get).with(%i[reader book_path]).and_return(book_path)
       allow(mock_state_store).to receive(:current_state).and_return({
-        reader: {
-          book_path: book_path,
-          current_chapter: 2,
-          left_page: 100
-        },
-        config: {
-          view_mode: :split
-        }
-      })
+                                                                      reader: {
+                                                                        book_path: book_path,
+                                                                        current_chapter: 2,
+                                                                        left_page: 100,
+                                                                      },
+                                                                      config: {
+                                                                        view_mode: :split,
+                                                                      },
+                                                                    })
       allow(mock_state_store).to receive(:update)
       allow(mock_state_store).to receive(:dispatch)
     end
@@ -227,7 +227,7 @@ RSpec.describe 'Repository Service Integration' do
       # Add bookmark
       expect(test_bookmark_repository).to receive(:add_for_book).and_return(test_bookmark)
       expect(mock_event_bus).to receive(:emit_event).with(:bookmark_added, { bookmark: test_bookmark })
-      
+
       bookmark_result = bookmark_service.add_bookmark('Test bookmark')
 
       # Add annotation
@@ -250,17 +250,17 @@ RSpec.describe 'Repository Service Integration' do
     let(:bookmark_service) { EbookReader::Domain::Services::BookmarkService.new(dependencies) }
 
     before do
-      allow(mock_state_store).to receive(:get).with([:reader, :book_path]).and_return(book_path)
+      allow(mock_state_store).to receive(:get).with(%i[reader book_path]).and_return(book_path)
       allow(mock_state_store).to receive(:current_state).and_return({
-        reader: {
-          book_path: book_path,
-          current_chapter: 2,
-          left_page: 100
-        },
-        config: {
-          view_mode: :split
-        }
-      })
+                                                                      reader: {
+                                                                        book_path: book_path,
+                                                                        current_chapter: 2,
+                                                                        left_page: 100,
+                                                                      },
+                                                                      config: {
+                                                                        view_mode: :split,
+                                                                      },
+                                                                    })
     end
 
     it 'handles repository errors gracefully' do
@@ -268,13 +268,13 @@ RSpec.describe 'Repository Service Integration' do
         EbookReader::Domain::Repositories::BaseRepository::PersistenceError, 'Storage failed'
       )
 
-      expect {
+      expect do
         bookmark_service.add_bookmark('Test')
-      }.to raise_error(EbookReader::Domain::Repositories::BaseRepository::PersistenceError)
+      end.to raise_error(EbookReader::Domain::Repositories::BaseRepository::PersistenceError)
     end
 
     it 'handles missing book path gracefully' do
-      allow(mock_state_store).to receive(:get).with([:reader, :book_path]).and_return(nil)
+      allow(mock_state_store).to receive(:get).with(%i[reader book_path]).and_return(nil)
 
       result = bookmark_service.add_bookmark('Test')
       expect(result).to be_nil
@@ -285,7 +285,7 @@ RSpec.describe 'Repository Service Integration' do
     let(:bookmark_service) { EbookReader::Domain::Services::BookmarkService.new(dependencies) }
 
     before do
-      allow(mock_state_store).to receive(:get).with([:reader, :book_path]).and_return(book_path)
+      allow(mock_state_store).to receive(:get).with(%i[reader book_path]).and_return(book_path)
       allow(mock_state_store).to receive(:current_state).and_return(current_state)
       allow(test_bookmark_repository).to receive(:find_by_book_path).and_return([test_bookmark])
     end
@@ -295,11 +295,11 @@ RSpec.describe 'Repository Service Integration' do
         reader: {
           book_path: book_path,
           current_chapter: 2,
-          left_page: 100
+          left_page: 100,
         },
         config: {
-          view_mode: :split
-        }
+          view_mode: :split,
+        },
       }
     end
 
@@ -308,7 +308,7 @@ RSpec.describe 'Repository Service Integration' do
       allow(mock_event_bus).to receive(:emit_event)
 
       expect(mock_state_store).to receive(:update).with(
-        { [:reader, :bookmarks] => [test_bookmark] }
+        { %i[reader bookmarks] => [test_bookmark] }
       )
 
       bookmark_service.add_bookmark('Test')
@@ -319,7 +319,7 @@ RSpec.describe 'Repository Service Integration' do
       allow(mock_event_bus).to receive(:emit_event)
 
       expect(mock_state_store).to receive(:update).with(
-        { [:reader, :bookmarks] => [test_bookmark] }
+        { %i[reader bookmarks] => [test_bookmark] }
       )
 
       bookmark_service.remove_bookmark(test_bookmark)

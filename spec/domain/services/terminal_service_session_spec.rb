@@ -15,4 +15,3 @@ RSpec.describe EbookReader::Domain::Services::TerminalService do
     expect { terminal.cleanup }.not_to raise_error
   end
 end
-

@@ -30,7 +30,7 @@ RSpec.describe EbookReader::ReaderController do
   it 'rebuilds dynamic page map on resize' do
     container = EbookReader::Domain::ContainerFactory.create_default_container
     page_calc = instance_double('PageCalculator', build_page_map: nil, total_pages: 10,
-                                              get_page: { lines: Array.new(10, 'x'), start_line: 0, chapter_index: 0 })
+                                                  get_page: { lines: Array.new(10, 'x'), start_line: 0, chapter_index: 0 })
     container.register(:page_calculator, page_calc)
 
     # Set dynamic mode

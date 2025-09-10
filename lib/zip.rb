@@ -34,6 +34,7 @@ module Zip
     def self.open(path)
       z = new(path)
       return z unless block_given?
+
       begin
         yield z
       ensure
@@ -58,6 +59,7 @@ module Zip
 
     def close
       return if @closed
+
       @io&.close
       @closed = true
     end
@@ -83,14 +85,17 @@ module Zip
       lfh = @io.read(26)
       raise Error, 'truncated local file header' unless lfh && lfh.bytesize == 26
 
-      _ver_needed, gp_flags, _method_local, _time, _date, _crc32_local,
+      _ver_needed, _, _method_local, _time, _date, _crc32_local,
         _csize_local, _usize_local, name_len, extra_len = lfh.unpack('v v v v v V V V v v')
 
       # Skip name + extra to reach data start
       @io.seek(name_len + extra_len, ::IO::SEEK_CUR)
 
       compressed = @io.read(entry.compressed_size)
-      raise Error, 'truncated compressed data' unless compressed && compressed.bytesize == entry.compressed_size
+      unless compressed && compressed.bytesize == entry.compressed_size
+        raise Error,
+              'truncated compressed data'
+      end
 
       case entry.compression_method
       when 0 # STORE
@@ -100,14 +105,18 @@ module Zip
         begin
           data = inflater.inflate(compressed)
         ensure
-          inflater.close rescue nil
+          begin
+            inflater.close
+          rescue StandardError
+            nil
+          end
         end
       else
         raise Error, "unsupported compression method: #{entry.compression_method}"
       end
 
       # Optional sanity check on size
-      if entry.uncompressed_size && entry.uncompressed_size > 0 && data.bytesize != entry.uncompressed_size
+      if entry.uncompressed_size&.positive? && data.bytesize != entry.uncompressed_size
         # Some archives may omit sizes in local header and rely on data descriptor;
         # we trust Central Directory sizes; mismatch indicates corruption.
         raise Error, 'size mismatch after decompression'
@@ -130,7 +139,7 @@ module Zip
         fixed = @io.read(42)
         raise Error, 'truncated central directory header' unless fixed && fixed.bytesize == 42
 
-        _ver_made, ver_needed, gp_flags, method, _time, _date, _crc32,
+        _ver_made, _, gp_flags, method, _time, _date, _crc32,
           csize, usize, name_len, extra_len, comment_len,
           _disk_start, _int_attr, _ext_attr, lfh_off = fixed.unpack('v v v v v v V V V v v v v v V V')
 
@@ -145,7 +154,7 @@ module Zip
           uncompressed_size: usize,
           compression_method: method,
           gp_flags: gp_flags,
-          local_header_offset: lfh_off,
+          local_header_offset: lfh_off
         )
       end
     end
@@ -186,6 +195,7 @@ module Zip
 
     def skip_bytes(n)
       return if n.to_i <= 0
+
       @io.seek(n, ::IO::SEEK_CUR)
     end
 
@@ -198,4 +208,3 @@ module Zip
     end
   end
 end
-

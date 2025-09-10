@@ -67,7 +67,8 @@ module EbookReader
       def view_renderer
         return @view_renderer if @view_renderer
 
-        @view_renderer = Reading::ViewRendererFactory.create(@controller.state, @controller.dependencies)
+        @view_renderer = Reading::ViewRendererFactory.create(@controller.state,
+                                                             @controller.dependencies)
       end
     end
   end

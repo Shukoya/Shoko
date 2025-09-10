@@ -166,11 +166,9 @@ module EbookReader
 
     def copy_to_clipboard(text)
       @clipboard_service.copy_with_feedback(text) do |message|
-        begin
-          @dependencies.resolve(:ui_controller).set_message(message)
-        rescue StandardError
-          # best-effort
-        end
+        @dependencies.resolve(:ui_controller).set_message(message)
+      rescue StandardError
+        # best-effort
       end
     rescue Domain::Services::ClipboardService::ClipboardError => e
       begin

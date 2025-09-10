@@ -65,14 +65,19 @@ module ZipTestBuilder
       out = deflater.deflate(data)
       out << deflater.finish
     ensure
-      deflater.close rescue nil
+      begin
+        deflater.close
+      rescue StandardError
+        nil
+      end
     end
     out
   end
 
   def normalize_method(m)
     return 0 if m.nil? || m == :store || m == 0
-    return 8 if m == :deflate || m == 8
+    return 8 if [:deflate, 8].include?(m)
+
     m.to_i
   end
 end

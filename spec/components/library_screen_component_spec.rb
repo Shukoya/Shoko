@@ -9,8 +9,10 @@ RSpec.describe EbookReader::Components::Screens::LibraryScreenComponent do
   # Fake dependencies resolving library_service
   class LibraryDeps
     def initialize(ls) = (@ls = ls)
+
     def resolve(name)
       return @ls if name == :library_service
+
       nil
     end
   end
@@ -18,7 +20,9 @@ RSpec.describe EbookReader::Components::Screens::LibraryScreenComponent do
   # Capture writes into an array for assertions
   class LibraryFakeOutput
     attr_reader :writes
+
     def initialize = (@writes = [])
+
     def write(row, col, text)
       @writes << [row, col, text]
     end
@@ -26,9 +30,9 @@ RSpec.describe EbookReader::Components::Screens::LibraryScreenComponent do
 
   it 'renders header and items with fake library service' do
     fake_ls = double('LibraryService', list_cached_books: [
-      { title: 'Cached One', authors: 'A', year: '2023', last_accessed: nil, size_bytes: 123, open_path: '/cache/1', epub_path: '/src/1.epub' },
-      { title: 'Cached Two', authors: 'B', year: '2024', last_accessed: nil, size_bytes: 456, open_path: '/cache/2', epub_path: '/src/2.epub' }
-    ])
+                       { title: 'Cached One', authors: 'A', year: '2023', last_accessed: nil, size_bytes: 123, open_path: '/cache/1', epub_path: '/src/1.epub' },
+                       { title: 'Cached Two', authors: 'B', year: '2024', last_accessed: nil, size_bytes: 456, open_path: '/cache/2', epub_path: '/src/2.epub' },
+                     ])
     comp = described_class.new(state, LibraryDeps.new(fake_ls))
 
     output = LibraryFakeOutput.new

@@ -55,30 +55,38 @@ module EbookReader
           # recent_* actions removed
           # Annotations list (menu) actions
           when :annotations_up
-            context.main_menu_component.annotations_screen.navigate(:up) if context.respond_to?(:main_menu_component)
+            if context.respond_to?(:main_menu_component)
+              context.main_menu_component.annotations_screen.navigate(:up)
+            end
           when :annotations_down
-            context.main_menu_component.annotations_screen.navigate(:down) if context.respond_to?(:main_menu_component)
+            if context.respond_to?(:main_menu_component)
+              context.main_menu_component.annotations_screen.navigate(:down)
+            end
           when :annotations_select
             if context.respond_to?(:main_menu_component)
               ann = context.main_menu_component.annotations_screen.current_annotation
               path = context.main_menu_component.annotations_screen.current_book_path
               if ann && path
                 context.state.update({
-                                      %i[menu selected_annotation] => ann,
-                                      %i[menu selected_annotation_book] => path,
-                                    })
+                                       %i[menu selected_annotation] => ann,
+                                       %i[menu selected_annotation_book] => path,
+                                     })
                 context.switch_to_mode(:annotation_detail) if context.respond_to?(:switch_to_mode)
               end
             end
           when :annotations_edit
-            context.open_selected_annotation_for_edit if context.respond_to?(:open_selected_annotation_for_edit)
+            if context.respond_to?(:open_selected_annotation_for_edit)
+              context.open_selected_annotation_for_edit
+            end
           when :annotations_delete
             context.delete_selected_annotation if context.respond_to?(:delete_selected_annotation)
           # Annotation detail actions
           when :annotation_detail_open
             context.open_selected_annotation if context.respond_to?(:open_selected_annotation)
           when :annotation_detail_edit
-            context.open_selected_annotation_for_edit if context.respond_to?(:open_selected_annotation_for_edit)
+            if context.respond_to?(:open_selected_annotation_for_edit)
+              context.open_selected_annotation_for_edit
+            end
           when :annotation_detail_delete
             if context.respond_to?(:delete_selected_annotation)
               context.delete_selected_annotation

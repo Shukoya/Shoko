@@ -6,7 +6,7 @@ RSpec.describe EbookReader::Domain::Commands::MenuCommand do
   let(:state) { EbookReader::Infrastructure::ObserverStateStore.new(EbookReader::Infrastructure::EventBus.new) }
   let(:ctx) do
     double('Ctx', state: state, handle_menu_selection: nil, cleanup_and_exit: nil,
-           switch_to_browse: nil, switch_to_search: nil, switch_to_mode: nil)
+                  switch_to_browse: nil, switch_to_search: nil, switch_to_mode: nil)
   end
 
   it 'navigates main menu up/down and selects' do

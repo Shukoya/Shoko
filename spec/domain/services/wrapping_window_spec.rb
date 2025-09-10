@@ -23,4 +23,3 @@ RSpec.describe EbookReader::Domain::Services::WrappingService do
     expect(slice).to eq([])
   end
 end
-

@@ -5,7 +5,9 @@ require 'spec_helper'
 RSpec.describe EbookReader::Components::Surface do
   class Capture
     attr_reader :calls
+
     def initialize = (@calls = [])
+
     def write(row, col, text)
       @calls << [row, col, text]
     end
@@ -26,4 +28,3 @@ RSpec.describe EbookReader::Components::Surface do
     expect(text).to start_with('0123456789')
   end
 end
-

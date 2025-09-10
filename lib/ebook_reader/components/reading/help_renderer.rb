@@ -39,10 +39,6 @@ module EbookReader
           'Press any key to return to reading...',
         ].freeze
 
-        def initialize(dependencies)
-          super(dependencies)
-        end
-
         def render_with_context(surface, bounds, _context)
           start_row = [(bounds.height - HELP_LINES.size) / 2, 1].max
 

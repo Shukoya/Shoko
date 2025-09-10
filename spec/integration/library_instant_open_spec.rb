@@ -16,12 +16,12 @@ RSpec.describe 'Library instant open' do
     FileUtils.mkdir_p(File.join(book_dir, 'META-INF'))
     # Minimal manifest and files
     File.write(File.join(book_dir, 'manifest.json'), JSON.generate({
-      'title' => 'Cached Book',
-      'author' => 'A. Author',
-      'authors' => ['A. Author'],
-      'opf_path' => 'OEBPS/content.opf',
-      'spine' => ['OEBPS/ch1.xhtml']
-    }))
+                                                                     'title' => 'Cached Book',
+                                                                     'author' => 'A. Author',
+                                                                     'authors' => ['A. Author'],
+                                                                     'opf_path' => 'OEBPS/content.opf',
+                                                                     'spine' => ['OEBPS/ch1.xhtml'],
+                                                                   }))
     FileUtils.mkdir_p(File.join(book_dir, 'OEBPS'))
     File.write(File.join(book_dir, 'META-INF', 'container.xml'), '<c/>')
     File.write(File.join(book_dir, 'OEBPS', 'content.opf'), '<opf/>')

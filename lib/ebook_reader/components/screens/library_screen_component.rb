@@ -43,6 +43,7 @@ module EbookReader
 
         def load_items
           return @items if @items
+
           svc = @services.resolve(:library_service)
           raw = svc ? (svc.list_cached_books || []) : []
           @items = raw.map do |h|
@@ -56,11 +57,6 @@ module EbookReader
               epub_path: h[:epub_path] || h['epub_path']
             )
           end
-        end
-
-        # Public accessor for items to avoid reflective access from MainMenu
-        public def items
-          load_items
         end
 
         def render_header(surface, bounds)
@@ -81,12 +77,15 @@ module EbookReader
           list_height -= 2
 
           items_per_page = list_height
-          start_index, visible_items = calculate_visible_range(items.length, items_per_page, selected)
+          start_index, visible_items = calculate_visible_range(items.length, items_per_page,
+                                                               selected)
 
           current_row = list_start
           visible_items.each_with_index do |book, i|
             break if current_row >= bounds.height - 1
-            render_library_item(surface, bounds, current_row, bounds.width, book, start_index + i, selected)
+
+            render_library_item(surface, bounds, current_row, bounds.width, book, start_index + i,
+                                selected)
             current_row += 1
           end
         end
@@ -96,7 +95,7 @@ module EbookReader
           start_index = selected - per_page + 1 if selected >= per_page
           start_index = [start_index, total_items - per_page].min if total_items > per_page
           end_index = [start_index + per_page - 1, total_items - 1].min
-          [start_index, (load_items[start_index..end_index] || [])]
+          [start_index, load_items[start_index..end_index] || []]
         end
 
         def draw_list_header(surface, bounds, width, row)
@@ -139,7 +138,8 @@ module EbookReader
           title_col = truncate_text((book.title || 'Unknown').to_s, title_w).ljust(title_w)
           author_col = truncate_text((book.authors || '').to_s, author_w).ljust(author_w)
           year_col = (book.year || '').to_s[0, 4].ljust(year_w)
-          last_col = truncate_text(relative_accessed_label(book.last_accessed), last_w).ljust(last_w)
+          last_col = truncate_text(relative_accessed_label(book.last_accessed),
+                                   last_w).ljust(last_w)
           size_col = format_size(book.size_bytes).rjust(size_w)
 
           line = [title_col, author_col, year_col, last_col, size_col].join(' ' * gap)
@@ -150,6 +150,7 @@ module EbookReader
         def truncate_text(text, max_length)
           str = text.to_s
           return str if str.length <= max_length
+
           "#{str[0...(max_length - 3)]}..."
         end
 
@@ -160,6 +161,7 @@ module EbookReader
 
         def relative_accessed_label(iso)
           return '' unless iso
+
           t = begin
             Time.parse(iso)
           rescue StandardError
@@ -187,7 +189,15 @@ module EbookReader
         end
 
         def render_footer(surface, bounds)
-          write_footer(surface, bounds, "#{UIConstants::COLOR_TEXT_DIM}↑↓ Navigate • Enter Open • ESC Back#{Terminal::ANSI::RESET}")
+          write_footer(surface, bounds,
+                       "#{UIConstants::COLOR_TEXT_DIM}↑↓ Navigate • Enter Open • ESC Back#{Terminal::ANSI::RESET}")
+        end
+
+        public
+
+        # Public accessor for items to avoid reflective access from MainMenu
+        def items
+          load_items
         end
       end
     end

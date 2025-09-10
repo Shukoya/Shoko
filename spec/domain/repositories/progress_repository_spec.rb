@@ -6,8 +6,10 @@ RSpec.describe EbookReader::Domain::Repositories::ProgressRepository do
   let(:logger) { double('Logger', error: nil, debug: nil, info: nil) }
   class CtnProg
     def initialize(logger) = (@logger = logger)
+
     def resolve(name)
       return @logger if name == :logger
+
       nil
     end
   end
@@ -17,13 +19,16 @@ RSpec.describe EbookReader::Domain::Repositories::ProgressRepository do
       def initialize
         @store = {}
       end
+
       def save(path, ch, off)
         @store[path] = { 'chapter' => ch, 'line_offset' => off, 'timestamp' => Time.now.iso8601 }
         true
       end
+
       def load(path)
         @store[path]
       end
+
       def load_all
         @store
       end

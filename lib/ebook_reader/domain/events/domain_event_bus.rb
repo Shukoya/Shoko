@@ -84,7 +84,7 @@ module EbookReader
         def add_middleware(middleware = nil, &block)
           middleware = block if block_given?
           raise ArgumentError, 'Middleware must be provided' unless middleware
-          
+
           @middleware << middleware
         end
 
@@ -132,7 +132,7 @@ module EbookReader
 
             begin
               middleware.call(current_event)
-            rescue => e
+            rescue StandardError => e
               # Log middleware error but don't stop event processing
               warn "Domain event middleware error: #{e.message}"
               current_event
@@ -142,14 +142,12 @@ module EbookReader
 
         def notify_subscribers(event)
           event_type = event.class
-          
+
           @subscribers[event_type].each do |handler|
-            begin
-              handler.call(event)
-            rescue => e
-              # Log subscriber error but continue with other subscribers
-              warn "Domain event subscriber error for #{event_type}: #{e.message}"
-            end
+            handler.call(event)
+          rescue StandardError => e
+            # Log subscriber error but continue with other subscribers
+            warn "Domain event subscriber error for #{event_type}: #{e.message}"
           end
         end
       end

@@ -18,12 +18,12 @@ RSpec.describe 'Library navigation and open via keys' do
     FileUtils.mkdir_p(File.join(book1_dir, 'META-INF'))
     FileUtils.mkdir_p(File.join(book1_dir, 'OEBPS'))
     File.write(File.join(book1_dir, 'manifest.json'), JSON.generate({
-      'title' => 'Cached One',
-      'author' => 'Author A',
-      'authors' => ['Author A'],
-      'opf_path' => 'OEBPS/content.opf',
-      'spine' => ['OEBPS/ch1.xhtml']
-    }))
+                                                                      'title' => 'Cached One',
+                                                                      'author' => 'Author A',
+                                                                      'authors' => ['Author A'],
+                                                                      'opf_path' => 'OEBPS/content.opf',
+                                                                      'spine' => ['OEBPS/ch1.xhtml'],
+                                                                    }))
     File.write(File.join(book1_dir, 'META-INF', 'container.xml'), '<c/>')
     File.write(File.join(book1_dir, 'OEBPS', 'content.opf'), '<opf/>')
     File.write(File.join(book1_dir, 'OEBPS', 'ch1.xhtml'), '<html><body><p>Hi</p></body></html>')
@@ -31,12 +31,12 @@ RSpec.describe 'Library navigation and open via keys' do
     FileUtils.mkdir_p(File.join(book2_dir, 'META-INF'))
     FileUtils.mkdir_p(File.join(book2_dir, 'OEBPS'))
     File.write(File.join(book2_dir, 'manifest.json'), JSON.generate({
-      'title' => 'Cached Two',
-      'author' => 'Author B',
-      'authors' => ['Author B'],
-      'opf_path' => 'OEBPS/content.opf',
-      'spine' => ['OEBPS/ch1.xhtml']
-    }))
+                                                                      'title' => 'Cached Two',
+                                                                      'author' => 'Author B',
+                                                                      'authors' => ['Author B'],
+                                                                      'opf_path' => 'OEBPS/content.opf',
+                                                                      'spine' => ['OEBPS/ch1.xhtml'],
+                                                                    }))
     File.write(File.join(book2_dir, 'META-INF', 'container.xml'), '<c/>')
     File.write(File.join(book2_dir, 'OEBPS', 'content.opf'), '<opf/>')
     File.write(File.join(book2_dir, 'OEBPS', 'ch1.xhtml'), '<html><body><p>Yo</p></body></html>')

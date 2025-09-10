@@ -10,12 +10,12 @@ module EbookReader
         required_attributes :book_path, :annotation
         typed_attributes book_path: String
 
-        def initialize(book_path:, annotation:, **options)
+        def initialize(book_path:, annotation:, **)
           super(
             aggregate_id: book_path,
             book_path: book_path,
             annotation: annotation,
-            **options
+            **
           )
         end
 
@@ -31,16 +31,17 @@ module EbookReader
       # Domain event for annotation updates
       class AnnotationUpdated < BaseDomainEvent
         required_attributes :book_path, :annotation_id, :old_note, :new_note
-        typed_attributes book_path: String, annotation_id: String, old_note: String, new_note: String
+        typed_attributes book_path: String, annotation_id: String, old_note: String,
+                         new_note: String
 
-        def initialize(book_path:, annotation_id:, old_note:, new_note:, **options)
+        def initialize(book_path:, annotation_id:, old_note:, new_note:, **)
           super(
             aggregate_id: book_path,
             book_path: book_path,
             annotation_id: annotation_id,
             old_note: old_note,
             new_note: new_note,
-            **options
+            **
           )
         end
 
@@ -66,13 +67,13 @@ module EbookReader
         required_attributes :book_path, :annotation_id
         typed_attributes book_path: String, annotation_id: String
 
-        def initialize(book_path:, annotation_id:, annotation: nil, **options)
+        def initialize(book_path:, annotation_id:, annotation: nil, **)
           super(
             aggregate_id: book_path,
             book_path: book_path,
             annotation_id: annotation_id,
             annotation: annotation,
-            **options
+            **
           )
         end
 

@@ -12,6 +12,7 @@ RSpec.describe 'AnnotationRepository + FileStore integration' do
     Class.new do
       def resolve(name)
         return EbookReader::Infrastructure::Logger if name == :logger
+
         nil
       end
     end.new
@@ -36,4 +37,3 @@ RSpec.describe 'AnnotationRepository + FileStore integration' do
     expect(repo.find_by_book_path(path)).to be_empty
   end
 end
-

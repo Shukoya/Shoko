@@ -20,7 +20,7 @@ module EbookReader
       #   bookmarks = repo.find_by_book_path('/path/to/book.epub')
       class BookmarkRepository < BaseRepository
         def initialize(dependencies)
-          super(dependencies)
+          super
           @storage = Storage::BookmarkFileStore.new
         end
 
@@ -46,12 +46,12 @@ module EbookReader
 
           begin
             @storage.add(bookmark_data)
-            
+
             # Return the bookmark object that was created
             bookmarks = find_by_book_path(book_path)
             # Find the most recently added bookmark (by timestamp)
             bookmarks.max_by(&:created_at)
-          rescue => e
+          rescue StandardError => e
             handle_storage_error(e, "adding bookmark for #{book_path}")
           end
         end
@@ -65,7 +65,7 @@ module EbookReader
 
           begin
             @storage.get(book_path) || []
-          rescue => e
+          rescue StandardError => e
             handle_storage_error(e, "loading bookmarks for #{book_path}")
           end
         end
@@ -77,13 +77,13 @@ module EbookReader
         # @return [Boolean] True if deleted successfully
         def delete_for_book(book_path, bookmark)
           # Ensure entity existence takes precedence for clearer error semantics
-          ensure_entity_exists(bookmark, "Bookmark")
+          ensure_entity_exists(bookmark, 'Bookmark')
           validate_required_params({ book_path: book_path }, %i[book_path])
 
           begin
             @storage.delete(book_path, bookmark)
             true
-          rescue => e
+          rescue StandardError => e
             handle_storage_error(e, "deleting bookmark for #{book_path}")
           end
         end
@@ -99,7 +99,7 @@ module EbookReader
           bookmarks.any? do |bookmark|
             bookmark.chapter_index == chapter_index && bookmark.line_offset == line_offset
           end
-        rescue => e
+        rescue StandardError => e
           handle_storage_error(e, "checking bookmark existence for #{book_path}")
         end
 
@@ -109,7 +109,7 @@ module EbookReader
         # @return [Integer] Number of bookmarks for the book
         def count_for_book(book_path)
           find_by_book_path(book_path).size
-        rescue => e
+        rescue StandardError => e
           handle_storage_error(e, "counting bookmarks for #{book_path}")
         end
 
@@ -124,7 +124,7 @@ module EbookReader
           bookmarks.find do |bookmark|
             bookmark.chapter_index == chapter_index && bookmark.line_offset == line_offset
           end
-        rescue => e
+        rescue StandardError => e
           handle_storage_error(e, "finding bookmark at position for #{book_path}")
         end
       end

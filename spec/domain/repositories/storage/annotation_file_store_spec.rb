@@ -28,4 +28,3 @@ RSpec.describe EbookReader::Domain::Repositories::Storage::AnnotationFileStore d
     expect(store.get(path)).to be_empty
   end
 end
-
