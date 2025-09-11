@@ -55,12 +55,12 @@
 ## Phase 3: Architecture Cleanup 📋 PLANNED
 
 ### 3.1 ReaderController Decomposition ✅ COMPLETE (re-verified)
-**Issue Resolved**: God class decomposed into focused controllers
-- [x] Extract NavigationController (page/chapter navigation)
+**Issue Resolved**: God class decomposed into focused controllers; navigation is delegated to Domain services
+- [x] Navigation delegated to `Domain::Services::NavigationService` (no dedicated NavigationController)
 - [x] Extract UIController (mode switching, overlays)  
 - [x] Extract InputController (key handling consolidation)
 - [x] Extract StateController (state updates and persistence)
-- [x] Keep ReaderController as coordinator only (currently ~810 LOC; further slimming planned by pushing wrapping/window orchestration fully into services).
+- [x] Keep ReaderController as coordinator only (currently ~813 LOC; further slimming planned by pushing wrapping/window orchestration fully into services).
 
 ### 3.2 Input System Unification ✅ COMPLETE
 **Issue Resolved**: All core navigation uses Domain Commands, specialized modes retain existing patterns
@@ -164,8 +164,8 @@ Goal: Instant subsequent opens by avoiding ZIP inflation and OPF parsing; cache-
 **Solution**: Legacy service wrappers deleted, all references use domain services
 
 ### 3. ReaderController Complexity ✅ RESOLVED
-**Location**: `reader_controller.rb` (1314→491 lines, 62% reduction)
-**Solution**: God class decomposed into NavigationController, UIController, StateController, InputController
+**Location**: `reader_controller.rb` (1314→813 lines, ~38% reduction from peak; additional slimming tracked below)
+**Solution**: God class decomposed into UIController, StateController, InputController; navigation now goes through `Domain::NavigationService`
 
 ## Phase 5: Component System Standardization ✅ COMPLETE
 
@@ -231,7 +231,7 @@ Goal: Instant subsequent opens by avoiding ZIP inflation and OPF parsing; cache-
 
 - Phase 2.1 Service Layer Consolidation: Verified no legacy wrappers under `lib/ebook_reader/services/` for coordinate/clipboard/layout; `chapter_cache.rb` remains as an internal helper for `WrappingService`; `LibraryScanner` moved to `infrastructure/` and registered via DI.
 - Phase 2.2 State System Unification: No `GlobalState` class in codebase; `:global_state` DI key resolves to `ObserverStateStore`. Some comments still mention “GlobalState”; update docs/comments only.
-- Phase 3.1 ReaderController Decomposition: Done; controllers exist (`navigation/ui/state/input`), and `ReaderController` now orchestrates.
+- Phase 3.1 ReaderController Decomposition: Done; controllers exist (`ui/state/input`). No dedicated `NavigationController` — input routes to `Domain::NavigationService`.
 - Phase 3.2 Input System Unification: Reader navigation keys route through `DomainCommandBridge` and domain commands (verified in `Input::CommandFactory`, `Input::Commands`).
 - Phase 3.3 Terminal Access Elimination: COMPLETE — all surfaces created via `TerminalService`; `UI::LoadingOverlay` uses `terminal_service.create_surface`; frame lifecycle centralized in `ReaderController` (spec verified).
 - Annotation UX Fixes: ESC cancel clears selection (`UIController#cleanup_popup_state` in editor bindings). Selected text extraction uses `SelectionService` in both `UIController` and `MouseableReader` — VERIFIED.
@@ -242,8 +242,8 @@ Goal: Instant subsequent opens by avoiding ZIP inflation and OPF parsing; cache-
 - Terminal dimension sync: `StateStore#update_terminal_size` updates both `[:reader, :last_width/height]` and `[:ui, :terminal_width/height]`.
 - Dispatcher duplication: Not present — only `Input::Dispatcher` exists (no `Infrastructure::InputDispatcher`).
 - DI hygiene: `Components::TooltipOverlayComponent` injects `coordinate_service` via constructor — VERIFIED.
- - UI boundary: No component requires domain/services directly — services are accessed via DI — VERIFIED.
- - MouseableReader: No lingering direct requires of `AnnotationStore` — VERIFIED.
+- UI boundary: No component requires domain/services directly — services are accessed via DI — VERIFIED.
+- MouseableReader: No lingering direct requires of `AnnotationStore` — VERIFIED.
  - Selection/overlay duplication: Eliminated — column-bounds logic now lives in `CoordinateService`; overlay and selection extraction use it — VERIFIED.
 - Annotation editor input: Reader-context editor is routed via `Domain::Commands::AnnotationEditorCommandFactory` (InputController) — VERIFIED.  
   Menu-context editor is also routed via `Domain::Commands::AnnotationEditorCommandFactory` in `MainMenu#register_annotation_editor_bindings` — VERIFIED.
@@ -251,13 +251,28 @@ Goal: Instant subsequent opens by avoiding ZIP inflation and OPF parsing; cache-
  - Progress identity: Previously, progress keyed by the open path failed when opening via cache dir (landing on "Cover"). Fixed by introducing `EPUBDocument#source_path` and switching persistence to use the canonical path.
  - First-frame accuracy: In dynamic mode, exact page restoration now runs immediately after the initial page-map build, not only when a background build completes.
 
+## Phase 2.4: Legacy Manager Cleanup 🔶 OPEN
+
+- [ ] Identify and remove unused legacy persistence classes in favor of repositories:
+  - `lib/ebook_reader/bookmark_manager.rb` (unused)
+  - `lib/ebook_reader/progress_manager.rb` (unused)
+  - `lib/ebook_reader/annotations/annotation_store.rb` (unused)
+  - Confirm no test reliance before removal.
+
+## Consistency Follow-ups 🔶 OPEN
+
+- [ ] Replace remaining direct `state.update` calls that set nested reader fields (e.g., `pending_progress`) with domain actions for consistency, or extend existing actions to cover these updates.
+- [ ] Unify selection text extraction: expose a single helper (e.g., `SelectionService.extract_from_state(state)`) and remove duplicate implementations in `UIController` and `MouseableReader`.
+- [ ] Remove unused `ReaderController#wrapped_window_for` helper (renderers call `WrappingService#wrap_window` directly).
+- [ ] Clarify ZIP implementation import path: prefer `require_relative 'ebook_reader/zip'` in code and remove the toplevel `zip.rb` indirection if not needed by tests.
+
 ## Phase 4: Annotations Unification 🚧 IN PROGRESS
 
 Goal: One coherent annotations flow with strict layering (Domain Service + Actions + Selectors; UI via components only; no direct store access from UI), and a single presentation path (no duplicate modes/screens doing the same job).
 
 ### 4.1 Establish Domain AnnotationService ✅ COMPLETE (updated)
 - [x] `Domain::Services::AnnotationService` implemented with `list_for_book`, `list_all`, `add`, `update`, `delete`.
-- [x] Delegates to `Annotations::AnnotationStore`, dispatches `UpdateAnnotationsAction` after mutations.
+- [x] Delegates to Domain repository (`Domain::Repositories::AnnotationRepository`) and dispatches `UpdateAnnotationsAction` after mutations.
 - [x] Registered as `:annotation_service` in `Domain::ContainerFactory`.
 
 ### 4.2 Remove UI-store coupling; enforce component contract ✅ COMPLETE
@@ -331,9 +346,9 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
 6) Component duplication — RESOLVED  
    - `Components::Screens::AnnotationsScreenComponent` has a single `normalize_list` implementation.
 
-7) Main menu file-open duplication — PARTIAL  
-  - `open_book`/`run_reader`/`handle_file_path` and `sanitize_input_path` live in `Actions::FileActions` (OK).  
-  - Duplication remains for `open_file_dialog`, `file_not_found`, and `handle_reader_error` (defined in both module and class). Remove the class copies and keep the module’s versions, except keep the class `open_file_dialog` that uses state dispatch.
+7) Main menu file-open duplication — ✅ COMPLETE  
+  - `open_book`/`run_reader`/`handle_file_path` and `sanitize_input_path` live in `Actions::FileActions`.
+  - `open_file_dialog` is defined in `MainMenu` (needs state dispatch); `file_not_found` and `handle_reader_error` exist only in the module. No duplication remains.
 
 8) Unused render cache — N/A  
   - No `RenderCache` exists; nothing to remove.
@@ -344,9 +359,8 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
 10) Naming consistency — COMPLETE  
    - Standardized on `page_calculator` across rendering context and renderers.
 
-11) Dead helpers in MainMenu — PARTIAL  
-   - Removed `MainMenu#create_menu_navigation_commands` and `#create_browse_navigation_commands`; dispatcher registrations are explicit per mode.  
-   - Leftover method `register_recent_bindings` still exists but is no longer used. Remove the method for clarity.
+11) Dead helpers in MainMenu — ✅ COMPLETE  
+   - Removed `MainMenu#create_menu_navigation_commands`, `#create_browse_navigation_commands`, and the unused `register_recent_bindings` method.
 
 12) Centralize cache paths — COMPLETE  
    - Introduced `Infrastructure::CachePaths.reader_root` and adopted it in EpubCache, Library screen, and cache wipe.

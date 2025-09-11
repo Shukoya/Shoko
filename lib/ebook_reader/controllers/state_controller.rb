@@ -204,10 +204,12 @@ module EbookReader
             # best-effort; leave index as-is if estimation fails
           end
           # Store pending precise restore to be applied after background map build
-          @state.update({ %i[reader pending_progress] => {
-                          chapter_index: @state.get(%i[reader current_chapter]),
-                          line_offset: line_offset,
-                        } })
+          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(
+                           pending_progress: {
+                             chapter_index: @state.get(%i[reader current_chapter]),
+                             line_offset: line_offset,
+                           }
+                         ))
         else
           # Absolute page mode
           page_offsets = line_offset

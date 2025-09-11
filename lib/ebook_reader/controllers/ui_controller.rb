@@ -296,11 +296,13 @@ dependencies: @dependencies)
 
       # Extract selected text from selection range using SelectionService
       def extract_selected_text_from_selection(selection_range)
-        return '' unless selection_range
-
         selection_service = @dependencies.resolve(:selection_service)
-        rendered_lines = @state.get(%i[reader rendered_lines]) || {}
-        selection_service.extract_text(selection_range, rendered_lines)
+        if selection_service.respond_to?(:extract_from_state)
+          selection_service.extract_from_state(@state, selection_range)
+        else
+          rendered_lines = @state.get(%i[reader rendered_lines]) || {}
+          selection_service.extract_text(selection_range, rendered_lines)
+        end
       end
     end
   end

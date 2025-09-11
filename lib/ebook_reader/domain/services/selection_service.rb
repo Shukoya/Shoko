@@ -8,6 +8,16 @@ module EbookReader
       # Service to normalize selection ranges and extract text from rendered_lines
       # Centralizes logic used by UIController and MouseableReader
       class SelectionService < BaseService
+        # Convenience helper: extract selection text directly from state.
+        # If selection_range is nil, uses state[:reader][:selection].
+        def extract_from_state(state, selection_range = nil)
+          return '' unless state
+
+          range = selection_range || state.get(%i[reader selection])
+          rendered = state.get(%i[reader rendered_lines]) || {}
+          extract_text(range, rendered)
+        end
+
         # Extract selected text from selection_range using rendered_lines in state
         # @param selection_range [Hash] {:start=>{x:,y:}, :end=>{x:,y:}}
         # @param rendered_lines [Hash<Integer, Hash>] mapping of line_id => {row:, col:, col_end:, width:, text:}

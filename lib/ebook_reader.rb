@@ -49,9 +49,6 @@ require_relative 'ebook_reader/validators/terminal_size_validator'
 # Data management
 require_relative 'ebook_reader/epub_finder'
 require_relative 'ebook_reader/recent_files'
-require_relative 'ebook_reader/progress_manager'
-require_relative 'ebook_reader/bookmark_manager'
-require_relative 'ebook_reader/annotations/annotation_store'
 
 # Document handling
 require_relative 'ebook_reader/epub_document'
@@ -116,6 +113,8 @@ require_relative 'ebook_reader/domain/actions/update_sidebar_action'
 require_relative 'ebook_reader/domain/actions/update_selections_action'
 require_relative 'ebook_reader/domain/actions/update_popup_menu_action'
 require_relative 'ebook_reader/domain/actions/update_rendered_lines_action'
+require_relative 'ebook_reader/domain/actions/update_ui_loading_action'
+require_relative 'ebook_reader/domain/actions/update_pagination_state_action'
 require_relative 'ebook_reader/domain/actions/update_annotations_action'
 require_relative 'ebook_reader/domain/actions/update_menu_action'
 require_relative 'ebook_reader/domain/actions/action_creators'

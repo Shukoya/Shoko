@@ -156,7 +156,9 @@ module EbookReader
                                                                         line_spacing)
           if EbookReader::Infrastructure::PaginationCache.exists_for_document?(@doc, key)
             @page_calculator.build_page_map(width, height, @doc, @state)
-            @state.update({ %i[reader total_pages] => @page_calculator.total_pages })
+            @state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                             total_pages: @page_calculator.total_pages
+                           ))
             # Apply precise pending progress now that a map exists
             begin
               pending = @state.get(%i[reader pending_progress])
@@ -164,7 +166,7 @@ module EbookReader
                 ch = pending[:chapter_index] || @state.get(%i[reader current_chapter])
                 idx = @page_calculator.find_page_index(ch, pending[:line_offset].to_i)
                 @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: idx))
-                @state.update({ %i[reader pending_progress] => nil })
+                @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_progress: nil))
               end
             rescue StandardError
               # ignore
@@ -446,7 +448,9 @@ module EbookReader
       @dependencies.register(:document, @doc)
       # Expose chapter count for navigation service logic
       begin
-        @state.update({ %i[reader total_chapters] => @doc&.chapter_count || 0 })
+        @state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                         total_chapters: (@doc&.chapter_count || 0)
+                       ))
       rescue StandardError
         # best-effort
       end
@@ -580,7 +584,7 @@ module EbookReader
             ch = pending[:chapter_index] || @state.get(%i[reader current_chapter])
             idx = @page_calculator.find_page_index(ch, pending[:line_offset].to_i)
             @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: idx))
-            @state.update({ %i[reader pending_progress] => nil })
+            @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_progress: nil))
           end
         rescue StandardError
           # ignore
@@ -588,8 +592,12 @@ module EbookReader
       else
         # Absolute page numbering: delegate to PageCalculatorService
         page_map = @page_calculator.build_absolute_page_map(width, height, @doc, @state)
-        @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum,
-                        %i[reader last_width] => width, %i[reader last_height] => height })
+        @state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                         page_map: page_map,
+                         total_pages: page_map.sum,
+                         last_width: width,
+                         last_height: height
+                       ))
       end
       @defer_page_map = false
       force_redraw
@@ -624,8 +632,12 @@ module EbookReader
 
       # Delegate absolute pagination to the PageCalculatorService for consistency
       page_map = @page_calculator.build_absolute_page_map(width, height, @doc, @state)
-      @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum,
-                      %i[reader last_width] => width, %i[reader last_height] => height })
+      @state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                       page_map: page_map,
+                       total_pages: page_map.sum,
+                       last_width: width,
+                       last_height: height
+                     ))
     end
 
     # Perform initial heavy page calculations with a visual progress overlay
@@ -633,20 +645,26 @@ module EbookReader
       return unless @doc
 
       height, width = @terminal_service.size
-      @state.update({ %i[ui loading_active] => true,
-                      %i[ui loading_message] => 'Opening book…',
-                      %i[ui loading_progress] => 0.0 })
+      @state.dispatch(EbookReader::Domain::Actions::UpdateUILoadingAction.new(
+                       loading_active: true,
+                       loading_message: 'Opening book…',
+                       loading_progress: 0.0
+                     ))
 
       render_loading_overlay
 
       if Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic && @page_calculator
         # Dynamic: use page calculator with progress callback
         @page_calculator.build_page_map(width, height, @doc, @state) do |done, total|
-          @state.update({ %i[ui loading_progress] => (done.to_f / [total, 1].max) })
+          @state.dispatch(EbookReader::Domain::Actions::UpdateUILoadingAction.new(
+                           loading_progress: (done.to_f / [total, 1].max)
+                         ))
           render_loading_overlay
         end
         # Sync total pages to state for view model
-        @state.update({ %i[reader total_pages] => @page_calculator.total_pages })
+        @state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                         total_pages: @page_calculator.total_pages
+                       ))
 
         # Apply precise pending progress now that map is ready (first-frame accuracy)
         begin
@@ -657,7 +675,7 @@ module EbookReader
             if idx && idx >= 0
               @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: idx))
             end
-            @state.update({ %i[reader pending_progress] => nil })
+            @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_progress: nil))
           end
         rescue StandardError
           # ignore
@@ -666,11 +684,17 @@ module EbookReader
         # Absolute: delegate per-chapter page map to page_calculator
         page_map = @page_calculator.build_absolute_page_map(width, height, @doc,
                                                             @state) do |done, total|
-          @state.update({ %i[ui loading_progress] => (done.to_f / [total, 1].max) })
+          @state.dispatch(EbookReader::Domain::Actions::UpdateUILoadingAction.new(
+                           loading_progress: (done.to_f / [total, 1].max)
+                         ))
           render_loading_overlay
         end
-        @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum,
-                        %i[reader last_width] => width, %i[reader last_height] => height })
+        @state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                         page_map: page_map,
+                         total_pages: page_map.sum,
+                         last_width: width,
+                         last_height: height
+                       ))
         cache_key = "#{width}x#{height}-#{@state.get(%i[config
                                                         view_mode])}-#{@state.get(%i[config
                                                                                      line_spacing])}"
@@ -678,11 +702,16 @@ module EbookReader
       end
 
       # Clear loading state and render once before entering main loop
-      @state.update({ %i[ui loading_active] => false, %i[ui loading_message] => nil })
+      @state.dispatch(EbookReader::Domain::Actions::UpdateUILoadingAction.new(
+                       loading_active: false,
+                       loading_message: nil
+                     ))
       draw_screen
     rescue StandardError
       # Best-effort; ensure we clear loading state to avoid a stuck overlay
-      @state.update({ %i[ui loading_active] => false })
+      @state.dispatch(EbookReader::Domain::Actions::UpdateUILoadingAction.new(
+                       loading_active: false
+                     ))
     end
 
     def render_loading_overlay
@@ -701,15 +730,22 @@ module EbookReader
       line_offset = prev_page ? prev_page[:start_line] : 0
       chapter_index = @state.get(%i[reader current_chapter]) || 0
 
-      @state.update({ %i[ui loading_active] => true, %i[ui loading_message] => 'Rebuilding pagination…',
-                      %i[ui loading_progress] => 0.0 })
+      @state.dispatch(EbookReader::Domain::Actions::UpdateUILoadingAction.new(
+                       loading_active: true,
+                       loading_message: 'Rebuilding pagination…',
+                       loading_progress: 0.0
+                     ))
       UI::LoadingOverlay.render(@terminal_service, @state)
 
       @page_calculator.build_page_map(width, height, @doc, @state) do |done, total|
-        @state.update({ %i[ui loading_progress] => (done.to_f / [total, 1].max) })
+        @state.dispatch(EbookReader::Domain::Actions::UpdateUILoadingAction.new(
+                         loading_progress: (done.to_f / [total, 1].max)
+                       ))
         UI::LoadingOverlay.render(@terminal_service, @state)
       end
-      @state.update({ %i[reader total_pages] => @page_calculator.total_pages })
+      @state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                       total_pages: @page_calculator.total_pages
+                     ))
 
       begin
         idx = @page_calculator.find_page_index(chapter_index, line_offset.to_i)
@@ -718,7 +754,10 @@ module EbookReader
         # best-effort
       end
 
-      @state.update({ %i[ui loading_active] => false, %i[ui loading_message] => nil })
+      @state.dispatch(EbookReader::Domain::Actions::UpdateUILoadingAction.new(
+                       loading_active: false,
+                       loading_message: nil
+                     ))
       draw_screen
       :handled
     end
@@ -761,7 +800,20 @@ module EbookReader
       lines
     end
 
-    # Fetch only the wrapped lines needed for immediate display (windowed wrapping)
+
+    # Hook for subclasses (MouseableReader) to clear any active selection/popup
+    def clear_selection!
+      # no-op in base controller
+    end
+
+    # Ensure both UI state and any local selection handlers are cleared
+    def cleanup_popup_state
+      @ui_controller.cleanup_popup_state
+      clear_selection!
+    end
+
+    # Backward-compatible helper used by tests to verify prefetch windowing behavior.
+    # Delegates to WrappingService#wrap_window and triggers background prefetch of ±N pages.
     def wrapped_window_for(chapter_index, col_width, offset, display_height)
       return [] unless @doc
 
@@ -797,17 +849,5 @@ module EbookReader
       (chapter.lines || [])[offset, display_height] || []
     end
 
-    # Hook for subclasses (MouseableReader) to clear any active selection/popup
-    def clear_selection!
-      # no-op in base controller
-    end
-
-    # Ensure both UI state and any local selection handlers are cleared
-    def cleanup_popup_state
-      @ui_controller.cleanup_popup_state
-      clear_selection!
-    end
-
-    public :wrapped_window_for
   end
 end

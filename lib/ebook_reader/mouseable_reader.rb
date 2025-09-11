@@ -158,10 +158,13 @@ module EbookReader
     end
 
     def extract_selected_text(range)
-      return '' unless range && @state.get(%i[reader rendered_lines])
-
       selection_service = @dependencies.resolve(:selection_service)
-      selection_service.extract_text(range, @state.get(%i[reader rendered_lines]))
+      if selection_service.respond_to?(:extract_from_state)
+        selection_service.extract_from_state(@state, range)
+      else
+        rendered = @state.get(%i[reader rendered_lines]) || {}
+        selection_service.extract_text(range, rendered)
+      end
     end
 
     def copy_to_clipboard(text)

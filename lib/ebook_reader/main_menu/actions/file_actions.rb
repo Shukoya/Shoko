@@ -93,7 +93,9 @@ module EbookReader
               return run_reader(path)
             end
             # Update total chapters for navigation service expectations
-            @state.update({ %i[reader total_chapters] => doc&.chapter_count || 0 })
+            @state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                             total_chapters: (doc&.chapter_count || 0)
+                           ))
             # Pre-register for reuse
             @dependencies.register(:document, doc)
 
@@ -118,8 +120,12 @@ module EbookReader
                                 ))
                 draw_screen
               end
-              @state.update({ %i[reader page_map] => page_map, %i[reader total_pages] => page_map.sum,
-                              %i[reader last_width] => width, %i[reader last_height] => height })
+              @state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                               page_map: page_map,
+                               total_pages: page_map.sum,
+                               last_width: width,
+                               last_height: height
+                             ))
             end
           rescue StandardError => e
             handle_reader_error(path, e)
