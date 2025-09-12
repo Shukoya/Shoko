@@ -17,9 +17,8 @@ module EbookReader
       def subscribe(subscriber, *event_types)
         @mutex.synchronize do
           event_types.each do |event_type|
-            unless @subscribers[event_type].include?(subscriber)
-              @subscribers[event_type] << subscriber
-            end
+            list = @subscribers[event_type]
+            list << subscriber unless list.include?(subscriber)
           end
         end
       end

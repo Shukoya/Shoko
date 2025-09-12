@@ -128,10 +128,9 @@ module EbookReader
         container.register_singleton(:event_bus) { Infrastructure::EventBus.new }
         container.register_singleton(:logger) { Infrastructure::Logger }
 
-        # Domain event bus
-        container.register_singleton(:domain_event_bus) do |c|
-          Domain::Events::DomainEventBus.new(c.resolve(:event_bus))
-        end
+        # Domain event bus (eagerly capture event_bus to avoid repeated resolves)
+        eb = container.resolve(:event_bus)
+        container.register_singleton(:domain_event_bus) { |_c| Domain::Events::DomainEventBus.new(eb) }
 
         # Domain repositories
         container.register_factory(:bookmark_repository) { |c| Domain::Repositories::BookmarkRepository.new(c) }
@@ -177,7 +176,7 @@ module EbookReader
         # Focused controllers replacing god class
 
         # Unified state management
-        container.register_singleton(:global_state) { |c| Infrastructure::ObserverStateStore.new(c.resolve(:event_bus)) }
+        container.register_singleton(:global_state) { |_c| Infrastructure::ObserverStateStore.new(eb) }
 
         # IMPORTANT: state_store must resolve to the same ObserverStateStore instance as :global_state
         container.register_factory(:state_store) { |c| c.resolve(:global_state) }

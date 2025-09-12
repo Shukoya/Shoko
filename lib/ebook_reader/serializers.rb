@@ -2,6 +2,16 @@
 
 module EbookReader
   module Infrastructure
+    module SerializerSupport
+      module_function
+      def msgpack_available?
+        require 'msgpack'
+        true
+      rescue LoadError
+        false
+      end
+    end
+
     class JSONSerializer
       def ext = 'json'
       def manifest_filename = 'manifest.json'

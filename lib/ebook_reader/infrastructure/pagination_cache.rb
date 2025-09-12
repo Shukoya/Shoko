@@ -61,9 +61,7 @@ module EbookReader
 
       def resolve_cache_dir(doc)
         # Prefer cache_dir if document exposes it (cached open)
-        if doc.respond_to?(:cache_dir) && doc.cache_dir && !doc.cache_dir.to_s.empty?
-          return doc.cache_dir
-        end
+        return doc.cache_dir if doc.respond_to?(:cache_dir) && doc.cache_dir && !doc.cache_dir.to_s.empty?
 
         # Fallback: compute cache dir from epub path via EpubCache
         if doc.respond_to?(:canonical_path) && doc.canonical_path && File.exist?(doc.canonical_path)
@@ -78,7 +76,7 @@ module EbookReader
       def locate(dir, key)
         mp = File.join(dir, 'pagination', "#{key}.msgpack")
         js = File.join(dir, 'pagination', "#{key}.json")
-        if File.exist?(mp) && msgpack_available?
+        if File.exist?(mp) && SerializerSupport.msgpack_available?
           [mp, MessagePackSerializer.new]
         elsif File.exist?(js)
           [js, JSONSerializer.new]
@@ -91,22 +89,16 @@ module EbookReader
         dir = resolve_cache_dir(doc)
         return false unless dir
 
-        mp = File.join(dir, 'pagination', "#{key}.msgpack")
-        js = File.join(dir, 'pagination', "#{key}.json")
+        base = File.join(dir, 'pagination', key)
+        mp = base + '.msgpack'
+        js = base + '.json'
         File.exist?(mp) || File.exist?(js)
       rescue StandardError
         false
       end
 
       def select_serializer
-        msgpack_available? ? MessagePackSerializer.new : JSONSerializer.new
-      end
-
-      def msgpack_available?
-        require 'msgpack'
-        true
-      rescue LoadError
-        false
+        SerializerSupport.msgpack_available? ? MessagePackSerializer.new : JSONSerializer.new
       end
 
       # Serializers are defined in lib/ebook_reader/serializers.rb (outside infra path for test coverage isolation)
@@ -115,8 +107,9 @@ module EbookReader
         dir = resolve_cache_dir(doc)
         return false unless dir
 
-        mp = File.join(dir, 'pagination', "#{key}.msgpack")
-        js = File.join(dir, 'pagination', "#{key}.json")
+        base = File.join(dir, 'pagination', key)
+        mp = base + '.msgpack'
+        js = base + '.json'
         removed = false
         [mp, js].each do |p|
           next unless File.exist?(p)

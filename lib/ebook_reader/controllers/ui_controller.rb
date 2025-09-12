@@ -13,60 +13,25 @@ module EbookReader
       def switch_mode(mode, **)
         @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(mode))
 
-        case mode
-        when :annotation_editor
+        if mode == :annotation_editor
           @current_mode = Components::Screens::AnnotationEditorScreenComponent.new(self, **,
-dependencies: @dependencies)
-        when :annotations
-          # Rendered via screen/sidebar components; no standalone mode component
-          @current_mode = nil
-        when :read, :help, :toc, :bookmarks
-          @current_mode = nil
-        when :popup_menu
-          # Popup handled separately via @state.get([:reader, :popup_menu])
+                                                                                   dependencies: @dependencies)
         else
+          # Rendered via screen/sidebar components; no standalone mode component
           @current_mode = nil
         end
 
         # Keep input dispatcher in sync with mode to prevent cross-mode key leaks
         begin
           input_controller = @dependencies.resolve(:input_controller)
-          if input_controller.respond_to?(:activate_for_mode)
-            input_controller.activate_for_mode(mode)
-          end
+          input_controller.activate_for_mode(mode) if input_controller.respond_to?(:activate_for_mode)
         rescue StandardError
           # If not available, ignore; read mode remains default
         end
       end
 
       def open_toc
-        # Toggle sidebar TOC panel at ~30% width and keep main view in read mode
-
-        if @state.get(%i[reader
-                         sidebar_visible]) && @state.get(%i[reader sidebar_active_tab]) == :toc
-          # Closing TOC sidebar – restore previous view mode if stored
-          prev_mode = @state.get(%i[reader sidebar_prev_view_mode])
-          if prev_mode
-            @state.dispatch(EbookReader::Domain::Actions::UpdateConfigAction.new(view_mode: prev_mode))
-            @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(sidebar_prev_view_mode: nil))
-          end
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(visible: false))
-          @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
-          set_message('TOC closed', 1)
-        else
-          # Opening TOC sidebar – store current view and force single-page view
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(sidebar_prev_view_mode: @state.get(%i[
-                                                                                                                        config view_mode
-                                                                                                                      ])))
-          @state.dispatch(EbookReader::Domain::Actions::UpdateConfigAction.new(view_mode: :single))
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(
-                            active_tab: :toc,
-                            toc_selected: @state.get(%i[reader current_chapter]),
-                            visible: true
-                          ))
-          @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
-          set_message('TOC opened', 1)
-        end
+        toggle_sidebar(:toc)
       rescue StandardError => e
         set_message("TOC error: #{e.message}", 3)
       end
@@ -77,35 +42,69 @@ dependencies: @dependencies)
       end
 
       def open_annotations
-        # Toggle sidebar Annotations panel similar to TOC
-        if @state.get(%i[reader
-                         sidebar_visible]) && @state.get(%i[reader
-                                                            sidebar_active_tab]) == :annotations
-          # Closing Annotations sidebar – restore previous view mode if stored
-          prev_mode = @state.get(%i[reader sidebar_prev_view_mode])
-          if prev_mode
-            @state.dispatch(EbookReader::Domain::Actions::UpdateConfigAction.new(view_mode: prev_mode))
-            @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(sidebar_prev_view_mode: nil))
-          end
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(visible: false))
-          @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
-          set_message('Annotations closed', 1)
+        toggle_sidebar(:annotations)
+      end
+
+      private
+
+      # Unified sidebar toggling for :toc, :annotations, :bookmarks
+      def toggle_sidebar(tab)
+        if sidebar_open_for?(tab)
+          close_sidebar_with_restore(tab)
         else
-          # Opening Annotations sidebar – store current view and force single-page view
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(sidebar_prev_view_mode: @state.get(%i[
-                                                                                                                        config view_mode
-                                                                                                                      ])))
-          @state.dispatch(EbookReader::Domain::Actions::UpdateConfigAction.new(view_mode: :single))
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(
-                            active_tab: :annotations,
-                            annotations_selected: @state.get(%i[reader
-                                                                sidebar_annotations_selected]) || 0,
-                            visible: true
-                          ))
-          @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
-          set_message('Annotations opened', 1)
+          open_sidebar_for(tab)
         end
       end
+
+      def sidebar_open_for?(tab)
+        @state.get(%i[reader sidebar_visible]) &&
+          @state.get(%i[reader sidebar_active_tab]) == tab
+      end
+
+      def close_sidebar_with_restore(tab)
+        prev_mode = @state.get(%i[reader sidebar_prev_view_mode])
+        if prev_mode
+          @state.dispatch(
+            EbookReader::Domain::Actions::UpdateConfigAction.new(view_mode: prev_mode)
+          )
+          @state.dispatch(
+            EbookReader::Domain::Actions::UpdateSelectionsAction.new(sidebar_prev_view_mode: nil)
+          )
+        end
+        @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(visible: false))
+        @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
+        set_message("#{tab.to_s.capitalize} closed", 1)
+      end
+
+      def open_sidebar_for(tab)
+        # Store current view and force single-page view
+        @state.dispatch(
+          EbookReader::Domain::Actions::UpdateSelectionsAction.new(
+            sidebar_prev_view_mode: @state.get(%i[config view_mode])
+          )
+        )
+        @state.dispatch(
+          EbookReader::Domain::Actions::UpdateConfigAction.new(view_mode: :single)
+        )
+
+        updates = { active_tab: tab, visible: true }
+        case tab
+        when :toc
+          updates[:toc_selected] = @state.get(%i[reader current_chapter])
+        when :annotations
+          updates[:annotations_selected] =
+            @state.get(%i[reader sidebar_annotations_selected]) || 0
+        when :bookmarks
+          updates[:bookmarks_selected] =
+            @state.get(%i[reader sidebar_bookmarks_selected]) || 0
+        end
+
+        @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(updates))
+        @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
+        set_message("#{tab.to_s.capitalize} opened", 1)
+      end
+
+      public
 
       def show_help
         switch_mode(:help)
@@ -142,54 +141,15 @@ dependencies: @dependencies)
 
       # Sidebar navigation helpers
       def sidebar_down
-        return unless @state.get(%i[reader sidebar_visible])
-
-        case @state.get(%i[reader sidebar_active_tab])
-        when :toc
-          max = (@dependencies.resolve(:document)&.chapters&.length || 1) - 1
-          current = @state.get(%i[reader sidebar_toc_selected]) || 0
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(toc_selected: [
-            current + 1, [max, 0].max
-          ].min))
-        when :annotations
-          max = (@state.get(%i[reader annotations]) || []).length - 1
-          current = @state.get(%i[reader sidebar_annotations_selected]) || 0
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(annotations_selected: [
-            current + 1, [max, 0].max
-          ].min))
-        when :bookmarks
-          max = (@state.get(%i[reader bookmarks]) || []).length - 1
-          current = @state.get(%i[reader sidebar_bookmarks_selected]) || 0
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(bookmarks_selected: [
-            current + 1, [max, 0].max
-          ].min))
-        end
+        update_sidebar_selection(+1)
       end
 
       def sidebar_up
-        return unless @state.get(%i[reader sidebar_visible])
-
-        case @state.get(%i[reader sidebar_active_tab])
-        when :toc
-          current = @state.get(%i[reader sidebar_toc_selected]) || 0
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(toc_selected: [
-            current - 1, 0
-          ].max))
-        when :annotations
-          current = @state.get(%i[reader sidebar_annotations_selected]) || 0
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(annotations_selected: [
-            current - 1, 0
-          ].max))
-        when :bookmarks
-          current = @state.get(%i[reader sidebar_bookmarks_selected]) || 0
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(bookmarks_selected: [
-            current - 1, 0
-          ].max))
-        end
+        update_sidebar_selection(-1)
       end
 
       def sidebar_select
-        return unless @state.get(%i[reader sidebar_visible])
+        return unless sidebar_visible?
 
         case @state.get(%i[reader sidebar_active_tab])
         when :toc
@@ -259,6 +219,38 @@ dependencies: @dependencies)
       attr_reader :current_mode
 
       private
+
+      def sidebar_visible?
+        @state.get(%i[reader sidebar_visible])
+      end
+
+      def update_sidebar_selection(delta)
+        return unless sidebar_visible?
+
+        tab = @state.get(%i[reader sidebar_active_tab])
+        key, action_key, max = case tab
+                               when :toc
+                                 cur = @state.get(%i[reader sidebar_toc_selected]) || 0
+                                 max = (@dependencies.resolve(:document)&.chapters&.length || 1) - 1
+                                 [:sidebar_toc_selected, :toc_selected, max]
+                               when :annotations
+                                 cur = @state.get(%i[reader sidebar_annotations_selected]) || 0
+                                 max = (@state.get(%i[reader annotations]) || []).length - 1
+                                 [:sidebar_annotations_selected, :annotations_selected, max]
+                               when :bookmarks
+                                 cur = @state.get(%i[reader sidebar_bookmarks_selected]) || 0
+                                 max = (@state.get(%i[reader bookmarks]) || []).length - 1
+                                 [:sidebar_bookmarks_selected, :bookmarks_selected, max]
+                               else
+                                 [nil, nil, nil]
+                               end
+        return unless key && action_key
+
+        current = @state.get([:reader, key]) || 0
+        max0 = [max, 0].max
+        new_val = (current + delta).clamp(0, max0)
+        @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(action_key => new_val))
+      end
 
       def handle_create_annotation_action(action_data)
         selection_range = if action_data.is_a?(Hash)

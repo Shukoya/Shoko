@@ -9,15 +9,17 @@ module EbookReader
       class BookmarksTabRenderer < BaseComponent
         include Constants::UIConstants
 
+        ItemCtx = Struct.new(:bookmark, :doc, :index, :selected_index, :y, keyword_init: true)
+
         def initialize(controller)
           super()
           @controller = controller
         end
 
         def do_render(surface, bounds)
-          bookmarks = @controller.state.get(%i[reader bookmarks]) || []
-          doc = @controller.doc
           state = @controller.state
+          bookmarks = state.get(%i[reader bookmarks]) || []
+          doc = @controller.doc
           selected_index = state.get(%i[reader sidebar_bookmarks_selected]) || 0
 
           return render_empty_message(surface, bounds) if bookmarks.empty?
@@ -27,7 +29,12 @@ module EbookReader
 
         private
 
-        def render_empty_message(surface, bounds)
+      def render_empty_message(surface, bounds)
+          reset = Terminal::ANSI::RESET
+          bx = bounds.x
+          by = bounds.y
+          bw = bounds.width
+          bh = bounds.height
           messages = [
             'No bookmarks yet',
             '',
@@ -35,69 +42,81 @@ module EbookReader
             'to add a bookmark',
           ]
 
-          start_y = bounds.y + ((bounds.height - messages.length) / 2)
+          start_y = by + ((bh - messages.length) / 2)
           messages.each_with_index do |message, i|
-            x = bounds.x + [(bounds.width - message.length) / 2, 2].max
+            x = bx + [(bw - message.length) / 2, 2].max
             y = start_y + i
-            surface.write(bounds, y, x, "#{COLOR_TEXT_DIM}#{message}#{Terminal::ANSI::RESET}")
+            surface.write(bounds, y, x, "#{COLOR_TEXT_DIM}#{message}#{reset}")
           end
-        end
+      end
 
         def render_bookmarks_list(surface, bounds, bookmarks, doc, selected_index)
           # Each bookmark takes 2 lines: title/chapter + snippet
           item_height = 2
-          visible_items = bounds.height / item_height
+          bh = bounds.height
+          by = bounds.y
+          visible_items = bh / item_height
 
           # Calculate scrolling
           visible_start = [selected_index - (visible_items / 2), 0].max
           visible_end = [visible_start + visible_items, bookmarks.length].min
 
-          current_y = bounds.y
+          current_y = by
+          end_y = by + bh
 
           (visible_start...visible_end).each do |idx|
             bookmark = bookmarks[idx]
-            break if current_y + item_height > bounds.y + bounds.height
+            break if current_y + item_height > end_y
 
-            render_bookmark_item(surface, bounds, bookmark, doc, idx, selected_index, current_y)
+            ctx = ItemCtx.new(bookmark: bookmark, doc: doc, index: idx, selected_index: selected_index, y: current_y)
+            render_bookmark_item(surface, bounds, ctx)
             current_y += item_height
           end
         end
 
-        def render_bookmark_item(surface, bounds, bookmark, doc, idx, selected_index, y)
-          is_selected = (idx == selected_index)
-          max_width = bounds.width - 4
+        def render_bookmark_item(surface, bounds, ctx)
+          reset = Terminal::ANSI::RESET
+          bx = bounds.x
+          bw = bounds.width
+          row = ctx.y
+          col = bx + 1
+          bm = ctx.bookmark
+          is_selected = (ctx.index == ctx.selected_index)
+          max_width = bw - 4
 
           # Get chapter info
-          chapter = doc.get_chapter(bookmark.chapter_index)
-          chapter_title = chapter&.title || "Chapter #{bookmark.chapter_index + 1}"
+          ch_index = bm.chapter_index
+          chapter = ctx.doc.get_chapter(ch_index)
+          chapter_title = chapter&.title || "Chapter #{ch_index + 1}"
 
           # First line: Chapter title with bookmark indicator
-          prefix = is_selected ? "#{COLOR_TEXT_ACCENT}#{SELECTION_POINTER}#{Terminal::ANSI::RESET}" : '  '
-          chapter_text = chapter_title.to_s
-
-          if chapter_text.length > max_width - 3
-            chapter_text = "#{chapter_text[0, max_width - 6]}..."
+          if is_selected
+            prefix = "#{COLOR_TEXT_ACCENT}#{SELECTION_POINTER}#{reset}"
+            title_style = SELECTION_HIGHLIGHT
+            snippet_style = COLOR_TEXT_SECONDARY
+          else
+            prefix = '  '
+            title_style = COLOR_TEXT_PRIMARY
+            snippet_style = COLOR_TEXT_DIM
           end
+          chapter_text = chapter_title.to_s
+          chapter_text = "#{chapter_text[0, max_width - 6]}..." if chapter_text.length > max_width - 3
 
           # Modern bookmark icon
-          bookmark_icon = "#{COLOR_TEXT_WARNING}◆#{Terminal::ANSI::RESET}"
-          title_style = is_selected ? SELECTION_HIGHLIGHT : COLOR_TEXT_PRIMARY
-          title_line = "#{prefix}#{bookmark_icon} #{title_style}#{chapter_text}#{Terminal::ANSI::RESET}"
-          surface.write(bounds, y, bounds.x + 1, title_line)
+          bookmark_icon = "#{COLOR_TEXT_WARNING}◆#{reset}"
+          title_line = "#{prefix}#{bookmark_icon} #{title_style}#{chapter_text}#{reset}"
+          surface.write(bounds, row, col, title_line)
 
           # Second line: Text snippet and position
-          snippet = bookmark.text_snippet || ''
+          snippet = bm.text_snippet || ''
           snippet = "#{snippet[0, max_width - 11]}..." if snippet.length > max_width - 8
 
           # Add position indicator if available
           position_text = ''
-          if bookmark.respond_to?(:position_percentage)
-            position_text = " (#{bookmark.position_percentage}%)"
-          end
+          position_text = " (#{bm.position_percentage}%)" if bm.respond_to?(:position_percentage)
 
-          snippet_style = is_selected ? COLOR_TEXT_SECONDARY : COLOR_TEXT_DIM
-          snippet_line = "    #{snippet_style}\"#{snippet}\"#{position_text}#{Terminal::ANSI::RESET}"
-          surface.write(bounds, y + 1, bounds.x + 1, snippet_line)
+          snippet_line = "    #{snippet_style}\"#{snippet}\"#{position_text}#{reset}"
+          surface.write(bounds, row + 1, col, snippet_line)
         end
       end
     end

@@ -10,6 +10,8 @@ module EbookReader
       class SettingsScreenComponent < BaseComponent
         include Constants::UIConstants
 
+        OptionCtx = Struct.new(:row, :key, :name, :value, keyword_init: true)
+
         def initialize(state, scanner)
           super()
           @state = state
@@ -25,14 +27,18 @@ module EbookReader
           surface.write(bounds, 1, width - 20, "#{COLOR_TEXT_DIM}[ESC] Back#{Terminal::ANSI::RESET}")
 
           # Settings options
-          render_setting_option(surface, bounds, 3, '1', 'View Mode', format_view_mode)
-          render_setting_option(surface, bounds, 4, '2', 'Line Spacing', format_line_spacing)
-          render_setting_option(surface, bounds, 5, '3', 'Page Numbers', format_page_numbers)
-          render_setting_option(surface, bounds, 6, '4', 'Page Numbering Mode',
-                                format_page_numbering_mode)
-          render_setting_option(surface, bounds, 7, '5', 'Highlight Quotes',
-                                format_highlight_quotes)
-          render_setting_option(surface, bounds, 8, '6', 'Wipe Cache', 'Removes EPUB + scan caches')
+          render_setting_option(surface, bounds,
+                                OptionCtx.new(row: 3,  key: '1', name: 'View Mode',            value: format_view_mode))
+          render_setting_option(surface, bounds,
+                                OptionCtx.new(row: 4,  key: '2', name: 'Line Spacing',         value: format_line_spacing))
+          render_setting_option(surface, bounds,
+                                OptionCtx.new(row: 5,  key: '3', name: 'Page Numbers',         value: format_page_numbers))
+          render_setting_option(surface, bounds,
+                                OptionCtx.new(row: 6,  key: '4', name: 'Page Numbering Mode',  value: format_page_numbering_mode))
+          render_setting_option(surface, bounds,
+                                OptionCtx.new(row: 7,  key: '5', name: 'Highlight Quotes',     value: format_highlight_quotes))
+          render_setting_option(surface, bounds,
+                                OptionCtx.new(row: 8,  key: '6', name: 'Wipe Cache',           value: 'Removes EPUB + scan caches'))
 
           # Instructions
           surface.write(bounds, height - 3, 2,
@@ -47,11 +53,12 @@ module EbookReader
 
         private
 
-        def render_setting_option(surface, bounds, row, key, name, value)
-          key_text = "#{COLOR_TEXT_ACCENT}[#{key}]#{Terminal::ANSI::RESET}"
-          name_text = "#{COLOR_TEXT_PRIMARY}#{name}:#{Terminal::ANSI::RESET}"
-          value_text = "#{COLOR_TEXT_SUCCESS}#{value}#{Terminal::ANSI::RESET}"
+        def render_setting_option(surface, bounds, ctx)
+          key_text = "#{COLOR_TEXT_ACCENT}[#{ctx.key}]#{Terminal::ANSI::RESET}"
+          name_text = "#{COLOR_TEXT_PRIMARY}#{ctx.name}:#{Terminal::ANSI::RESET}"
+          value_text = "#{COLOR_TEXT_SUCCESS}#{ctx.value}#{Terminal::ANSI::RESET}"
 
+          row = ctx.row
           surface.write(bounds, row, 2, "#{key_text} #{name_text}")
           surface.write(bounds, row, 25, value_text)
         end

@@ -22,44 +22,24 @@ module EbookReader
 
       # Enhanced popup navigation handlers for direct key routing
       def handle_popup_navigation(key)
-        popup_menu = EbookReader::Domain::Selectors::ReaderSelectors.popup_menu(@state)
-        return :pass unless popup_menu
-
-        result = popup_menu.handle_key(key)
-
-        if result && result[:type] == :selection_change
+        with_popup_menu do |menu|
+          res = menu.handle_key(key)
+          next :pass unless res
           :handled
-        else
-          :pass
         end
       end
 
       def handle_popup_action_key(key)
-        popup_menu = EbookReader::Domain::Selectors::ReaderSelectors.popup_menu(@state)
-        return :pass unless popup_menu
-
-        result = popup_menu.handle_key(key)
-        if result && result[:type] == :action
-          ui_controller = @dependencies.resolve(:ui_controller)
-          ui_controller.handle_popup_action(result)
-          :handled
-        else
-          :pass
+        with_popup_menu do |menu|
+          res = menu.handle_key(key) || { type: :noop }
+          process_popup_result(res)
         end
       end
 
       def handle_popup_cancel(key)
-        popup_menu = EbookReader::Domain::Selectors::ReaderSelectors.popup_menu(@state)
-        return :pass unless popup_menu
-
-        result = popup_menu.handle_key(key)
-        if result && result[:type] == :cancel
-          ui_controller = @dependencies.resolve(:ui_controller)
-          ui_controller.cleanup_popup_state
-          ui_controller.switch_mode(:read)
-          :handled
-        else
-          :pass
+        with_popup_menu do |menu|
+          res = menu.handle_key(key) || { type: :noop }
+          process_popup_result(res)
         end
       end
 
@@ -69,22 +49,35 @@ module EbookReader
 
         ui_controller = @dependencies.resolve(:ui_controller)
         keys.each do |key|
-          result = popup_menu.handle_key(key)
-          next unless result
-
-          case result[:type]
-          when :selection_change
-            # Selection change handled by popup itself
-          when :action
-            ui_controller.handle_popup_action(result)
-          when :cancel
-            ui_controller.cleanup_popup_state
-            ui_controller.switch_mode(:read)
-          end
+          res = popup_menu.handle_key(key) || { type: :noop }
+          process_popup_result(res, ui_controller)
         end
       end
 
       private
+
+      def with_popup_menu
+        popup_menu = EbookReader::Domain::Selectors::ReaderSelectors.popup_menu(@state)
+        return :pass unless popup_menu
+        yield popup_menu
+      end
+
+      def process_popup_result(result, ui_controller = @dependencies.resolve(:ui_controller))
+        case result[:type]
+        when :selection_change
+          # Selection change handled by popup itself
+          :handled
+        when :action
+          ui_controller.handle_popup_action(result)
+          :handled
+        when :cancel
+          ui_controller.cleanup_popup_state
+          ui_controller.switch_mode(:read)
+          :handled
+        else
+          :pass
+        end
+      end
 
       def setup_consolidated_reader_bindings(reader_controller)
         # Register reader mode bindings using Input::CommandFactory patterns
@@ -104,15 +97,18 @@ module EbookReader
         bindings.merge!(Input::CommandFactory.reader_control_commands)
 
         # When sidebar is visible, redirect up/down/enter to sidebar handlers
-        Input::KeyDefinitions::NAVIGATION[:down].each do |key|
+        nav_down = Input::KeyDefinitions::NAVIGATION[:down]
+        nav_down.each do |key|
           bindings[key] = :conditional_down
         end
 
-        Input::KeyDefinitions::NAVIGATION[:up].each do |key|
+        nav_up = Input::KeyDefinitions::NAVIGATION[:up]
+        nav_up.each do |key|
           bindings[key] = :conditional_up
         end
 
-        Input::KeyDefinitions::ACTIONS[:confirm].each do |key|
+        confirm_keys = Input::KeyDefinitions::ACTIONS[:confirm]
+        confirm_keys.each do |key|
           bindings[key] = :conditional_select
         end
 
@@ -142,14 +138,18 @@ module EbookReader
 
         # Exit TOC
         bindings['t'] = :exit_toc
-        Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :exit_toc }
+        cancel_keys = Input::KeyDefinitions::ACTIONS[:cancel]
+        cancel_keys.each { |k| bindings[k] = :exit_toc }
 
         # Navigation
-        Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :toc_down }
-        Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :toc_up }
+        nav_down = Input::KeyDefinitions::NAVIGATION[:down]
+        nav_up   = Input::KeyDefinitions::NAVIGATION[:up]
+        nav_down.each { |k| bindings[k] = :toc_down }
+        nav_up.each   { |k| bindings[k] = :toc_up }
 
         # Selection
-        Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :toc_select }
+        confirm_keys = Input::KeyDefinitions::ACTIONS[:confirm]
+        confirm_keys.each { |k| bindings[k] = :toc_select }
 
         @dispatcher.register_mode(:toc, bindings)
       end
@@ -159,14 +159,18 @@ module EbookReader
 
         # Exit bookmarks
         bindings['B'] = :exit_bookmarks
-        Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :exit_bookmarks }
+        cancel_keys = Input::KeyDefinitions::ACTIONS[:cancel]
+        cancel_keys.each { |k| bindings[k] = :exit_bookmarks }
 
         # Navigation
-        Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :bookmark_down }
-        Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :bookmark_up }
+        nav_down = Input::KeyDefinitions::NAVIGATION[:down]
+        nav_up   = Input::KeyDefinitions::NAVIGATION[:up]
+        nav_down.each { |k| bindings[k] = :bookmark_down }
+        nav_up.each   { |k| bindings[k] = :bookmark_up }
 
         # Actions
-        Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :bookmark_select }
+        confirm_keys = Input::KeyDefinitions::ACTIONS[:confirm]
+        confirm_keys.each { |k| bindings[k] = :bookmark_select }
         bindings['d'] = :delete_selected_bookmark
 
         @dispatcher.register_mode(:bookmarks, bindings)
@@ -180,24 +184,29 @@ module EbookReader
       def register_annotation_editor_bindings_new(_reader_controller)
         bindings = {}
 
-        # Cancel editor
-        bindings["\e"] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.cancel
+        cancel_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.cancel
+        save_cmd   = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
+        back_cmd   = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.backspace
+        enter_cmd  = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.enter
+        insert_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.insert_char
 
-        # Save: support Ctrl+S (\x13) and 'S'
-        bindings["\x13"] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
-        bindings['S'] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
+        # Cancel editor
+        bindings["\e"] = cancel_cmd
+
+        # Save: Ctrl+S and 'S'
+        bindings["\x13"] = save_cmd
+        bindings['S'] = save_cmd
 
         # Backspace (both variants)
-        bindings["\x7F"] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.backspace
-        bindings["\b"]   = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.backspace
+        bindings["\x7F"] = back_cmd
+        bindings["\b"]   = back_cmd
 
         # Enter (CR and LF)
-        EbookReader::Input::KeyDefinitions::ACTIONS[:confirm].each do |k|
-          bindings[k] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.enter
-        end
+        confirm_keys = EbookReader::Input::KeyDefinitions::ACTIONS[:confirm]
+        confirm_keys.each { |k| bindings[k] = enter_cmd }
 
         # Default: insert printable characters
-        bindings[:__default__] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.insert_char
+        bindings[:__default__] = insert_cmd
 
         @dispatcher.register_mode(:annotation_editor, bindings)
       end

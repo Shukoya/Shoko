@@ -44,15 +44,19 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
   - Rendering Surface: `Components::Surface` abstracts writing to Terminal.
 - Application
   - Controllers: `ReaderController` orchestrates rendering and loop; `UIController` manages modes/overlays; `StateController` handles persistence; `InputController` configures the dispatcher. Navigation is handled exclusively by the domain `NavigationService` via input commands.
+  - Input: Popup handling is centralized via `with_popup_menu` and `process_popup_result` helpers to avoid repeated conditional branches for navigation/action/cancel.
   - UnifiedApplication: decides between menu and reader modes.
 - Domain
   - Services: Navigation, PageCalculator, Selection, Coordinate, Layout, Clipboard, Annotation, Library.
+  - NavigationService: uses `dynamic_route_exec` to route dynamic vs absolute strategies and small updater helpers to apply split/alignment updates without repeated conditionals.
+  - DocumentService: uses `cached_fetch` and `with_chapter` helpers to consolidate caching and chapter access.
   - Actions/Selectors: explicit state transitions and read-only projections.
   - Commands: Navigation/Application/Sidebar command objects for input.
 - Infrastructure
   - StateStore/ObserverStateStore, EventBus, Terminal (buffered output/input/mouse), Logger, DocumentService, Managers (recent files).
   - Repositories persist via domain file stores: `Storage::BookmarkFileStore`, `Storage::ProgressFileStore`, `Storage::AnnotationFileStore`.
   - LibraryService wraps cached-library enumeration and is resolved via DI for components (no direct Infra access in components).
+  - Debug helpers: `EPUBFinder` and `DirectoryScanner` provide `debug?`/`warn_debug` helpers to keep debug logging free of repeated conditionals.
 
 ## Data Flow
 
@@ -68,6 +72,17 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 - New Domain logic: implement a service; expose actions/selectors as needed.
 - New File format: implement a document parser and plug into `DocumentService`.
   - DocumentService is created via the DI `:document_service_factory` per book (no container creation inside the service).
+
+### Internal Service Helpers
+
+- For complex domain services that need small, focused helpers, place them under
+  `lib/ebook_reader/domain/services/internal/` and do not register them in DI.
+  These helpers are implementation details of a facade service (e.g.,
+  `PageCalculatorService`) and must not be resolved by components or controllers.
+  Example helpers:
+  - `Internal::DynamicPageMapBuilder` — builds dynamic pagination page data.
+  - `Internal::AbsolutePageMapBuilder` — computes absolute page counts per chapter.
+  - `Internal::ChapterCache` — local wrapped-lines caching used by `WrappingService`.
 
 ## Performance Considerations
 

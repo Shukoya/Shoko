@@ -13,6 +13,7 @@ module EbookReader
 
       def initialize(selection_range, available_actions = nil, coordinate_service = nil,
                      clipboard_service = nil)
+        super()
         @coordinate_service = coordinate_service
         @clipboard_service = clipboard_service
 
@@ -64,9 +65,6 @@ module EbookReader
           execute_selected_action
         elsif Input::KeyDefinitions::ACTIONS[:cancel].include?(key)
           { type: :cancel }
-        else
-          # Explicitly return nil for unhandled keys to allow fallthrough
-          nil
         end
       end
 
@@ -149,14 +147,21 @@ module EbookReader
         action = @available_actions[index]
 
         # Colors
-        bg = is_selected ? POPUP_BG_SELECTED : POPUP_BG_DEFAULT
-        fg = is_selected ? POPUP_FG_SELECTED : POPUP_FG_DEFAULT
+        if is_selected
+          bg = POPUP_BG_SELECTED
+          fg = POPUP_FG_SELECTED
+          sel_icon = '❯'
+        else
+          bg = POPUP_BG_DEFAULT
+          fg = POPUP_FG_DEFAULT
+          sel_icon = ' '
+        end
 
         # Background
         surface.write(bounds, item_y, @x, "#{bg}#{' ' * @width}#{Terminal::ANSI::RESET}")
 
         # Content with icon
-        icon = action[:icon] || (is_selected ? '❯' : ' ')
+        icon = action[:icon] || sel_icon
         line_text = " #{icon} #{item} ".ljust(@width)
         surface.write(bounds, item_y, @x, "#{bg}#{fg}#{line_text}#{Terminal::ANSI::RESET}")
       end

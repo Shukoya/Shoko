@@ -55,20 +55,14 @@ module EbookReader
       # @return [Array<String>] Array of content lines
       def get_page_content(chapter_index, page_offset, lines_per_page = 20)
         cache_key = "#{chapter_index}_#{page_offset}_#{lines_per_page}"
-
-        return @content_cache[cache_key] if @content_cache.key?(cache_key)
-
-        chapter = get_chapter(chapter_index)
-        return [] unless chapter
-
-        lines = chapter.lines || []
-        start_line = page_offset * lines_per_page
-        end_line = start_line + lines_per_page - 1
-
-        content = lines[start_line..end_line] || []
-        @content_cache[cache_key] = content
-
-        content
+        cached_fetch(cache_key, default: []) do
+          with_chapter(chapter_index, default: []) do |chapter|
+            lines = chapter.lines || []
+            start_line = page_offset * lines_per_page
+            end_line = start_line + lines_per_page - 1
+            lines[start_line..end_line] || []
+          end
+        end
       end
 
       # Get wrapped content for specific page
@@ -80,22 +74,15 @@ module EbookReader
       # @return [Array<String>] Array of wrapped content lines
       def get_wrapped_page_content(chapter_index, page_offset, column_width, lines_per_page = 20)
         cache_key = "wrapped_#{chapter_index}_#{page_offset}_#{column_width}_#{lines_per_page}"
-
-        return @content_cache[cache_key] if @content_cache.key?(cache_key)
-
-        chapter = get_chapter(chapter_index)
-        return [] unless chapter
-
-        lines = chapter.lines || []
-        wrapped_lines = wrap_lines(lines, column_width)
-
-        start_line = page_offset * lines_per_page
-        end_line = start_line + lines_per_page - 1
-
-        content = wrapped_lines[start_line..end_line] || []
-        @content_cache[cache_key] = content
-
-        content
+        cached_fetch(cache_key, default: []) do
+          with_chapter(chapter_index, default: []) do |chapter|
+            lines = chapter.lines || []
+            wrapped_lines = wrap_lines(lines, column_width)
+            start_line = page_offset * lines_per_page
+            end_line = start_line + lines_per_page - 1
+            wrapped_lines[start_line..end_line] || []
+          end
+        end
       end
 
       # Get total wrapped lines for chapter
@@ -105,19 +92,13 @@ module EbookReader
       # @return [Integer] Total wrapped lines
       def get_chapter_wrapped_line_count(chapter_index, column_width)
         cache_key = "line_count_#{chapter_index}_#{column_width}"
-
-        return @content_cache[cache_key] if @content_cache.key?(cache_key)
-
-        chapter = get_chapter(chapter_index)
-        return 0 unless chapter
-
-        lines = chapter.lines || []
-        wrapped_lines = wrap_lines(lines, column_width)
-
-        count = wrapped_lines.size
-        @content_cache[cache_key] = count
-
-        count
+        cached_fetch(cache_key, default: 0) do
+          with_chapter(chapter_index, default: 0) do |chapter|
+            lines = chapter.lines || []
+            wrapped_lines = wrap_lines(lines, column_width)
+            wrapped_lines.size
+          end
+        end
       end
 
       # Clear content cache
@@ -145,6 +126,19 @@ module EbookReader
 
         # Minimal fallback for tests/dev without DI
         lines
+      end
+
+      def cached_fetch(key, default: nil)
+        return @content_cache[key] if @content_cache.key?(key)
+        value = yield
+        @content_cache[key] = value
+        value
+      end
+
+      def with_chapter(index, default: nil)
+        chapter = get_chapter(index)
+        return default unless chapter
+        yield chapter
       end
     end
 

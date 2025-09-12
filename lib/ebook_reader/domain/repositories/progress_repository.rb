@@ -111,9 +111,10 @@ module EbookReader
         # @return [Time, nil] Last update timestamp, or nil if no progress exists
         def last_updated_at(book_path)
           progress = find_by_book_path(book_path)
-          return nil unless progress&.timestamp
+          ts = progress&.timestamp
+          return nil unless ts
 
-          Time.parse(progress.timestamp)
+          Time.parse(ts)
         rescue StandardError => e
           handle_storage_error(e, "getting last update time for #{book_path}")
         end
@@ -125,7 +126,8 @@ module EbookReader
         def recent_books(limit: nil)
           all_progress = find_all
           sorted_paths = all_progress.sort_by do |_path, progress|
-            progress.timestamp ? Time.parse(progress.timestamp) : Time.at(0)
+            ts = progress.timestamp
+            ts ? Time.parse(ts) : Time.at(0)
           end.reverse.map(&:first)
 
           limit ? sorted_paths.take(limit) : sorted_paths
@@ -142,19 +144,18 @@ module EbookReader
         def save_if_further(book_path, chapter_index:, line_offset:)
           current_progress = find_by_book_path(book_path)
 
-          # Always save if no current progress
-          unless current_progress
-            return save_for_book(book_path, chapter_index: chapter_index,
-                                            line_offset: line_offset)
-          end
+          should_save = if current_progress.nil?
+                          true
+                        else
+                          cur_ch = current_progress.chapter_index
+                          cur_off = current_progress.line_offset
+                          chapter_index > cur_ch ||
+                            (chapter_index == cur_ch && line_offset > cur_off)
+                        end
 
-          # Compare positions
-          if chapter_index > current_progress.chapter_index ||
-             (chapter_index == current_progress.chapter_index && line_offset > current_progress.line_offset)
-            save_for_book(book_path, chapter_index: chapter_index, line_offset: line_offset)
-          else
-            current_progress
-          end
+          return save_for_book(book_path, chapter_index: chapter_index, line_offset: line_offset) if should_save
+
+          current_progress
         rescue StandardError => e
           handle_storage_error(e, "conditionally saving progress for #{book_path}")
         end

@@ -20,23 +20,29 @@ module EbookReader
       def extract_metadata
         metadata = {}
         if (meta_elem = @opf.elements['//metadata'])
-          raw_title = meta_elem.elements['*[local-name()="title"]']&.text
+          elems = meta_elem.elements
+
+          raw_title = elems['*[local-name()="title"]']&.text
           metadata[:title] = HTMLProcessor.clean_html(raw_title.to_s).strip if raw_title
-          if (lang = meta_elem.elements['*[local-name()="language"]']&.text)
-            metadata[:language] = lang.include?('_') ? lang : "#{lang}_#{lang.upcase}"
+
+          if (lang_text = elems['*[local-name()="language"]']&.text)
+            metadata[:language] = lang_text.include?('_') ? lang_text : "#{lang_text}_#{lang_text.upcase}"
           end
 
           # dc:creator (authors) — may be multiple
           authors = []
-          meta_elem.elements.each('*[local-name()="creator"]') do |creator|
+          elems.each('*[local-name()="creator"]') do |creator|
             txt = HTMLProcessor.clean_html(creator.text.to_s).strip
             authors << txt unless txt.empty?
           end
           metadata[:authors] = authors unless authors.empty?
 
           # dc:date — parse year if present
-          if (date_elem = meta_elem.elements['*[local-name()="date"]']) && date_elem.text && (m = date_elem.text.to_s.match(/(\d{4})/))
-            metadata[:year] = m[1]
+          if (date_elem = elems['*[local-name()="date"]'])
+            date_text = date_elem.text.to_s
+            if !date_text.empty? && (m = date_text.match(/(\d{4})/))
+              metadata[:year] = m[1]
+            end
           end
         end
         metadata
@@ -45,8 +51,9 @@ module EbookReader
       def build_manifest_map
         manifest = {}
         @opf.elements.each('//manifest/item') do |item|
-          id = item.attributes['id']
-          href = item.attributes['href']
+          attrs = item.attributes
+          id = attrs['id']
+          href = attrs['href']
           manifest[id] = CGI.unescape(href) if id && href
         end
         manifest
@@ -80,16 +87,12 @@ module EbookReader
         return nil unless ncx_href
 
         path = join_path(ncx_href)
-        if @zip
-          @zip.find_entry(path) ? path : nil
-        else
-          File.exist?(path) ? path : nil
-        end
+        entry_exists?(path) ? path : nil
       end
 
       def extract_titles_from_ncx(ncx_path)
         chapter_titles = {}
-        ncx_content = @zip ? @zip.read(ncx_path) : File.read(ncx_path)
+        ncx_content = read_entry(ncx_path)
         ncx = REXML::Document.new(ncx_content)
 
         ncx.elements.each('//navMap/navPoint/navLabel/text') do |label|
@@ -110,11 +113,12 @@ module EbookReader
 
       def process_itemref(itemref, chapter_num, spine_context)
         idref = itemref.attributes['idref']
-        return chapter_num unless valid_itemref?(idref, spine_context.manifest)
+        manifest = spine_context.manifest
+        return chapter_num unless valid_itemref?(idref, manifest)
 
-        href = spine_context.manifest[idref]
+        href = manifest[idref]
         file_path = join_path(href)
-        exists = @zip ? @zip.find_entry(file_path) : File.exist?(file_path)
+        exists = entry_exists?(file_path)
         return chapter_num unless exists
 
         title = spine_context.chapter_titles[href]
@@ -128,6 +132,18 @@ module EbookReader
 
       def join_path(href)
         File.join(@opf_dir, href).sub(%r{^\./}, '')
+      end
+
+      def use_zip?
+        !@zip.nil?
+      end
+
+      def entry_exists?(path)
+        use_zip? ? !!@zip.find_entry(path) : File.exist?(path)
+      end
+
+      def read_entry(path)
+        use_zip? ? @zip.read(path) : File.read(path)
       end
     end
   end

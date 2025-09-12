@@ -8,12 +8,13 @@ module EbookReader
     module Layouts
       # Simple vertical layout that stacks children top-to-bottom
       # Respects preferred heights; assigns remaining space to first flexible child
-      class Vertical
+      class Vertical < BaseComponent
         def initialize(children)
+          super(nil)
           @children = children
         end
 
-        def render(surface, bounds)
+        def do_render(surface, bounds)
           return if @children.nil? || @children.empty?
 
           # Calculate heights using new contract
@@ -52,21 +53,16 @@ module EbookReader
               # Fill remaining space (calculated in second pass)
               fill_children << i
               heights[i] = nil
-            when :flexible
-              # Use minimum space for now, will expand if needed
-              heights[i] = 0
             else
+              # :flexible and any unknown values default to minimum space
               heights[i] = 0
             end
           end
 
           # Second pass: distribute remaining space to fill children
-          if fill_children.any? && remaining.positive?
-            fill_height = remaining / fill_children.size
-            fill_children.each { |i| heights[i] = fill_height }
-          elsif fill_children.any?
-            # No remaining space for fill children
-            fill_children.each { |i| heights[i] = 0 }
+          if fill_children.any?
+            target_height = remaining.positive? ? (remaining / fill_children.size) : 0
+            fill_children.each { |i| heights[i] = target_height }
           end
 
           heights

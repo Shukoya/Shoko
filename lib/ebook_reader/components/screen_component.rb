@@ -8,6 +8,7 @@ module EbookReader
     # Provides a unified interface for screen rendering
     class ScreenComponent < BaseComponent
       def initialize(screen_manager)
+        super()
         @screen_manager = screen_manager
       end
 

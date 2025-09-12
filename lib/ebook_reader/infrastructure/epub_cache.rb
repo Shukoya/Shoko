@@ -108,7 +108,7 @@ module EbookReader
       def locate_manifest
         mp = File.join(@cache_dir, 'manifest.msgpack')
         js = File.join(@cache_dir, 'manifest.json')
-        if File.exist?(mp) && msgpack_available?
+        if File.exist?(mp) && EbookReader::Infrastructure::SerializerSupport.msgpack_available?
           [mp, EbookReader::Infrastructure::MessagePackSerializer.new]
         elsif File.exist?(js)
           [js, EbookReader::Infrastructure::JSONSerializer.new]
@@ -118,14 +118,7 @@ module EbookReader
       end
 
       def select_serializer
-        msgpack_available? ? EbookReader::Infrastructure::MessagePackSerializer.new : EbookReader::Infrastructure::JSONSerializer.new
-      end
-
-      def msgpack_available?
-        require 'msgpack'
-        true
-      rescue LoadError
-        false
+        EbookReader::Infrastructure::SerializerSupport.msgpack_available? ? EbookReader::Infrastructure::MessagePackSerializer.new : EbookReader::Infrastructure::JSONSerializer.new
       end
 
       def to_manifest(h)

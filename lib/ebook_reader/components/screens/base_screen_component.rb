@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../base_component'
+require_relative '../render_style'
 
 module EbookReader
   module Components
@@ -20,11 +21,11 @@ module EbookReader
         protected
 
         def write_header(surface, bounds, title, help_text = nil)
+          w = bounds.width
           surface.write(bounds, 1, 2, title)
           return unless help_text
 
-          surface.write(bounds, 1, [bounds.width - help_text.length - 2, bounds.width / 2].max,
-                        help_text)
+          surface.write(bounds, 1, [w - help_text.length - 2, w / 2].max, help_text)
         end
 
         def write_footer(surface, bounds, text)
@@ -38,12 +39,8 @@ module EbookReader
         end
 
         def write_selection_pointer(surface, bounds, row, selected = true)
-          if selected
-            surface.write(bounds, row, 2,
-                          "#{EbookReader::Constants::UIConstants::SELECTION_POINTER_COLOR}#{EbookReader::Constants::UIConstants::SELECTION_POINTER}#{Terminal::ANSI::RESET}")
-          else
-            surface.write(bounds, row, 2, '  ')
-          end
+          text = selected ? EbookReader::Components::RenderStyle.selection_pointer_colored : '  '
+          surface.write(bounds, row, 2, text)
         end
       end
     end

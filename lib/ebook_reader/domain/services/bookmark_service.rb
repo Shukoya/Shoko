@@ -15,18 +15,16 @@ module EbookReader
         # @return [Bookmark] Created bookmark
         def add_bookmark(text_snippet = nil)
           current_state = @state_store.current_state
-          book_path = current_book_path
-          return nil unless book_path
-
-          chapter_index = current_state.dig(:reader, :current_chapter) || 0
-          line_offset = get_current_line_offset(current_state)
-
-          bookmark = @bookmark_repository.add_for_book(
-            book_path,
-            chapter_index: chapter_index,
-            line_offset: line_offset,
-            text_snippet: text_snippet || generate_text_snippet(current_state)
-          )
+          bookmark = with_book_path(default: nil) do |book_path|
+            chapter_index = current_state.dig(:reader, :current_chapter) || 0
+            line_offset = get_current_line_offset(current_state)
+            @bookmark_repository.add_for_book(
+              book_path,
+              chapter_index: chapter_index,
+              line_offset: line_offset,
+              text_snippet: text_snippet || generate_text_snippet(current_state)
+            )
+          end
 
           refresh_bookmarks
 
@@ -45,10 +43,7 @@ module EbookReader
         #
         # @param bookmark [Bookmark] Bookmark to remove
         def remove_bookmark(bookmark)
-          book_path = current_book_path
-          return unless book_path
-
-          @bookmark_repository.delete_for_book(book_path, bookmark)
+          with_book_path { |book_path| @bookmark_repository.delete_for_book(book_path, bookmark) }
           refresh_bookmarks
 
           # Publish domain event
@@ -65,10 +60,7 @@ module EbookReader
         #
         # @return [Array<Bookmark>] Array of bookmarks
         def get_bookmarks
-          book_path = current_book_path
-          return [] unless book_path
-
-          @bookmark_repository.find_by_book_path(book_path)
+          with_book_path(default: []) { |book_path| @bookmark_repository.find_by_book_path(book_path) }
         end
 
         # Navigate to bookmark
@@ -95,13 +87,11 @@ module EbookReader
         # @return [Boolean]
         def current_position_bookmarked?
           current_state = @state_store.current_state
-          book_path = current_book_path
-          return false unless book_path
-
-          current_chapter = current_state.dig(:reader, :current_chapter) || 0
-          line_offset = get_current_line_offset(current_state)
-
-          @bookmark_repository.exists_at_position?(book_path, current_chapter, line_offset)
+          with_book_path(default: false) do |book_path|
+            current_chapter = current_state.dig(:reader, :current_chapter) || 0
+            line_offset = get_current_line_offset(current_state)
+            @bookmark_repository.exists_at_position?(book_path, current_chapter, line_offset)
+          end
         end
 
         # Get bookmark at current position (if any)
@@ -109,13 +99,11 @@ module EbookReader
         # @return [Bookmark, nil]
         def bookmark_at_current_position
           current_state = @state_store.current_state
-          book_path = current_book_path
-          return nil unless book_path
-
-          current_chapter = current_state.dig(:reader, :current_chapter) || 0
-          line_offset = get_current_line_offset(current_state)
-
-          @bookmark_repository.find_at_position(book_path, current_chapter, line_offset)
+          with_book_path(default: nil) do |book_path|
+            current_chapter = current_state.dig(:reader, :current_chapter) || 0
+            line_offset = get_current_line_offset(current_state)
+            @bookmark_repository.find_at_position(book_path, current_chapter, line_offset)
+          end
         end
 
         # Toggle bookmark at current position
@@ -147,7 +135,13 @@ module EbookReader
           @domain_event_bus = resolve(:domain_event_bus)
         end
 
-        private
+      private
+
+        def with_book_path(default: nil)
+          path = current_book_path
+          return default unless path
+          yield(path)
+        end
 
         def get_current_line_offset(state)
           # Get the current line position depending on view mode

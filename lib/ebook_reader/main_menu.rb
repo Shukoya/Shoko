@@ -9,6 +9,7 @@ require_relative 'input/dispatcher'
 require_relative 'components/main_menu_component'
 require_relative 'components/surface'
 require_relative 'components/rect'
+require_relative 'application/frame_coordinator'
 
 module EbookReader
   # Main menu (LazyVim style)
@@ -34,9 +35,10 @@ module EbookReader
     def run
       @terminal_service.setup
       @scanner.load_cached
-      @filtered_epubs = @scanner.epubs || []
-      @main_menu_component.browse_screen.filtered_epubs = @filtered_epubs
-      @scanner.start_scan if @scanner.epubs.empty?
+      epubs = @scanner.epubs || []
+      @filtered_epubs = epubs
+      @main_menu_component.browse_screen.filtered_epubs = epubs
+      @scanner.start_scan if epubs.empty?
 
       main_loop
     rescue Interrupt
@@ -127,17 +129,20 @@ module EbookReader
         current = (EbookReader::Domain::Selectors::MenuSelectors.search_query(@state) || '').to_s
         cursor = (@state.get(%i[menu search_cursor]) || current.length).to_i
         if cursor.positive?
-          before = current[0, cursor - 1] || ''
+          prev = cursor - 1
+          before = current[0, prev] || ''
           after  = current[cursor..] || ''
           @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
                             search_query: before + after,
-                            search_cursor: cursor - 1
+                            search_cursor: prev
                           ))
         end
-      elsif @state.get(%i[menu file_input]).length.positive?
+      else
         file_input = (EbookReader::Domain::Selectors::MenuSelectors.file_input(@state) || '').to_s
-        new_val = file_input.length.positive? ? file_input[0...-1] : file_input
-        @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(file_input: new_val))
+        if file_input.length.positive?
+          new_val = file_input[0...-1]
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(file_input: new_val))
+        end
       end
       @main_menu_component.open_file_screen.input = @state.get(%i[menu file_input])
     end
@@ -170,8 +175,6 @@ module EbookReader
       case EbookReader::Domain::Selectors::MenuSelectors.mode(@state)
       when :menu
         cleanup_and_exit(0, '')
-      when :browse, :settings, :annotations, :annotation_editor, :open_file
-        switch_to_mode(:menu)
       else
         switch_to_mode(:menu)
       end
@@ -186,8 +189,6 @@ module EbookReader
       case EbookReader::Domain::Selectors::MenuSelectors.mode(@state)
       when :browse
         handle_delete if respond_to?(:handle_delete)
-      else
-        # No-op for other modes
       end
     end
 
@@ -204,6 +205,8 @@ module EbookReader
       # Use dependency injection for services
       @scanner = @dependencies.resolve(:library_scanner)
       @terminal_service = @dependencies.resolve(:terminal_service)
+      @frame_coordinator = Application::FrameCoordinator.new(@dependencies)
+      @render_pipeline = Application::RenderPipeline.new(@dependencies)
       setup_input_dispatcher
     end
 
@@ -216,9 +219,10 @@ module EbookReader
     # Library mode helpers
     def library_up
       current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
-      @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [
-        current - 1, 0
-      ].max))
+      @state.dispatch(
+        EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: (current - 1).clamp(0,
+                                                                                                current))
+      )
     end
 
     def library_down
@@ -229,9 +233,10 @@ module EbookReader
               end
       max_index = [items.length - 1, 0].max
       current = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
-      @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: [
-        current + 1, max_index
-      ].min))
+      @state.dispatch(
+        EbookReader::Domain::Actions::UpdateMenuAction.new(browse_selected: (current + 1).clamp(0,
+                                                                                                max_index))
+      )
     end
 
     def library_select
@@ -291,25 +296,15 @@ module EbookReader
     end
 
     def read_input_keys
-      key = @terminal_service.read_key_blocking
-      keys = [key]
-      collect_additional_keys(keys)
-      keys
-    end
-
-    def collect_additional_keys(keys)
-      while (extra = @terminal_service.read_key)
-        keys << extra
-        break if keys.size > 10
-      end
+      @terminal_service.read_keys_blocking(limit: 10)
     end
 
     def process_scan_results_if_available
       return unless (epubs = @scanner.process_results)
 
       @scanner.epubs = epubs
-      @filtered_epubs = @scanner.epubs
-      @main_menu_component.browse_screen.filtered_epubs = @scanner.epubs
+      @filtered_epubs = epubs
+      @main_menu_component.browse_screen.filtered_epubs = epubs
     end
 
     def navigate_browse(key)
@@ -317,14 +312,9 @@ module EbookReader
     end
 
     def draw_screen
-      height, width = @terminal_service.size
-      @terminal_service.start_frame
-
-      surface = @terminal_service.create_surface
-      bounds = Components::Rect.new(x: 1, y: 1, width: width, height: height)
-      @main_menu_component.render(surface, bounds)
-
-      @terminal_service.end_frame
+      @frame_coordinator.with_frame do |surface, bounds, _w, _h|
+        @render_pipeline.render_component(surface, bounds, @main_menu_component)
+      end
     end
 
     def setup_input_dispatcher
@@ -347,76 +337,91 @@ module EbookReader
       register_annotation_editor_bindings
     end
 
+    # Small helpers to reduce repeated binding patterns
+    def add_back_bindings(bindings)
+      keys = Array(Input::KeyDefinitions::ACTIONS[:quit]) + Array(Input::KeyDefinitions::ACTIONS[:cancel])
+      keys.each { |k| bindings[k] = :back_to_menu }
+      bindings
+    end
+
+    def add_confirm_bindings(bindings, action)
+      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = action }
+      bindings
+    end
+
+    def add_nav_up_down(bindings, up_action, down_action)
+      Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = up_action }
+      Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = down_action }
+      bindings
+    end
+
     # Annotation helpers (public so dispatcher can invoke explicitly)
     def open_selected_annotation
-      screen = @main_menu_component.annotations_screen
-      annotation = screen.current_annotation
-      path = screen.current_book_path
-      return unless annotation && path
+      with_selected_annotation do |ann, path|
+        # Prepare a pending jump for the reader to apply on startup
+        @state.update({
+                        %i[reader book_path] => path,
+                        %i[reader pending_jump] => {
+                          chapter_index: ann[:chapter_index],
+                          selection_range: ann[:range] || nil,
+                          annotation: ann,
+                        },
+                      })
 
-      # Prepare a pending jump for the reader to apply on startup
-      @state.update({
-                      %i[reader book_path] => path,
-                      %i[reader pending_jump] => {
-                        chapter_index: annotation[:chapter_index],
-                        selection_range: annotation[:range] || nil,
-                        annotation: annotation,
-                      },
-                    })
-
-      run_reader(path)
+        run_reader(path)
+      end
     end
 
     def open_selected_annotation_for_edit
-      screen = @main_menu_component.annotations_screen
-      annotation = screen.current_annotation
-      path = screen.current_book_path
-      return unless annotation && path
-
-      # Prepare in-menu editor state
-      @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                        selected_annotation: annotation,
-                        selected_annotation_book: path,
-                        annotation_edit_text: annotation[:note] || annotation['note'] || '',
-                        annotation_edit_cursor: (annotation[:note] || annotation['note'] || '').to_s.length
-                      ))
-      switch_to_mode(:annotation_editor)
+      with_selected_annotation do |ann, path|
+        # Prepare in-menu editor state
+        note_text = ann[:note] || ann['note'] || ''
+        @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
+                          selected_annotation: ann,
+                          selected_annotation_book: path,
+                          annotation_edit_text: note_text,
+                          annotation_edit_cursor: note_text.to_s.length
+                        ))
+        switch_to_mode(:annotation_editor)
+      end
     end
 
     def delete_selected_annotation
-      screen = @main_menu_component.annotations_screen
-      annotation = screen.current_annotation
-      path = screen.current_book_path
-      return unless annotation && path && annotation[:id]
+      with_selected_annotation do |ann, path|
+        ann_id = hid(ann)
+        return unless ann_id
 
-      service = @dependencies.resolve(:annotation_service)
-      begin
-        service.delete(path, annotation[:id])
-        # Refresh preloaded mapping for list view
-        @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(annotations_all: service.list_all))
-      rescue StandardError => e
-        # Log error; do not fallback to direct store
+        service = @dependencies.resolve(:annotation_service)
         begin
-          @dependencies.resolve(:logger).error('Failed to delete annotation', error: e.message,
-                                                                              path: path)
-        rescue StandardError
-          # no-op
+          service.delete(path, ann_id)
+          # Refresh preloaded mapping for list view
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(annotations_all: service.list_all))
+        rescue StandardError => e
+          # Log error; do not fallback to direct store
+          begin
+            @dependencies.resolve(:logger).error('Failed to delete annotation', error: e.message,
+                                                                                path: path)
+          rescue StandardError
+            # no-op
+          end
         end
-      end
 
-      # Refresh UI
-      screen.refresh_data
+        # Refresh UI
+        @main_menu_component.annotations_screen.refresh_data
+      end
     end
 
     def save_current_annotation_edit
       ann = @state.get(%i[menu selected_annotation]) || {}
       path = @state.get(%i[menu selected_annotation_book])
       text = @state.get(%i[menu annotation_edit_text]) || ''
-      return unless path && ann && (ann[:id] || ann['id'])
+      return unless path && ann
+      ann_id = hid(ann)
+      return unless ann_id
 
       service = @dependencies.resolve(:annotation_service)
       begin
-        service.update(path, ann[:id] || ann['id'], text)
+        service.update(path, ann_id, text)
         # Refresh all annotations mapping for list view
         @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(annotations_all: service.list_all))
       rescue StandardError => e
@@ -440,22 +445,24 @@ module EbookReader
     def register_menu_bindings
       bindings = {}
       # Up/Down navigation via domain menu commands
-      Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :menu_up }
-      Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :menu_down }
+      nav_up = Input::KeyDefinitions::NAVIGATION[:up]
+      nav_down = Input::KeyDefinitions::NAVIGATION[:down]
+      confirm_keys = Input::KeyDefinitions::ACTIONS[:confirm]
+      quit_keys = Input::KeyDefinitions::ACTIONS[:quit]
+      nav_up.each { |k| bindings[k] = :menu_up }
+      nav_down.each { |k| bindings[k] = :menu_down }
       # Select current item
-      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :menu_select }
+      confirm_keys.each { |k| bindings[k] = :menu_select }
       # Quit application from main menu
-      Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :menu_quit }
+      quit_keys.each { |k| bindings[k] = :menu_quit }
       @dispatcher.register_mode(:menu, bindings)
     end
 
     def register_browse_bindings
       bindings = {}
-      Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :browse_up }
-      Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :browse_down }
-      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :browse_select }
-      Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :back_to_menu }
-      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :back_to_menu }
+      add_nav_up_down(bindings, :browse_up, :browse_down)
+      add_confirm_bindings(bindings, :browse_select)
+      add_back_bindings(bindings)
       # Start search with '/'
       bindings['/'] = :start_search
       @dispatcher.register_mode(:browse, bindings)
@@ -467,11 +474,14 @@ module EbookReader
                                                            cursor_field: :search_cursor)
 
       # Navigation of filtered results via arrow keys only (not vi keys)
-      ["\e[A", "\eOA"].each { |k| bindings[k] = :browse_up }
-      ["\e[B", "\eOB"].each { |k| bindings[k] = :browse_down }
+      arrow_up = ["\e[A", "\eOA"]
+      arrow_down = ["\e[B", "\eOB"]
+      arrow_up.each { |k| bindings[k] = :browse_up }
+      arrow_down.each { |k| bindings[k] = :browse_down }
 
       # Open selected with Enter
-      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :browse_select }
+      confirm_keys = Input::KeyDefinitions::ACTIONS[:confirm]
+      confirm_keys.each { |k| bindings[k] = :browse_select }
 
       # Toggle exit search with '/'
       bindings['/'] = :exit_search
@@ -483,14 +493,9 @@ module EbookReader
 
     def register_library_bindings
       bindings = {}
-      # Navigate
-      Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :library_up }
-      Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :library_down }
-      # Open
-      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :library_select }
-      # Back
-      Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :back_to_menu }
-      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :back_to_menu }
+      add_nav_up_down(bindings, :library_up, :library_down)
+      add_confirm_bindings(bindings, :library_select)
+      add_back_bindings(bindings)
       @dispatcher.register_mode(:library, bindings)
     end
 
@@ -512,8 +517,7 @@ module EbookReader
       bindings['6'] = :wipe_cache
 
       # Go back to main menu
-      Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :back_to_menu }
-      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :back_to_menu }
+      add_back_bindings(bindings)
 
       @dispatcher.register_mode(:settings, bindings)
     end
@@ -522,8 +526,7 @@ module EbookReader
       bindings = Input::CommandFactory.text_input_commands(:file_input)
 
       # Go back to main menu
-      Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :back_to_menu }
-      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :back_to_menu }
+      add_back_bindings(bindings)
 
       @dispatcher.register_mode(:open_file, bindings)
     end
@@ -532,11 +535,10 @@ module EbookReader
       bindings = {}
 
       # Up/Down navigate within the annotations screen component
-      Input::KeyDefinitions::NAVIGATION[:up].each { |k| bindings[k] = :annotations_up }
-      Input::KeyDefinitions::NAVIGATION[:down].each { |k| bindings[k] = :annotations_down }
+      add_nav_up_down(bindings, :annotations_up, :annotations_down)
 
       # Open selected annotation detail view
-      Input::KeyDefinitions::ACTIONS[:confirm].each { |k| bindings[k] = :annotations_select }
+      add_confirm_bindings(bindings, :annotations_select)
 
       # Edit selected annotation (open book and enter editor)
       %w[e E].each { |k| bindings[k] = :annotations_edit }
@@ -545,8 +547,7 @@ module EbookReader
       bindings['d'] = :annotations_delete
 
       # Go back to main menu
-      Input::KeyDefinitions::ACTIONS[:quit].each { |k| bindings[k] = :back_to_menu }
-      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :back_to_menu }
+      add_back_bindings(bindings)
 
       @dispatcher.register_mode(:annotations, bindings)
     end
@@ -569,28 +570,24 @@ module EbookReader
       bindings = {}
 
       # Cancel
-      Input::KeyDefinitions::ACTIONS[:cancel].each do |k|
-        bindings[k] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.cancel
-      end
+      cancel_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.cancel
+      Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = cancel_cmd }
 
       # Save: Ctrl+S and 'S'
-      bindings["\x13"] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
-      bindings['S'] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
+      save_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
+      bindings["\x13"] = save_cmd
+      bindings['S'] = save_cmd
 
       # Backspace (both variants)
-      Input::KeyDefinitions::ACTIONS[:backspace].each do |k|
-        bindings[k] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.backspace
-      end
+      backspace_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.backspace
+      Input::KeyDefinitions::ACTIONS[:backspace].each { |k| bindings[k] = backspace_cmd }
 
-      # Enter (CR and LF)
-      if Input::KeyDefinitions::ACTIONS.key?(:enter)
-        Input::KeyDefinitions::ACTIONS[:enter].each do |k|
-          bindings[k] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.enter
-        end
-      end
-      EbookReader::Input::KeyDefinitions::ACTIONS[:confirm].each do |k|
-        bindings[k] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.enter
-      end
+      # Enter (CR and LF) + confirm keys
+      enter_keys = []
+      enter_keys += Array(Input::KeyDefinitions::ACTIONS[:enter]) if Input::KeyDefinitions::ACTIONS.key?(:enter)
+      enter_keys += Array(EbookReader::Input::KeyDefinitions::ACTIONS[:confirm])
+      enter_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.enter
+      enter_keys.each { |k| bindings[k] = enter_cmd }
 
       # Default char input → insert
       bindings[:__default__] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.insert_char
@@ -604,9 +601,7 @@ module EbookReader
 
     # Provide current editor component for domain commands in menu context
     def current_editor_component
-      unless EbookReader::Domain::Selectors::MenuSelectors.mode(@state) == :annotation_editor
-        return nil
-      end
+      return nil unless EbookReader::Domain::Selectors::MenuSelectors.mode(@state) == :annotation_editor
 
       @main_menu_component&.annotation_edit_screen
     end
@@ -645,3 +640,21 @@ module EbookReader
     end
   end
 end
+    # Indifferent access helpers for annotations
+    def hget(h, key)
+      h[key] || h[key.to_s]
+    end
+
+    def hid(h)
+      hget(h, :id)
+    end
+    def selected_annotation_and_path
+      screen = @main_menu_component.annotations_screen
+      [screen.current_annotation, screen.current_book_path]
+    end
+
+    def with_selected_annotation
+      ann, path = selected_annotation_and_path
+      return unless ann && path
+      yield ann, path
+    end

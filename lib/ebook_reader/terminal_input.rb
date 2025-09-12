@@ -67,11 +67,13 @@ module EbookReader
       return nil unless input
 
       if input.start_with?("\e[<")
-        while input[-1] != 'm' && input[-1] != 'M'
+        last = input[-1]
+        while last != 'm' && last != 'M'
           extra = read_key
           break unless extra
 
           input += extra
+          last = extra[-1]
         end
       end
 
@@ -91,7 +93,8 @@ module EbookReader
 
     def cache_expired?
       now = Time.now
-      @size_cache[:checked_at].nil? || now - @size_cache[:checked_at] > SIZE_CACHE_INTERVAL
+      checked = @size_cache[:checked_at]
+      checked.nil? || now - checked > SIZE_CACHE_INTERVAL
     end
 
     def update_size_cache

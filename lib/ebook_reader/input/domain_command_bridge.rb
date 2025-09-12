@@ -134,8 +134,13 @@ module EbookReader
         #
         # @param symbol [Symbol] Input symbol to check
         # @return [Boolean] True if symbol has Domain command equivalent
-        def has_domain_command?(symbol)
+        def domain_command?(symbol)
           !symbol_to_command(symbol).nil?
+        end
+
+        # Backward-compatible alias during transition
+        def has_domain_command?(symbol)
+          domain_command?(symbol)
         end
       end
     end

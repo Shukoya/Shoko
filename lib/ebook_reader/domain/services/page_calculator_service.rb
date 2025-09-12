@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative 'base_service'
+require_relative 'internal/absolute_page_map_builder'
+require_relative 'internal/dynamic_page_map_builder'
 
 module EbookReader
   module Domain
@@ -36,9 +38,7 @@ module EbookReader
 
         # Build complete page map (PageManager compatibility)
         def build_page_map(terminal_width, terminal_height, doc, config, &on_progress)
-          unless EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(config) == :dynamic
-            return
-          end
+          return unless EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(config) == :dynamic
 
           @pages_data = []
           # Try to load a cached pagination for this layout to get instant totals
@@ -72,7 +72,9 @@ module EbookReader
           layout_metrics = prepare_layout_metrics(terminal_width, terminal_height, config)
           return if layout_metrics[:lines_per_page] <= 0
 
-          build_all_chapter_pages(doc, layout_metrics) do |idx, total|
+          @pages_data = Internal::DynamicPageMapBuilder.build(
+            doc, layout_metrics[:col_width], layout_metrics[:lines_per_page]
+          ) do |idx, total|
             on_progress&.call(idx, total)
           end
           # Persist a compact representation for instant reopen
@@ -97,11 +99,14 @@ module EbookReader
 
           # Lazily populate lines when loaded from cache (compact format)
           begin
-            width  = @state_store.current_state.dig(:ui, :terminal_width) || 80
-            height = @state_store.current_state.dig(:ui, :terminal_height) || 24
+            cs = @state_store.current_state
+            width  = cs.dig(:ui, :terminal_width) || 80
+            height = cs.dig(:ui, :terminal_height) || 24
             config = @state_store
             col_width, _content_height = calculate_layout_metrics(width, height, config)
-            len = (page[:end_line].to_i - page[:start_line].to_i + 1)
+            start_i = page[:start_line].to_i
+            end_i = page[:end_line].to_i
+            len = (end_i - start_i + 1)
             wrapper = begin
               @dependencies&.resolve(:wrapping_service)
             rescue StandardError
@@ -115,17 +120,17 @@ module EbookReader
                 doc = nil
               end
             end
-            chapter = doc&.get_chapter(page[:chapter_index].to_i)
+            ch_i = page[:chapter_index].to_i
+            chapter = doc&.get_chapter(ch_i)
             raw_lines = chapter&.lines || []
             lines = if wrapper
-                      res = wrapper.wrap_window(raw_lines, page[:chapter_index].to_i, col_width,
-                                                page[:start_line].to_i, len.to_i)
+                      res = wrapper.wrap_window(raw_lines, ch_i, col_width, start_i, len)
                       # Fallback to raw slicing if wrapper unexpectedly returns empty
                       if res.nil? || res.empty?
-                        candidate = raw_lines[page[:start_line].to_i, len.to_i] || []
+                        candidate = raw_lines[start_i, len] || []
                         if candidate.empty? && defined?(RSpec)
                           # Synthesize deterministic lines for tests when using fake docs
-                          (page[:start_line].to_i..page[:end_line].to_i).map { |i| "L#{i}" }
+                          (start_i..end_i).map { |i| "L#{i}" }
                         else
                           candidate
                         end
@@ -133,8 +138,7 @@ module EbookReader
                         res
                       end
                     else
-                      DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[page[:start_line].to_i,
-                                                                                      len.to_i] || []
+                      DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[start_i, len] || []
                     end
             page.merge(lines: lines)
           rescue StandardError
@@ -240,37 +244,51 @@ module EbookReader
         # @yield [done, total] optional progress callback
         def build_absolute_page_map(terminal_width, terminal_height, doc, state)
           # Compute layout metrics based on current config
-          col_width, content_height = calculate_layout_metrics(terminal_width, terminal_height,
-                                                               state)
+          col_width, content_height = calculate_layout_metrics(terminal_width, terminal_height, state)
           lines_per_page = adjust_for_line_spacing(content_height, state)
-          total_chapters = doc.chapter_count
-
-          page_map = []
           wrapper = begin
             @dependencies&.resolve(:wrapping_service)
           rescue StandardError
             nil
           end
 
-          total_chapters.times do |i|
-            chapter = doc.get_chapter(i)
-            lines = chapter&.lines || []
-
-            wrapped = if wrapper
-                        wrapper.wrap_lines(lines, i,
-                                           col_width)
-                      else
-                        DefaultTextWrapper.new.wrap_chapter_lines(
-                          lines, col_width
-                        )
-                      end
-
-            pages = (wrapped.size.to_f / [lines_per_page, 1].max).ceil
-            page_map << pages
-            yield(i + 1, total_chapters) if block_given?
+          Internal::AbsolutePageMapBuilder.build(doc, col_width, lines_per_page, wrapper) do |done, total|
+            yield(done, total) if block_given?
           end
+        end
 
-          page_map
+        # --- Unified orchestration helpers ---
+        # Build dynamic (lazy) page map and sync total to state. Accepts optional progress callback.
+        def build_dynamic_map!(width, height, doc, state, &)
+          build_page_map(width, height, doc, state, &)
+          state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                           total_pages: total_pages
+                         ))
+        end
+
+        # Build absolute page map and sync map/total/last dims to state. Accepts optional progress callback.
+        def build_absolute_map!(width, height, doc, state, &)
+          map = build_absolute_page_map(width, height, doc, state, &)
+          state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                           page_map: map,
+                           total_pages: map.sum,
+                           last_width: width,
+                           last_height: height
+                         ))
+          map
+        end
+
+        # Apply precise pending progress (dynamic mode) if present in state
+        def apply_pending_precise_restore!(state)
+          pending = state.get(%i[reader pending_progress])
+          return unless pending && pending[:line_offset]
+
+          ch = pending[:chapter_index] || state.get(%i[reader current_chapter])
+          idx = find_page_index(ch, pending[:line_offset].to_i)
+          state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: idx)) if idx && idx >= 0
+          state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_progress: nil))
+        rescue StandardError
+          # no-op on failure
         end
 
         def calculate_lines_per_page
@@ -295,13 +313,10 @@ module EbookReader
           terminal_width = state.dig(:ui, :terminal_width) || 80
           view_mode = state.dig(:reader, :view_mode) || :split
 
-          case view_mode
-          when :single
-            terminal_width - 4 # Account for padding
-          when :split
+          if view_mode == :split
             (terminal_width / 2) - 4 # Two columns with padding
           else
-            terminal_width - 4
+            terminal_width - 4 # Account for padding
           end
         end
 

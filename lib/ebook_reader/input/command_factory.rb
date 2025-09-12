@@ -26,53 +26,26 @@ module EbookReader
                         end
           return commands unless action_type
 
-          # Up navigation
-          KeyDefinitions::NAVIGATION[:up].each do |key|
-            commands[key] = lambda do |ctx, _|
-              current = case action_type
-                        when :menu
-                          ctx.state.get([:menu, field]) || 0
-                        when :selections
-                          ctx.state.get([:reader, field]) || 0
-                        when :sidebar
-                          ctx.state.get([:reader, field]) || 0
-                        end
-              new_val = [current - 1, 0].max
+          base_path = (action_type == :menu ? :menu : :reader)
 
-              case action_type
-              when :menu
-                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(field => new_val))
-              when :selections
-                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(field => new_val))
-              when :sidebar
-                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(field => new_val))
-              end
+          # Up/Down navigation
+          ups = KeyDefinitions::NAVIGATION[:up]
+          ups.each do |key|
+            commands[key] = lambda do |ctx, _|
+              current = value_at(ctx, base_path, field)
+              new_val = [current - 1, 0].max
+              dispatch_for(ctx, action_type, field, new_val)
               :handled
             end
           end
 
-          # Down navigation
-          KeyDefinitions::NAVIGATION[:down].each do |key|
+          downs = KeyDefinitions::NAVIGATION[:down]
+          downs.each do |key|
             commands[key] = lambda do |ctx, _|
-              current = case action_type
-                        when :menu
-                          ctx.state.get([:menu, field]) || 0
-                        when :selections
-                          ctx.state.get([:reader, field]) || 0
-                        when :sidebar
-                          ctx.state.get([:reader, field]) || 0
-                        end
+              current = value_at(ctx, base_path, field)
               max_val = max_value_proc.call(ctx)
-              new_val = [[current + 1, 0].max, max_val].min
-
-              case action_type
-              when :menu
-                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(field => new_val))
-              when :selections
-                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(field => new_val))
-              when :sidebar
-                ctx.state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(field => new_val))
-              end
+              new_val = (current + 1).clamp(0, max_val)
+              dispatch_for(ctx, action_type, field, new_val)
               :handled
             end
           end
@@ -84,7 +57,8 @@ module EbookReader
         def exit_commands(exit_action)
           commands = {}
 
-          KeyDefinitions::ACTIONS[:cancel].each do |key|
+          cancels = KeyDefinitions::ACTIONS[:cancel]
+          cancels.each do |key|
             commands[key] = exit_action
           end
 
@@ -95,7 +69,8 @@ module EbookReader
         def menu_selection_commands
           commands = {}
 
-          KeyDefinitions::ACTIONS[:confirm].each do |key|
+          confirms = KeyDefinitions::ACTIONS[:confirm]
+          confirms.each do |key|
             commands[key] = lambda do |ctx, _|
               ctx.handle_menu_selection
               :handled
@@ -108,41 +83,21 @@ module EbookReader
         # Reader navigation commands
         def reader_navigation_commands
           commands = {}
+          reader = KeyDefinitions::READER
 
           # Page navigation
-          KeyDefinitions::READER[:next_page].each do |key|
-            commands[key] = :next_page
-          end
-
-          KeyDefinitions::READER[:prev_page].each do |key|
-            commands[key] = :prev_page
-          end
-
-          KeyDefinitions::READER[:scroll_down].each do |key|
-            commands[key] = :scroll_down
-          end
-
-          KeyDefinitions::READER[:scroll_up].each do |key|
-            commands[key] = :scroll_up
-          end
+          map_keys!(commands, reader[:next_page], :next_page)
+          map_keys!(commands, reader[:prev_page], :prev_page)
+          map_keys!(commands, reader[:scroll_down], :scroll_down)
+          map_keys!(commands, reader[:scroll_up], :scroll_up)
 
           # Chapter navigation
-          KeyDefinitions::READER[:next_chapter].each do |key|
-            commands[key] = :next_chapter
-          end
-
-          KeyDefinitions::READER[:prev_chapter].each do |key|
-            commands[key] = :prev_chapter
-          end
+          map_keys!(commands, reader[:next_chapter], :next_chapter)
+          map_keys!(commands, reader[:prev_chapter], :prev_chapter)
 
           # Position commands
-          KeyDefinitions::READER[:go_to_start].each do |key|
-            commands[key] = :go_to_start
-          end
-
-          KeyDefinitions::READER[:go_to_end].each do |key|
-            commands[key] = :go_to_end
-          end
+          map_keys!(commands, reader[:go_to_start], :go_to_start)
+          map_keys!(commands, reader[:go_to_end], :go_to_end)
 
           commands
         end
@@ -150,65 +105,33 @@ module EbookReader
         # Reader control commands
         def reader_control_commands
           commands = {}
+          reader = KeyDefinitions::READER
+          actions = KeyDefinitions::ACTIONS
 
-          KeyDefinitions::READER[:toggle_view].each do |key|
-            commands[key] = :toggle_view_mode
-          end
-
-          KeyDefinitions::READER[:toggle_page_mode].each do |key|
-            commands[key] = :toggle_page_numbering_mode
-          end
-
-          KeyDefinitions::READER[:increase_spacing].each do |key|
-            commands[key] = :increase_line_spacing
-          end
-
-          KeyDefinitions::READER[:decrease_spacing].each do |key|
-            commands[key] = :decrease_line_spacing
-          end
-
-          KeyDefinitions::READER[:show_toc].each do |key|
-            commands[key] = :open_toc
-          end
-
-          KeyDefinitions::READER[:add_bookmark].each do |key|
-            commands[key] = :add_bookmark
-          end
-
-          KeyDefinitions::READER[:show_bookmarks].each do |key|
-            commands[key] = :open_bookmarks
-          end
-
-          KeyDefinitions::READER[:show_help].each do |key|
-            commands[key] = :show_help
-          end
+          map_keys!(commands, reader[:toggle_view], :toggle_view_mode)
+          map_keys!(commands, reader[:toggle_page_mode], :toggle_page_numbering_mode)
+          map_keys!(commands, reader[:increase_spacing], :increase_line_spacing)
+          map_keys!(commands, reader[:decrease_spacing], :decrease_line_spacing)
+          map_keys!(commands, reader[:show_toc], :open_toc)
+          map_keys!(commands, reader[:add_bookmark], :add_bookmark)
+          map_keys!(commands, reader[:show_bookmarks], :open_bookmarks)
+          map_keys!(commands, reader[:show_help], :show_help)
 
           # Annotations list
-          if KeyDefinitions::READER.key?(:show_annotations)
-            KeyDefinitions::READER[:show_annotations].each do |key|
-              commands[key] = :open_annotations
-            end
+          if reader.key?(:show_annotations)
+            map_keys!(commands, reader[:show_annotations], :open_annotations)
           end
 
           # Pagination maintenance
-          if KeyDefinitions::READER.key?(:rebuild_pagination)
-            KeyDefinitions::READER[:rebuild_pagination].each do |key|
-              commands[key] = :rebuild_pagination
-            end
+          if reader.key?(:rebuild_pagination)
+            map_keys!(commands, reader[:rebuild_pagination], :rebuild_pagination)
           end
-          if KeyDefinitions::READER.key?(:invalidate_pagination)
-            KeyDefinitions::READER[:invalidate_pagination].each do |key|
-              commands[key] = :invalidate_pagination_cache
-            end
+          if reader.key?(:invalidate_pagination)
+            map_keys!(commands, reader[:invalidate_pagination], :invalidate_pagination_cache)
           end
 
-          KeyDefinitions::ACTIONS[:quit].each do |key|
-            commands[key] = :quit_to_menu
-          end
-
-          KeyDefinitions::ACTIONS[:force_quit].each do |key|
-            commands[key] = :quit_application
-          end
+          map_keys!(commands, actions[:quit], :quit_to_menu)
+          map_keys!(commands, actions[:force_quit], :quit_application)
 
           commands
         end
@@ -226,29 +149,28 @@ module EbookReader
           input_path = input_paths[input_field.to_sym]
 
           # Backspace
-          KeyDefinitions::ACTIONS[:backspace].each do |key|
+          backs = KeyDefinitions::ACTIONS[:backspace]
+          has_cursor = !!cursor_field
+          apply_value = lambda do |ctx, new_value, new_cursor = nil|
+            if cursor_field && !new_cursor.nil?
+              dispatch_menu(ctx, input_field => new_value, cursor_field => new_cursor)
+            else
+              dispatch_menu(ctx, input_field => new_value)
+            end
+          end
+          determine_pos = lambda do |ctx, cur|
+            cursor_field ? cursor_value(ctx, cursor_field, cur) : cur.length
+          end
+
+          backs.each do |key|
             commands[key] = lambda do |ctx, _|
               if context_method
                 ctx.send(context_method, key)
               elsif input_path
-                current = (ctx.state.get(input_path) || '').to_s
-                if cursor_field
-                  cursor = (ctx.state.get([:menu, cursor_field]) || current.length).to_i
-                  if cursor.positive?
-                    before = current[0, cursor - 1] || ''
-                    after = current[cursor..] || ''
-                    new_value = before + after
-                    new_cursor = cursor - 1
-                  else
-                    new_value = current
-                    new_cursor = cursor
-                  end
-                  ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value,
-                                                                                        cursor_field => new_cursor))
-                else
-                  new_value = current.length.positive? ? current[0...-1] : current
-                  ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value))
-                end
+                cur = current_value(ctx, input_path)
+                pos = determine_pos.call(ctx, cur)
+                new_value, new_cursor = splice_backspace(cur, pos)
+                apply_value.call(ctx, new_value, new_cursor)
               end
               :handled
             end
@@ -261,19 +183,10 @@ module EbookReader
               if context_method
                 ctx.send(context_method, key)
               elsif input_path
-                current = (ctx.state.get(input_path) || '').to_s
-                if cursor_field
-                  cursor = (ctx.state.get([:menu, cursor_field]) || current.length).to_i
-                  before = current[0, cursor] || ''
-                  after = current[cursor..] || ''
-                  new_value = before + char + after
-                  new_cursor = cursor + 1
-                  ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value,
-                                                                                        cursor_field => new_cursor))
-                else
-                  new_value = current + char
-                  ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value))
-                end
+                cur = current_value(ctx, input_path)
+                pos = determine_pos.call(ctx, cur)
+                new_value, new_cursor = splice_insert(cur, pos, char)
+                apply_value.call(ctx, new_value, new_cursor)
               end
               :handled
             else
@@ -282,19 +195,14 @@ module EbookReader
           end
 
           # Delete at cursor
-          if cursor_field
-            KeyDefinitions::ACTIONS[:delete].each do |key|
-              commands[key] = lambda do |ctx, _|
-                current = (ctx.state.get(input_path) || '').to_s
-                cursor = (ctx.state.get([:menu, cursor_field]) || current.length).to_i
-                if cursor < current.length
-                  before = current[0, cursor] || ''
-                  after = current[(cursor + 1)..] || ''
-                  new_value = before + after
-                  ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(input_field => new_value))
-                end
-                :handled
-              end
+          dels = KeyDefinitions::ACTIONS[:delete]
+          dels.each do |key|
+            commands[key] = lambda do |ctx, _|
+              cur = current_value(ctx, input_path)
+              pos = determine_pos.call(ctx, cur)
+              new_value = splice_delete(cur, pos)
+              apply_value.call(ctx, new_value)
+              :handled
             end
           end
 
@@ -304,12 +212,13 @@ module EbookReader
         # Bookmark list commands
         def bookmark_commands(empty_handler = nil)
           commands = {}
+          reader = KeyDefinitions::READER
+          actions = KeyDefinitions::ACTIONS
 
           if empty_handler
             # For empty bookmark lists
             commands[:__default__] = lambda do |ctx, key|
-              if KeyDefinitions::READER[:show_bookmarks].include?(key) ||
-                 KeyDefinitions::ACTIONS[:cancel].include?(key)
+              if reader[:show_bookmarks].include?(key) || actions[:cancel].include?(key)
                 ctx.send(empty_handler)
                 :handled
               else
@@ -322,22 +231,75 @@ module EbookReader
               (ctx.state.bookmarks || []).length - 1
             }))
 
-            KeyDefinitions::ACTIONS[:confirm].each do |key|
+            actions[:confirm].each do |key|
               commands[key] = :bookmark_select
             end
 
             commands['d'] = :delete_selected_bookmark
 
-            KeyDefinitions::READER[:show_bookmarks].each do |key|
-              commands[key] = :exit_bookmarks
-            end
-
-            KeyDefinitions::ACTIONS[:cancel].each do |key|
-              commands[key] = :exit_bookmarks
-            end
+            exit_keys = Array(reader[:show_bookmarks]) + Array(actions[:cancel])
+            exit_keys.each { |key| commands[key] = :exit_bookmarks }
           end
 
           commands
+        end
+      end
+
+      class << self
+        private
+
+        def map_keys!(commands, keys, action)
+          Array(keys).each { |key| commands[key] = action }
+          commands
+        end
+
+        def value_at(ctx, base, field)
+          (ctx.state.get([base, field]) || 0)
+        end
+
+        def dispatch_for(ctx, action_type, field, value)
+          case action_type
+          when :menu
+            dispatch_menu(ctx, field => value)
+          when :selections
+            ctx.state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(field => value))
+          when :sidebar
+            ctx.state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(field => value))
+          end
+        end
+
+        def dispatch_menu(ctx, hash)
+          ctx.state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(hash))
+        end
+
+        def current_value(ctx, input_path)
+          (ctx.state.get(input_path) || '').to_s
+        end
+
+        def cursor_value(ctx, cursor_field, current)
+          (ctx.state.get([:menu, cursor_field]) || current.length).to_i
+        end
+
+        def splice_backspace(current, cursor)
+          return [current, cursor] unless cursor.positive?
+
+          before = current[0, cursor - 1] || ''
+          after = current[cursor..] || ''
+          [before + after, cursor - 1]
+        end
+
+        def splice_insert(current, cursor, char)
+          before = current[0, cursor] || ''
+          after = current[cursor..] || ''
+          [before + char + after, cursor + 1]
+        end
+
+        def splice_delete(current, cursor)
+          return current unless cursor < current.length
+
+          before = current[0, cursor] || ''
+          after = current[(cursor + 1)..] || ''
+          before + after
         end
       end
     end

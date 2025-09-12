@@ -15,7 +15,12 @@ module EbookReader
       include Constants::UIConstants
 
       TABS = %i[toc annotations bookmarks].freeze
-      TAB_NAMES = { toc: 'TOC', annotations: 'Notes', bookmarks: 'Marks' }.freeze
+      TAB_TITLES = { toc: 'Contents', annotations: 'Annotations', bookmarks: 'Bookmarks' }.freeze
+      HELP_TEXTS = {
+        toc: "↑↓ Navigate • ⏎ Jump • / Filter",
+        annotations: "↑↓ Navigate • ⏎ Jump • e Edit • d Delete",
+        bookmarks: "↑↓ Navigate • ⏎ Jump • d Delete",
+      }.freeze
       DEFAULT_WIDTH_PERCENT = 30
       MIN_WIDTH = 24
 
@@ -57,7 +62,14 @@ module EbookReader
 
       def do_render(surface, bounds)
         state = @controller.state
-        return unless state.get(%i[reader sidebar_visible]) && bounds.width >= MIN_WIDTH
+        bw = bounds.width
+        bh = bounds.height
+        return unless state.get(%i[reader sidebar_visible]) && bw >= MIN_WIDTH
+
+        # Cache frequently-used bounds values
+        bx = bounds.x
+        by = bounds.y
+        # bw, bh already cached above
 
         # Draw modern border
         draw_border(surface, bounds)
@@ -66,28 +78,29 @@ module EbookReader
         header_height = 2
         tab_height = 3
         help_height = 1
-        content_height = bounds.height - header_height - tab_height - help_height
+        content_height = bh - header_height - tab_height - help_height
 
         return if content_height <= 0
 
         # Render minimal header with title only
-        header_bounds = Rect.new(x: bounds.x, y: bounds.y, width: bounds.width,
+        header_bounds = Rect.new(x: bx, y: by, width: bw,
                                  height: header_height)
         render_header(surface, header_bounds)
 
         # Render active tab content
-        content_bounds = Rect.new(x: bounds.x, y: bounds.y + header_height,
-                                  width: bounds.width, height: content_height)
+        y_header = by + header_height
+        content_bounds = Rect.new(x: bx, y: y_header,
+                                  width: bw, height: content_height)
         render_active_tab(surface, content_bounds)
 
         # Render help text
-        help_bounds = Rect.new(x: bounds.x, y: bounds.y + header_height + content_height,
-                               width: bounds.width, height: help_height)
+        help_bounds = Rect.new(x: bx, y: y_header + content_height,
+                               width: bw, height: help_height)
         render_help(surface, help_bounds)
 
         # Render tab navigation at bottom
-        tab_bounds = Rect.new(x: bounds.x, y: bounds.y + bounds.height - tab_height,
-                              width: bounds.width, height: tab_height)
+        tab_bounds = Rect.new(x: bx, y: by + bh - tab_height,
+                              width: bw, height: tab_height)
         @tab_header.render(surface, tab_bounds)
 
         @needs_redraw = false
@@ -97,8 +110,12 @@ module EbookReader
 
       def draw_border(surface, bounds)
         # Draw modern vertical border on the right edge
-        (1..bounds.height).each do |y|
-          surface.write(bounds, y, bounds.width, "#{COLOR_TEXT_DIM}│#{Terminal::ANSI::RESET}")
+        h = bounds.height
+        w = bounds.width
+        reset = Terminal::ANSI::RESET
+        dim = COLOR_TEXT_DIM
+        (1..h).each do |y|
+          surface.write(bounds, y, w, "#{dim}│#{reset}")
         end
       end
 
@@ -107,12 +124,14 @@ module EbookReader
 
         # Simple clean title
         active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
-        title = get_clean_title(active_tab)
-        surface.write(bounds, 1, 2, "#{SELECTION_HIGHLIGHT}#{title}#{Terminal::ANSI::RESET}")
+        title = TAB_TITLES[active_tab] || 'Sidebar'
+        reset = Terminal::ANSI::RESET
+        surface.write(bounds, 1, 2, "#{SELECTION_HIGHLIGHT}#{title}#{reset}")
 
         # Close indicator
-        close_text = "#{COLOR_TEXT_DIM}[t]#{Terminal::ANSI::RESET}"
-        surface.write(bounds, 1, bounds.width - 5, close_text)
+        w = bounds.width
+        close_text = "#{COLOR_TEXT_DIM}[t]#{reset}"
+        surface.write(bounds, 1, w - 5, close_text)
       end
 
       def get_clean_title(active_tab)
@@ -132,20 +151,14 @@ module EbookReader
         state = @controller.state
 
         active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
-        help_text = case active_tab
-                    when :toc
-                      "#{COLOR_TEXT_DIM}↑↓ Navigate • ⏎ Jump • / Filter#{Terminal::ANSI::RESET}"
-                    when :annotations
-                      "#{COLOR_TEXT_DIM}↑↓ Navigate • ⏎ Jump • e Edit • d Delete#{Terminal::ANSI::RESET}"
-                    when :bookmarks
-                      "#{COLOR_TEXT_DIM}↑↓ Navigate • ⏎ Jump • d Delete#{Terminal::ANSI::RESET}"
-                    else
-                      ''
-                    end
+        reset = Terminal::ANSI::RESET
+        width = bounds.width
+        hint = HELP_TEXTS[active_tab]
+        help_text = hint ? "#{COLOR_TEXT_DIM}#{hint}#{reset}" : ''
 
         # Truncate to fit width
-        if help_text.length > bounds.width - 4
-          visible_length = bounds.width - 7
+        if help_text.length > width - 4
+          visible_length = width - 7
           help_text = "#{help_text[0, visible_length]}..."
         end
 
@@ -156,14 +169,8 @@ module EbookReader
         state = @controller.state
 
         active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
-        case active_tab
-        when :toc
-          @toc_renderer.render(surface, bounds)
-        when :annotations
-          @annotations_renderer.render(surface, bounds)
-        when :bookmarks
-          @bookmarks_renderer.render(surface, bounds)
-        end
+        renderer = { toc: @toc_renderer, annotations: @annotations_renderer, bookmarks: @bookmarks_renderer }[active_tab]
+        renderer&.render(surface, bounds)
       end
     end
   end

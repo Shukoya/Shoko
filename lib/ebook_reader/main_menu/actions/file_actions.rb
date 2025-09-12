@@ -45,8 +45,11 @@ module EbookReader
           RecentFiles.add(path)
           # Ensure reader loop runs even if a previous session set running=false
           if instance_variable_defined?(:@state) && @state
-            @state.update({ %i[reader book_path] => path, %i[reader running] => true,
-                            %i[reader mode] => :read })
+            @state.dispatch(EbookReader::Domain::Actions::UpdateReaderMetaAction.new(
+                              book_path: path,
+                              running: true
+                            ))
+            @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
           end
           # Pass dependencies to MouseableReader
           dependencies = @dependencies || Domain::ContainerFactory.create_default_container
@@ -65,14 +68,20 @@ module EbookReader
           index = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state) || 0
           mode  = EbookReader::Domain::Selectors::MenuSelectors.mode(@state)
 
-          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                            loading_active: true,
-                            loading_path: path,
-                            loading_progress: 0.0,
-                            loading_index: index,
-                            loading_mode: mode
-                          ))
+          menu_update = lambda do |hash|
+            @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(hash))
+          end
 
+          menu_update.call(
+            loading_active: true,
+            loading_path: path,
+            loading_progress: 0.0,
+            loading_index: index,
+            loading_mode: mode,
+          )
+
+          opened = false
+          path_to_open = nil
           begin
             height, width = @terminal_service.size
             # Prepare services
@@ -85,59 +94,52 @@ module EbookReader
             doc = doc_svc.load_document
             # If cached, skip precomputation to open instantly
             if doc.respond_to?(:cached?) && doc.cached?
-              @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                                loading_active: false,
-                                loading_path: nil,
-                                loading_index: nil
-                              ))
-              return run_reader(path)
+              menu_update.call(loading_active: false, loading_path: nil, loading_index: nil)
+              path_to_open = path
+              return
             end
             # Update total chapters for navigation service expectations
             @state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
-                             total_chapters: (doc&.chapter_count || 0)
-                           ))
+                              total_chapters: doc&.chapter_count || 0
+                            ))
             # Pre-register for reuse
             @dependencies.register(:document, doc)
 
             # Build pages according to numbering mode
             if @state.get(%i[config page_numbering_mode]) == :dynamic
               page_calc.build_page_map(width, height, doc, @state) do |done, total|
-                @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                                  loading_progress: (done.to_f / [total, 1].max)
-                                ))
+                update_loading_progress(done, total)
                 draw_screen
               end
-              @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                                loading_progress: 1.0
-                              ))
+              menu_update.call(loading_progress: 1.0)
             else
               # Absolute mode: compute per-chapter with progress
               # Absolute: delegate page map building to page_calculator
-              page_map = page_calc.build_absolute_page_map(width, height, doc,
-                                                           @state) do |done, total|
-                @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                                  loading_progress: (done.to_f / [total, 1].max)
-                                ))
+              page_map = page_calc.build_absolute_page_map(width, height, doc, @state) do |done, total|
+                update_loading_progress(done, total)
                 draw_screen
               end
               @state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
-                               page_map: page_map,
-                               total_pages: page_map.sum,
-                               last_width: width,
-                               last_height: height
-                             ))
+                                page_map: page_map,
+                                total_pages: page_map.sum,
+                                last_width: width,
+                                last_height: height
+                              ))
             end
           rescue StandardError => e
             handle_reader_error(path, e)
           ensure
-            # Clear loading UI and open the reader
-            @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                              loading_active: false,
-                              loading_path: nil,
-                              loading_index: nil
-                            ))
-            run_reader(path)
+            # Clear loading UI and open the reader exactly once
+            menu_update.call(loading_active: false, loading_path: nil, loading_index: nil)
+            target = path_to_open || path
+            run_reader(target) unless opened
           end
+        end
+
+        def update_loading_progress(done, total)
+          denom = [total, 1].max
+          progress = done.to_f / denom
+          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(loading_progress: progress))
         end
 
         def file_not_found
@@ -169,9 +171,8 @@ module EbookReader
         def handle_file_path(path)
           if File.exist?(path) && path.downcase.end_with?('.epub')
             RecentFiles.add(path)
-            # Pass dependencies to MouseableReader
-            dependencies = @dependencies || Domain::ContainerFactory.create_default_container
-            MouseableReader.new(path, nil, dependencies).run
+            # Delegate to the single reader-launch path
+            run_reader(path)
           else
             @scanner.scan_message = 'Invalid file path'
             @scanner.scan_status = :error

@@ -48,7 +48,8 @@ module EbookReader
 
         # Helper to handle common storage errors
         def handle_storage_error(error, context = nil)
-          message = context ? "#{context}: #{error.message}" : error.message
+          msg = error.message
+          message = context ? "#{context}: #{msg}" : msg
           logger.error("Repository error - #{message}")
 
           case error
@@ -62,7 +63,8 @@ module EbookReader
         # Helper to validate required parameters
         def validate_required_params(params, required_keys)
           missing_keys = required_keys.select do |key|
-            !params.key?(key) || params[key].nil? || (params[key].respond_to?(:empty?) && params[key].empty?)
+            val = params[key]
+            !params.key?(key) || val.nil? || (val.respond_to?(:empty?) && val.empty?)
           end
           return if missing_keys.empty?
 

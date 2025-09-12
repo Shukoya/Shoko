@@ -26,14 +26,15 @@ module EbookReader
 
         # Normalize selection range ensuring start <= end
         def normalize_selection_range(selection_range)
-          return nil unless selection_range&.dig(:start) && selection_range[:end]
+          end_pos = selection_range&.dig(:end)
+          return nil unless selection_range&.dig(:start) && end_pos
 
           start_pos = selection_range[:start]
-          end_pos = selection_range[:end]
 
+          sy = start_pos[:y]
+          ey = end_pos[:y]
           # Swap if end comes before start
-          if end_pos[:y] < start_pos[:y] ||
-             (end_pos[:y] == start_pos[:y] && end_pos[:x] < start_pos[:x])
+          if ey < sy || (ey == sy && end_pos[:x] < start_pos[:x])
             start_pos, end_pos = end_pos, start_pos
           end
 
@@ -55,8 +56,9 @@ module EbookReader
           terminal_height, terminal_width = @dependencies.resolve(:terminal_service).size
 
           # Start with position below selection end
+          end_y = selection_end[:y]
           popup_x = selection_end[:x]
-          popup_y = selection_end[:y] + 1
+          popup_y = end_y + 1
 
           # Adjust if popup would go off right edge
           popup_x = [terminal_width - popup_width, 1].max if popup_x + popup_width > terminal_width
@@ -64,7 +66,7 @@ module EbookReader
           # Adjust if popup would go off bottom edge
           if popup_y + popup_height > terminal_height
             # Try to position above selection instead
-            popup_y = [selection_end[:y] - popup_height, 1].max
+            popup_y = [end_y - popup_height, 1].max
           end
 
           {
@@ -75,8 +77,11 @@ module EbookReader
 
         # Check if coordinates are within bounds
         def within_bounds?(x, y, bounds)
-          x >= bounds.x && x < (bounds.x + bounds.width) &&
-            y >= bounds.y && y < (bounds.y + bounds.height)
+          bx = bounds.x
+          by = bounds.y
+          bw = bounds.width
+          bh = bounds.height
+          x >= bx && x < (bx + bw) && y >= by && y < (by + bh)
         end
 
         # Convert line-relative coordinates to absolute terminal coordinates

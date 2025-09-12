@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../../constants/ui_constants'
+require_relative '../ui/text_utils'
 
 module EbookReader
   module Components
@@ -9,6 +10,9 @@ module EbookReader
       # Browse screen component that renders the book browsing interface
       class BrowseScreenComponent < BaseComponent
         include Constants::UIConstants
+        include UI::TextUtils
+
+        BookItemCtx = Struct.new(:row, :width, :book, :selected, keyword_init: true)
 
         def initialize(scanner, state)
           super()
@@ -72,7 +76,10 @@ module EbookReader
           width = bounds.width
 
           # Header (show visual indicator when search is active)
-          if @state.get(%i[menu mode]) == :search || @state.get(%i[menu search_active])
+          mode = @state.get(%i[menu mode])
+          search_active = @state.get(%i[menu search_active])
+          in_search = (mode == :search) || search_active
+          if in_search
             title = "#{COLOR_TEXT_ACCENT}📚 Browse Books  [SEARCH]#{Terminal::ANSI::RESET}"
             right_text = "#{COLOR_TEXT_DIM}[/] Exit Search#{Terminal::ANSI::RESET}"
           else
@@ -104,7 +111,7 @@ module EbookReader
 
           # Footer
           book_count = @filtered_epubs&.length.to_i
-          hint = if @state.get(%i[menu mode]) == :search || @state.get(%i[menu search_active])
+          hint = if in_search
                    "#{book_count} books • ↑↓ Navigate • Enter Open • / Exit Search"
                  else
                    "#{book_count} books • ↑↓ Navigate • Enter Open • / Search • r Refresh • ESC Back"
@@ -121,12 +128,14 @@ module EbookReader
 
         def filter_books
           query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
-          return @filtered_epubs = @scanner.epubs || [] if query.nil? || query.empty?
+          books = @scanner.epubs || []
+          return @filtered_epubs = books if query.nil? || query.empty?
 
-          all_books = @scanner.epubs || []
-          @filtered_epubs = all_books.select do |book|
-            book['name']&.downcase&.include?(query.downcase) ||
-              book['author']&.downcase&.include?(query.downcase)
+          q = query.downcase
+          @filtered_epubs = books.select do |book|
+            name = book['name']&.downcase
+            author = book['author']&.downcase
+            (name && name.include?(q)) || (author && author.include?(q))
           end
         end
 
@@ -134,10 +143,11 @@ module EbookReader
           status = @scanner.scan_status
           return unless status
 
+          msg = @scanner.scan_message || ''
           text = case status
-                 when :scanning then "#{COLOR_TEXT_WARNING}⟳ #{@scanner.scan_message || ''}#{Terminal::ANSI::RESET}"
-                 when :error then "#{COLOR_TEXT_ERROR}✗ #{@scanner.scan_message || ''}#{Terminal::ANSI::RESET}"
-                 when :done then "#{COLOR_TEXT_SUCCESS}✓ #{@scanner.scan_message || ''}#{Terminal::ANSI::RESET}"
+                 when :scanning then "#{COLOR_TEXT_WARNING}⟳ #{msg}#{Terminal::ANSI::RESET}"
+                 when :error    then "#{COLOR_TEXT_ERROR}✗ #{msg}#{Terminal::ANSI::RESET}"
+                 when :done     then "#{COLOR_TEXT_SUCCESS}✓ #{msg}#{Terminal::ANSI::RESET}"
                  else ''
                  end
           surface.write(bounds, 4, 2, text) unless text.empty?
@@ -173,10 +183,12 @@ module EbookReader
           current_row = list_start_row
           visible_books.each_with_index do |book, index|
             is_selected = (start_index + index) == selected
-            render_book_item(surface, bounds, current_row, width, book, is_selected)
+            ctx = BookItemCtx.new(row: current_row, width: width, book: book, selected: is_selected)
+            render_book_item(surface, bounds, ctx)
 
-            if loading_active && loading_path == book['path'] && current_row + 1 < bounds.bottom
-              draw_inline_progress(surface, bounds, width, current_row + 1, loading_progress)
+            next_row = current_row + 1
+            if loading_active && loading_path == book['path'] && next_row < bounds.bottom
+              draw_inline_progress(surface, bounds, width, next_row, loading_progress)
               current_row += 2
             else
               current_row += 1
@@ -198,8 +210,9 @@ module EbookReader
           [start_index, visible_books]
         end
 
-        def render_book_item(surface, bounds, row, width, book, is_selected)
+        def render_book_item(surface, bounds, ctx)
           @meta_cache ||= {}
+          book = ctx.book
           path = book['path']
           meta = @meta_cache[path]
           unless meta
@@ -220,24 +233,26 @@ module EbookReader
           # Compute column widths
           pointer_w = 2
           gap = 2
-          remaining = width - pointer_w - (gap * 3)
+          remaining = ctx.width - pointer_w - (gap * 3)
           year_w = 6
           size_w = 8
-          author_w = [[(remaining * 0.25).to_i, 12].max, remaining - 20 - year_w - size_w].min
+          author_w = [(remaining * 0.25).to_i, 12].max.clamp(12, remaining - 20 - year_w - size_w)
           title_w = [remaining - author_w - year_w - size_w, 20].max
 
           # Compose columns
-          pointer = is_selected ? '▸ ' : '  '
+          sel = ctx.selected
+          pointer = sel ? '▸ ' : '  '
           title_col = truncate_text(title, title_w).ljust(title_w)
           author_col = truncate_text(authors, author_w).ljust(author_w)
           year_col = year[0, 4].ljust(year_w)
           size_col = size_mb.rjust(size_w)
 
           line = [title_col, author_col, year_col, size_col].join(' ' * gap)
-          if is_selected
-            surface.write(bounds, row, 1, SELECTION_HIGHLIGHT + pointer + line + Terminal::ANSI::RESET)
+          r = ctx.row
+          if sel
+            surface.write(bounds, r, 1, SELECTION_HIGHLIGHT + pointer + line + Terminal::ANSI::RESET)
           else
-            surface.write(bounds, row, 1, COLOR_TEXT_PRIMARY + pointer + line + Terminal::ANSI::RESET)
+            surface.write(bounds, r, 1, COLOR_TEXT_PRIMARY + pointer + line + Terminal::ANSI::RESET)
           end
         end
 
@@ -249,7 +264,7 @@ module EbookReader
           remaining = width - pointer_w - (gap * 3)
           year_w = 6
           size_w = 8
-          author_w = [[(remaining * 0.25).to_i, 12].max, remaining - 20 - year_w - size_w].min
+          author_w = [(remaining * 0.25).to_i, 12].max.clamp(12, remaining - 20 - year_w - size_w)
           title_w = [remaining - author_w - year_w - size_w, 20].max
 
           headers = [
@@ -282,11 +297,7 @@ module EbookReader
           surface.write(bounds, row, bar_col, track)
         end
 
-        def truncate_text(text, max_length)
-          return text if text.length <= max_length
-
-          "#{text[0...(max_length - 3)]}..."
-        end
+        # truncate_text provided by UI::TextUtils
       end
     end
   end

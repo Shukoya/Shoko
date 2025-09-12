@@ -10,6 +10,7 @@ module EbookReader
           updates = {}
           payload.each do |field, value|
             next unless %i[loading_active loading_message loading_progress].include?(field)
+
             updates[[:ui, field]] = value
           end
           state.update(updates) unless updates.empty?
@@ -18,4 +19,3 @@ module EbookReader
     end
   end
 end
-

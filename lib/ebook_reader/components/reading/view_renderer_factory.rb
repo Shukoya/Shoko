@@ -10,8 +10,8 @@ module EbookReader
           when :split
             SplitViewRenderer.new(dependencies)
           else
-            SingleViewRenderer.new(Domain::Selectors::ConfigSelectors.page_numbering_mode(state),
-                                   dependencies)
+            mode = Domain::Selectors::ConfigSelectors.page_numbering_mode(state)
+            SingleViewRenderer.new(dependencies, page_numbering_mode: mode)
           end
         end
       end

@@ -41,10 +41,10 @@ module EbookReader
       end
 
       def cache_valid?(cache)
-        cache && cache['files'].is_a?(Array) &&
-          !cache['files'].empty? &&
-          cache['timestamp'] &&
-          !cache_expired?(cache['timestamp'])
+        return false unless cache
+        files = cache['files']
+        ts = cache['timestamp']
+        files.is_a?(Array) && !files.empty? && ts && !cache_expired?(ts)
       end
 
       def cache_expired?(timestamp = nil)
@@ -106,7 +106,7 @@ module EbookReader
         scanner = DirectoryScanner.new(context)
         scanner.scan_all_directories
 
-        warn "Found #{epubs.length} EPUB files" if DEBUG_MODE
+        warn_debug "Found #{epubs.length} EPUB files"
         epubs
       end
 
@@ -115,7 +115,7 @@ module EbookReader
 
         parse_cache_file
       rescue StandardError => e
-        warn "Cache load error: #{e.message}" if DEBUG_MODE
+        warn_debug "Cache load error: #{e.message}"
         delete_corrupted_cache
         nil
       end
@@ -140,7 +140,13 @@ module EbookReader
                                                       'version' => VERSION,
                                                     }))
       rescue StandardError => e
-        warn "Cache save error: #{e.message}" if DEBUG_MODE
+        warn_debug "Cache save error: #{e.message}"
+      end
+
+      def debug? = !!DEBUG_MODE
+
+      def warn_debug(msg)
+        warn msg if debug?
       end
     end
   end

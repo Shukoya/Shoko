@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../../models/rendering_context'
+require_relative '../../models/render_params'
 
 module EbookReader
   module Components
@@ -56,16 +57,53 @@ module EbookReader
           @layout_service.calculate_center_start_row(content_height, lines_count, line_spacing)
         end
 
+        # Compute common layout values for a given view mode
+        # Returns [col_width, content_height, spacing, displayable]
+        def compute_layout(bounds, view_mode, config)
+          col_width, content_height = layout_metrics(bounds.width, bounds.height, view_mode)
+          spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config)
+          displayable = adjust_for_line_spacing(content_height, spacing)
+          [col_width, content_height, spacing, displayable]
+        end
+
+        # Draw a vertical divider between columns (shared helper)
+        def draw_divider(surface, bounds, col_width, start_row = 3)
+          (start_row..[bounds.height - 1, start_row + 1].max).each do |row|
+            surface.write(
+              bounds,
+              row,
+              col_width + 3,
+              "#{EbookReader::Constants::UIConstants::BORDER_PRIMARY}│#{Terminal::ANSI::RESET}"
+            )
+          end
+        end
+
+        # Shared helpers for common renderer patterns
+        def center_start_col(total_width, col_width)
+          [(total_width - col_width) / 2, 1].max
+        end
+
+        def fetch_wrapped_lines(document, chapter_index, col_width, offset, length)
+          chapter = document&.get_chapter(chapter_index)
+          if @dependencies&.registered?(:wrapping_service) && chapter
+            ws = @dependencies.resolve(:wrapping_service)
+            ws.wrap_window(chapter.lines || [], chapter_index, col_width, offset, length)
+          else
+            (chapter&.lines || [])[offset, length] || []
+          end
+        end
+
         # Shared helper to draw a list of lines with spacing and clipping considerations.
         # Computes row progression based on current line spacing and stops at bounds.
-        def draw_lines(surface, bounds, lines, start_row, col_start, col_width, context)
-          spacing = context ? EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config) : :normal
+        def draw_lines(surface, bounds, lines, params)
+          ctx = params.context
+          spacing = ctx ? EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(ctx.config) : :normal
           lines.each_with_index do |line, idx|
-            row = start_row + (spacing == :relaxed ? idx * 2 : idx)
+            row = params.start_row + (spacing == :relaxed ? idx * 2 : idx)
             break if row > bounds.height - 1
 
-            draw_line(surface, bounds, line: line, row: row, col: col_start, width: col_width,
-                                       context: context)
+            draw_line(surface, bounds, line: line, row: row, col: params.col_start, width: params.col_width,
+                                       context: ctx)
           end
         end
 
@@ -83,31 +121,41 @@ module EbookReader
         end
 
         def draw_line(surface, bounds, line:, row:, col:, width:, context:)
+          text = styled_text_for(line, width, context)
+          abs_row, abs_col = absolute_cell(bounds, row, col)
+          record_rendered_line(abs_row, abs_col, width, text)
+          surface.write(
+            bounds,
+            row,
+            col,
+            EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + text + Terminal::ANSI::RESET
+          )
+        end
+
+        def styled_text_for(line, width, context)
           text = line.to_s[0, width]
           config = context&.config
-
           text = highlight_keywords(text) if config&.get(%i[config highlight_keywords])
           text = highlight_quotes(text) if config&.get(%i[config highlight_quotes])
+          text
+        end
 
-          abs_row = bounds.y + row - 1
-          abs_col = bounds.x + col - 1
+        def absolute_cell(bounds, row, col)
+          [bounds.y + row - 1, bounds.x + col - 1]
+        end
 
-          # Store line data in format compatible with mouse selection
-          # Use a key that includes both row and column range to distinguish columns
-          # Buffer rendered lines locally; flushed once per frame in do_render
-          if @rendered_lines_buffer.is_a?(Hash)
-            line_key = "#{abs_row}_#{abs_col}_#{abs_col + width - 1}"
-            @rendered_lines_buffer[line_key] = {
-              row: abs_row,
-              col: abs_col,
-              col_end: abs_col + width - 1,
-              text: text,
-              width: width,
-            }
-          end
+        def record_rendered_line(abs_row, abs_col, width, text)
+          return unless @rendered_lines_buffer.is_a?(Hash)
 
-          surface.write(bounds, row, col,
-                        EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + text + Terminal::ANSI::RESET)
+          end_col = abs_col + width - 1
+          line_key = "#{abs_row}_#{abs_col}_#{end_col}"
+          @rendered_lines_buffer[line_key] = {
+            row: abs_row,
+            col: abs_col,
+            col_end: end_col,
+            text: text,
+            width: width,
+          }
         end
 
         def highlight_keywords(line)

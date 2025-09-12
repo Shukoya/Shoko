@@ -236,9 +236,7 @@ module EbookReader
         case path_array
         when %i[reader current_chapter]
           raise ArgumentError, 'current_chapter must be non-negative' if value.negative?
-        when %i[reader view_mode]
-          raise ArgumentError, 'invalid view_mode' unless %i[single split].include?(value)
-        when %i[config view_mode]
+        when %i[reader view_mode], %i[config view_mode]
           raise ArgumentError, 'invalid view_mode' unless %i[single split].include?(value)
         when %i[ui terminal_width], %i[ui terminal_height]
           raise ArgumentError, 'terminal dimensions must be positive' if value <= 0
@@ -280,11 +278,12 @@ module EbookReader
 
       def emit_change_events(old_state, new_state, updates)
         updates.each do |path, new_value|
-          old_value = get_nested_value(old_state, Array(path))
+          arr_path = Array(path)
+          old_value = get_nested_value(old_state, arr_path)
           next if old_value == new_value
 
           @event_bus.emit_event(:state_changed, {
-                                  path: Array(path),
+                                  path: arr_path,
                                   old_value: old_value,
                                   new_value: new_value,
                                   full_state: new_state,

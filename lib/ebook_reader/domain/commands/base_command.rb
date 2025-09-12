@@ -129,11 +129,12 @@ module EbookReader
         end
 
         def user_friendly_error_message(error)
+          msg = error.message
           case error
           when ValidationError
-            "Invalid input: #{error.message}"
+            "Invalid input: #{msg}"
           when CommandError
-            error.message
+            msg
           else
             'An unexpected error occurred'
           end

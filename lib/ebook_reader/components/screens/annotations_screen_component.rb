@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../../constants/ui_constants'
+require_relative '../ui/text_utils'
 
 module EbookReader
   module Components
@@ -9,6 +10,7 @@ module EbookReader
       # Annotations screen component for viewing and managing annotations
       class AnnotationsScreenComponent < BaseComponent
         include Constants::UIConstants
+        include UI::TextUtils
 
         def initialize(state)
           super()
@@ -67,7 +69,8 @@ module EbookReader
           end
 
           annotations = current_annotations
-          @selected = [[prev_selected, 0].max, [annotations.length - 1, 0].max].min
+          upper = [annotations.length - 1, 0].max
+          @selected = prev_selected.clamp(0, upper)
           update_current_annotation
         end
 
@@ -78,41 +81,39 @@ module EbookReader
           width = bounds.width
 
           # Header
+          reset = Terminal::ANSI::RESET
           count = current_annotations.length
-          book_label = if @mode == :all
-                         'All Books'
+          all_mode = (@mode == :all)
+          book_label = if @current_book_path
+                         File.basename(@current_book_path)
                        else
-                         (@current_book_path ? File.basename(@current_book_path) : 'No book selected')
+                         (all_mode ? 'All Books' : 'No book selected')
                        end
-          header_left = "#{COLOR_TEXT_ACCENT}📝 Annotations (#{count}) — #{book_label}#{Terminal::ANSI::RESET}"
-          header_right = "#{COLOR_TEXT_DIM}[Enter] Open • [e] Edit • [d] Delete#{Terminal::ANSI::RESET}"
+          header_left = "#{COLOR_TEXT_ACCENT}📝 Annotations (#{count}) — #{book_label}#{reset}"
+          header_right = "#{COLOR_TEXT_DIM}[Enter] Open • [e] Edit • [d] Delete#{reset}"
           surface.write(bounds, 1, 2, header_left)
-          surface.write(bounds, 1, [width - header_right.length - 1, header_left.length + 2].max,
-                        header_right)
+          right_col = [width - header_right.length - 1, header_left.length + 2].max
+          surface.write(bounds, 1, right_col, header_right)
           # Divider and column headers
-          surface.write(bounds, 2, 1, COLOR_TEXT_DIM + ('─' * width) + Terminal::ANSI::RESET)
+          surface.write(bounds, 2, 1, COLOR_TEXT_DIM + ('─' * width) + reset)
           idx_w = 4
           ch_w = 6
           date_w = 10
-          book_w = (@mode == :all ? 12 : 0)
+          book_w = all_mode ? 12 : 0
           avail = width - (idx_w + ch_w + date_w + book_w + 8)
           snippet_w = (avail * 0.55).to_i
           note_w = avail - snippet_w
-          columns = if @mode == :all
-                      format("%-#{idx_w}s  %-#{ch_w}s  %-#{snippet_w}s  %-#{note_w}s  %-#{book_w}s  %-#{date_w}s",
-                             '#', 'Ch', 'Snippet', 'Note', 'Book', 'Date')
-                    else
-                      format("%-#{idx_w}s  %-#{ch_w}s  %-#{snippet_w}s  %-#{note_w}s  %-#{date_w}s",
-                             '#', 'Ch', 'Snippet', 'Note', 'Date')
-                    end
-          surface.write(bounds, 3, 1, COLOR_TEXT_DIM + columns + Terminal::ANSI::RESET)
+          has_book_col = book_w.positive?
+          columns = format("%-#{idx_w}s  %-#{ch_w}s  %-#{snippet_w}s  %-#{note_w}s  %-#{book_w}s  %-#{date_w}s",
+                           '#', 'Ch', 'Snippet', 'Note', (has_book_col ? 'Book' : ''), 'Date')
+          surface.write(bounds, 3, 1, COLOR_TEXT_DIM + columns + reset)
 
           annotations = current_annotations
 
           if annotations.empty?
             render_empty_state(surface, bounds, width, height)
           else
-            render_annotations_list(surface, bounds, width, height, annotations)
+            render_annotations_list(surface, bounds, width, height, annotations, has_book_col)
           end
 
           # Footer instructions
@@ -133,22 +134,25 @@ module EbookReader
         def update_current_annotation
           annotations = current_annotations
           @current_annotation = annotations[@selected] if @selected < annotations.length
-          return unless @current_annotation && @current_annotation[:book_path]
+          return unless @current_annotation
 
-          @current_book_path = @current_annotation[:book_path]
+          book_path = @current_annotation[:book_path]
+          return unless book_path
+
+          @current_book_path = book_path
         end
 
         def render_empty_state(surface, bounds, width, height)
-          empty_text = "#{COLOR_TEXT_DIM}No annotations found#{Terminal::ANSI::RESET}"
-          surface.write(bounds, height / 2, [(width - empty_text.length + 10) / 2, 1].max,
-                        empty_text)
+          reset = Terminal::ANSI::RESET
+          empty_text = "#{COLOR_TEXT_DIM}No annotations found#{reset}"
+          mid = height / 2
+          surface.write(bounds, mid, [(width - empty_text.length + 10) / 2, 1].max, empty_text)
 
-          help_text = "#{COLOR_TEXT_DIM}Annotations you create while reading will appear here#{Terminal::ANSI::RESET}"
-          surface.write(bounds, (height / 2) + 2, [(width - help_text.length + 10) / 2, 1].max,
-                        help_text)
+          help_text = "#{COLOR_TEXT_DIM}Annotations you create while reading will appear here#{reset}"
+          surface.write(bounds, mid + 2, [(width - help_text.length + 10) / 2, 1].max, help_text)
         end
 
-        def render_annotations_list(surface, bounds, width, height, annotations)
+        def render_annotations_list(surface, bounds, width, height, annotations, in_all)
           list_start_row = 4
           list_height = height - list_start_row - 2
           return if list_height <= 0
@@ -157,11 +161,12 @@ module EbookReader
 
           visible_annotations.each_with_index do |annotation, index|
             row = list_start_row + index
-            is_selected = (start_index + index) == @selected
+            abs_idx = start_index + index
+            is_selected = (abs_idx == @selected)
 
             render_annotation_item(surface, bounds, row, width, annotation, is_selected,
-                                   start_index + index)
-          end
+                                   abs_idx, in_all)
+        end
         end
 
         def calculate_visible_range(list_height, annotations)
@@ -170,9 +175,7 @@ module EbookReader
 
           start_index = @selected - list_height + 1 if @selected >= list_height
 
-          if total_annotations > list_height
-            start_index = [start_index, total_annotations - list_height].min
-          end
+          start_index = [start_index, total_annotations - list_height].min if total_annotations > list_height
 
           end_index = [start_index + list_height - 1, total_annotations - 1].min
           visible_annotations = annotations[start_index..end_index] || []
@@ -181,7 +184,7 @@ module EbookReader
         end
 
         def render_annotation_item(surface, bounds, row, width, annotation, is_selected,
-                                   absolute_index)
+                                   absolute_index, in_all)
           # Extract annotation details
           text = (annotation[:text] || 'No text').to_s.tr("\n", ' ')
           note = (annotation[:note] || '').to_s.tr("\n", ' ')
@@ -192,7 +195,7 @@ module EbookReader
           idx_w = 4
           ch_w = 6
           date_w = 10
-          book_w = (@mode == :all ? 12 : 0)
+          book_w = (in_all ? 12 : 0)
           avail = width - (idx_w + ch_w + date_w + book_w + 8)
           snippet_w = (avail * 0.6).to_i
           note_w = avail - snippet_w
@@ -202,8 +205,9 @@ module EbookReader
           chv = chapter.nil? ? '-' : chapter.to_i
           snippet = truncate_text(text, snippet_w)
           note_tr = truncate_text(note, note_w)
-          if @mode == :all
-            book = annotation[:book_path] ? File.basename(annotation[:book_path]) : ''
+          if in_all
+            bp = annotation[:book_path]
+            book = bp ? File.basename(bp) : ''
             line = format("%s %s  %-#{ch_w}s  %-#{snippet_w}s  %-#{note_w}s  %-#{book_w}s  %-#{date_w}s",
                           pointer, idx, chv, snippet, note_tr, truncate_text(book, book_w), created)
           else
@@ -215,11 +219,7 @@ module EbookReader
           surface.write(bounds, row, 1, color + line + Terminal::ANSI::RESET)
         end
 
-        def truncate_text(text, max_length)
-          return text if text.length <= max_length
-
-          "#{text[0...(max_length - 3)]}..."
-        end
+        # truncate_text provided by UI::TextUtils
 
         def normalize_list(raw)
           (raw || []).map do |a|

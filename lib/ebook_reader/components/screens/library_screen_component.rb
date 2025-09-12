@@ -6,11 +6,14 @@ require_relative '../../constants/ui_constants'
 module EbookReader
   module Components
     module Screens
+      # LibraryScreenComponent renders the cached library view with
+      # sortable columns and paging of visible items.
       class LibraryScreenComponent < BaseScreenComponent
         include EbookReader::Constants
 
         Item = Struct.new(:title, :authors, :year, :last_accessed, :size_bytes, :open_path, :epub_path,
                           keyword_init: true)
+        ItemRenderCtx = Struct.new(:row, :width, :book, :index, :selected, keyword_init: true)
 
         def initialize(state, dependencies)
           super(dependencies)
@@ -44,7 +47,7 @@ module EbookReader
         def load_items
           return @items if @items
 
-          svc = @services.resolve(:library_service)
+          svc = @dependencies.resolve(:library_service)
           raw = svc ? (svc.list_cached_books || []) : []
           @items = raw.map do |h|
             Item.new(
@@ -69,10 +72,12 @@ module EbookReader
 
         def render_library(surface, bounds, items, selected)
           list_start = 4
-          list_height = bounds.height - list_start - 2
+          width = bounds.width
+          height = bounds.height
+          list_height = height - list_start - 2
           return if list_height <= 0
 
-          draw_list_header(surface, bounds, bounds.width, list_start)
+          draw_list_header(surface, bounds, width, list_start)
           list_start += 2
           list_height -= 2
 
@@ -82,10 +87,11 @@ module EbookReader
 
           current_row = list_start
           visible_items.each_with_index do |book, i|
-            break if current_row >= bounds.height - 1
+            break if current_row >= height - 1
 
-            render_library_item(surface, bounds, current_row, bounds.width, book, start_index + i,
-                                selected)
+            ctx = ItemRenderCtx.new(row: current_row, width: width, book: book,
+                                    index: start_index + i, selected: selected)
+            render_library_item(surface, bounds, ctx)
             current_row += 1
           end
         end
@@ -99,52 +105,56 @@ module EbookReader
         end
 
         def draw_list_header(surface, bounds, width, row)
-          pointer_w = 2
-          gap = 2
-          remaining = width - pointer_w - (gap * 4)
-          year_w = 6
-          last_w = 16
-          size_w = 8
-          author_w = [[(remaining * 0.25).to_i, 12].max,
-                      remaining - 20 - year_w - last_w - size_w].min
-          title_w = [remaining - author_w - year_w - last_w - size_w, 20].max
+          dims = compute_column_widths(width)
 
           headers = [
-            'Title'.ljust(title_w),
-            'Author(s)'.ljust(author_w),
-            'Year'.ljust(year_w),
-            'Last accessed'.ljust(last_w),
-            'Size'.rjust(size_w),
-          ].join(' ' * gap)
+            'Title'.ljust(dims[:title_w]),
+            'Author(s)'.ljust(dims[:author_w]),
+            'Year'.ljust(dims[:year_w]),
+            'Last accessed'.ljust(dims[:last_w]),
+            'Size'.rjust(dims[:size_w]),
+          ].join(' ' * dims[:gap])
           header_style = Terminal::ANSI::BOLD + Terminal::ANSI::LIGHT_GREY
-          surface.write(bounds, row, 1, header_style + (' ' * pointer_w) + headers + Terminal::ANSI::RESET)
-          divider = ('─' * [width - 2, 1].max)
-          surface.write(bounds, row + 1, 1, UIConstants::COLOR_TEXT_DIM + divider + Terminal::ANSI::RESET)
+          header_line = header_style + (' ' * dims[:pointer_w]) + headers + Terminal::ANSI::RESET
+          surface.write(bounds, row, 1, header_line)
+          divider = '─' * [width - 2, 1].max
+          divider_line = UIConstants::COLOR_TEXT_DIM + divider + Terminal::ANSI::RESET
+          surface.write(bounds, row + 1, 1, divider_line)
         end
 
-        def render_library_item(surface, bounds, row, width, book, index, selected)
-          is_selected = (index == selected)
+        def render_library_item(surface, bounds, ctx)
+          is_selected = (ctx.index == ctx.selected)
+          dims = compute_column_widths(ctx.width)
+
+          pointer = is_selected ? '▸ ' : '  '
+          book = ctx.book
+          t_w = dims[:title_w]
+          a_w = dims[:author_w]
+          y_w = dims[:year_w]
+          l_w = dims[:last_w]
+          s_w = dims[:size_w]
+          title_col = truncate_text((book.title || 'Unknown').to_s, t_w).ljust(t_w)
+          author_col = truncate_text((book.authors || '').to_s, a_w).ljust(a_w)
+          year_col = (book.year || '').to_s[0, 4].ljust(y_w)
+          last_col = truncate_text(relative_accessed_label(book.last_accessed), l_w).ljust(l_w)
+          size_col = format_size(book.size_bytes).rjust(s_w)
+
+          line = [title_col, author_col, year_col, last_col, size_col].join(' ' * dims[:gap])
+          style = is_selected ? UIConstants::SELECTION_HIGHLIGHT : UIConstants::COLOR_TEXT_PRIMARY
+          surface.write(bounds, ctx.row, 1, style + pointer + line + Terminal::ANSI::RESET)
+        end
+
+        def compute_column_widths(total_width)
           pointer_w = 2
           gap = 2
-          remaining = width - pointer_w - (gap * 4)
+          remaining = total_width - pointer_w - (gap * 4)
           year_w = 6
           last_w = 16
           size_w = 8
-          author_w = [[(remaining * 0.25).to_i, 12].max,
-                      remaining - 20 - year_w - last_w - size_w].min
+          author_w = [(remaining * 0.25).to_i, 12].max.clamp(12, remaining - 20 - year_w - last_w - size_w)
           title_w = [remaining - author_w - year_w - last_w - size_w, 20].max
-
-          pointer = is_selected ? '▸ ' : '  '
-          title_col = truncate_text((book.title || 'Unknown').to_s, title_w).ljust(title_w)
-          author_col = truncate_text((book.authors || '').to_s, author_w).ljust(author_w)
-          year_col = (book.year || '').to_s[0, 4].ljust(year_w)
-          last_col = truncate_text(relative_accessed_label(book.last_accessed),
-                                   last_w).ljust(last_w)
-          size_col = format_size(book.size_bytes).rjust(size_w)
-
-          line = [title_col, author_col, year_col, last_col, size_col].join(' ' * gap)
-          style = is_selected ? UIConstants::SELECTION_HIGHLIGHT : UIConstants::COLOR_TEXT_PRIMARY
-          surface.write(bounds, row, 1, style + pointer + line + Terminal::ANSI::RESET)
+          { pointer_w: pointer_w, gap: gap, title_w: title_w, author_w: author_w,
+            year_w: year_w, last_w: last_w, size_w: size_w }
         end
 
         def truncate_text(text, max_length)
@@ -182,7 +192,7 @@ module EbookReader
           elsif days == 1
             'yesterday'
           elsif days < 7
-            days == 1 ? 'a day ago' : "#{days} days ago"
+            "#{days} days ago"
           else
             weeks == 1 ? 'a week ago' : "#{weeks} weeks ago"
           end

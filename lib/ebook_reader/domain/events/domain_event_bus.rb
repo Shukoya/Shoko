@@ -47,9 +47,7 @@ module EbookReader
         # @param handler [Proc] Handler block or callable
         # @yield [event] Block to handle the event
         def subscribe(event_type, handler = nil, &block)
-          handler = block if block_given?
-          raise ArgumentError, 'Handler must be provided' unless handler
-
+          handler = resolve_callable!(handler, &block)
           @subscribers[event_type] << handler
         end
 
@@ -59,9 +57,7 @@ module EbookReader
         # @param handler [Proc] Handler block or callable
         # @yield [event] Block to handle the event
         def subscribe_to_many(event_types, handler = nil, &block)
-          handler = block if block_given?
-          raise ArgumentError, 'Handler must be provided' unless handler
-
+          handler = resolve_callable!(handler, &block)
           event_types.each { |type| subscribe(type, handler) }
         end
 
@@ -88,6 +84,12 @@ module EbookReader
           @middleware << middleware
         end
 
+        def resolve_callable!(callable, &block)
+          callable = block if block_given?
+          raise ArgumentError, 'Handler must be provided' unless callable
+          callable
+        end
+
         # Get all subscribers for an event type
         #
         # @param event_type [Class] Event class
@@ -100,8 +102,13 @@ module EbookReader
         #
         # @param event_type [Class] Event class
         # @return [Boolean] True if there are subscribers
-        def has_subscribers?(event_type)
+        def subscribers?(event_type)
           @subscribers[event_type].any?
+        end
+
+        # Backward-compatible alias
+        def has_subscribers?(event_type)
+          subscribers?(event_type)
         end
 
         # Clear all subscribers (useful for testing)

@@ -29,12 +29,14 @@ module EbookReader
       private
 
       def render_saved_annotations(surface, bounds)
-        return unless @controller.state.get(%i[reader annotations])
+        state = @controller.state
+        anns = state.get(%i[reader annotations])
+        return unless anns
 
-        @controller.state.get(%i[reader annotations])
+        current_ch = state.get(%i[reader current_chapter])
+        anns
                    .select do |a|
-          a['chapter_index'] == @controller.state.get(%i[reader
-                                                         current_chapter])
+          a['chapter_index'] == current_ch
         end
                    .each do |annotation|
           render_text_highlight(surface, bounds, annotation['range'], HIGHLIGHT_BG_SAVED)
@@ -71,11 +73,13 @@ module EbookReader
         rendered_lines = @controller.state.get(%i[reader rendered_lines]) || {}
         start_pos = normalized_range[:start]
         end_pos = normalized_range[:end]
+        start_y = start_pos[:y]
+        end_y = end_pos[:y]
 
         # Determine which column the selection started in (for column-aware highlighting)
         target_column_bounds = @coordinate_service.column_bounds_for(start_pos, rendered_lines)
 
-        (start_pos[:y]..end_pos[:y]).each do |y|
+        (start_y..end_y).each do |y|
           render_highlighted_line(surface, bounds, rendered_lines, y, start_pos, end_pos, color,
                                   target_column_bounds)
         end
@@ -85,6 +89,12 @@ module EbookReader
                                   target_column_bounds = nil)
         # Convert 0-based selection coordinates to 1-based terminal row
         terminal_row = y + 1
+        start_y = start_pos[:y]
+        end_y = end_pos[:y]
+        start_x = start_pos[:x]
+        end_x = end_pos[:x]
+        is_start_row = (y == start_y)
+        is_end_row = (y == end_y)
 
         # Find line segments for this row that belong to the target column
         rendered_lines.each_value do |line_info|
@@ -95,16 +105,16 @@ module EbookReader
 
           # If we have column bounds, only highlight within the target column
           if target_column_bounds
-            next unless @coordinate_service.column_overlaps?(line_start_col, line_end_col,
-                                                             target_column_bounds)
+            overlaps = @coordinate_service.column_overlaps?(line_start_col, line_end_col, target_column_bounds)
+            next unless overlaps
 
             # Constrain selection to target column bounds
-            row_start_x = y == start_pos[:y] ? start_pos[:x] : target_column_bounds[:start]
-            row_end_x = y == end_pos[:y] ? end_pos[:x] : target_column_bounds[:end]
+            row_start_x = is_start_row ? start_x : target_column_bounds[:start]
+            row_end_x = is_end_row ? end_x : target_column_bounds[:end]
           else
             # Original behavior for single-column mode or saved annotations
-            row_start_x = y == start_pos[:y] ? start_pos[:x] : 0
-            row_end_x = y == end_pos[:y] ? end_pos[:x] : Float::INFINITY
+            row_start_x = is_start_row ? start_x : 0
+            row_end_x = is_end_row ? end_x : Float::INFINITY
           end
 
           # Skip if selection doesn't overlap with this line segment
@@ -137,9 +147,11 @@ module EbookReader
         surface.write(bounds, terminal_row, line_start_col, highlighted_text)
 
         # Track segments for cleanup when selection disappears
-        seg_start = line_start_col + highlight_bounds[:start]
-        seg_len = highlight_bounds[:end] - highlight_bounds[:start] + 1
-        original_text = line_text[highlight_bounds[:start]..highlight_bounds[:end]]
+        b_start = highlight_bounds[:start]
+        b_end = highlight_bounds[:end]
+        seg_start = line_start_col + b_start
+        seg_len = b_end - b_start + 1
+        original_text = line_text[b_start..b_end]
         @last_selection_segments << { row: terminal_row, col: seg_start, len: seg_len,
                                       text: original_text }
       end
@@ -153,8 +165,8 @@ module EbookReader
         end_idx_raw = (current_y == end_pos[:y] ? end_pos[:x] - line_start_col : max_index)
 
         # Clamp to valid boundaries
-        start_idx = [[start_idx_raw, 0].max, max_index].min
-        end_idx = [[end_idx_raw, 0].max, max_index].min
+        start_idx = start_idx_raw.clamp(0, max_index)
+        end_idx = end_idx_raw.clamp(0, max_index)
 
         return nil if end_idx < start_idx
 
@@ -163,17 +175,20 @@ module EbookReader
 
       def build_highlighted_text(line_text, bounds, color)
         result = ''
+        reset = Terminal::ANSI::RESET
 
         # Add text before highlight
-        result += line_text[0...bounds[:start]] if bounds[:start].positive?
+        s = bounds[:start]
+        e = bounds[:end]
+        result += line_text[0...s] if s.positive?
 
         # Add highlighted portion
-        highlighted_part = line_text[bounds[:start]..bounds[:end]]
-        result += "#{color}#{COLOR_TEXT_PRIMARY}#{highlighted_part}#{Terminal::ANSI::RESET}"
+        highlighted_part = line_text[s..e]
+        result += "#{color}#{COLOR_TEXT_PRIMARY}#{highlighted_part}#{reset}"
 
         # Add text after highlight
-        result += line_text[(bounds[:end] + 1)..] if bounds[:end] < line_text.length - 1
-
+        result += line_text[(e + 1)..] if e < line_text.length - 1
+        
         result
       end
 
@@ -184,7 +199,8 @@ module EbookReader
 
         @last_selection_segments.each do |seg|
           safe_text = seg[:text] || ''
-          repaint = "#{Terminal::ANSI::RESET}#{COLOR_TEXT_PRIMARY}#{safe_text}#{Terminal::ANSI::RESET}"
+          reset = Terminal::ANSI::RESET
+          repaint = "#{reset}#{COLOR_TEXT_PRIMARY}#{safe_text}#{reset}"
           surface.write(bounds, seg[:row], seg[:col], repaint)
         end
 

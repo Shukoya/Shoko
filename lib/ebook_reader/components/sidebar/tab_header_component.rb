@@ -49,54 +49,65 @@ module EbookReader
           active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
           TABS.each_with_index do |tab, index|
             x_pos = bounds.x + 1 + (index * tab_width)
-            render_tab_button(surface, bounds, tab, x_pos, start_y, tab_width,
-                              active_tab == tab)
+            ctx = TabButtonCtx.new(tab: tab, x: x_pos, y: start_y, width: tab_width, active: (active_tab == tab))
+            render_tab_button(surface, bounds, ctx)
           end
         end
 
-        def render_tab_button(surface, bounds, tab, x_pos, y_pos, width, is_active)
-          info = TAB_INFO[tab]
+        TabButtonCtx = Struct.new(:tab, :x, :y, :width, :active, keyword_init: true)
+
+        def render_tab_button(surface, bounds, ctx)
+          info = TAB_INFO[ctx.tab]
           icon = info[:icon]
           label = info[:label]
           key = info[:key]
+          reset = Terminal::ANSI::RESET
+          x = ctx.x
+          y = ctx.y
+          w = ctx.width
 
-          if is_active
-            # Active tab styling - modern and clean
-            icon_text = "#{COLOR_TEXT_ACCENT}#{icon}#{Terminal::ANSI::RESET}"
-            label_text = "#{COLOR_TEXT_PRIMARY}#{label}#{Terminal::ANSI::RESET}"
+          y1 = y + 1
+          y2 = y + 2
+          return render_active(surface, bounds, x, y1, y2, w, icon, label, reset) if ctx.active
+          render_inactive(surface, bounds, x, y1, y2, w, icon, key, reset)
+        end
 
-            # Center the content
-            content = "#{icon} #{label}"
-            padding = [(width - content.length) / 2, 0].max
+        def write_at(surface, bounds, y, x, text)
+          surface.write(bounds, y, x, text)
+        end
 
-            surface.write(bounds, y_pos + 1, x_pos + padding, icon_text)
-            surface.write(bounds, y_pos + 1, x_pos + padding + 2, label_text)
+        def write_pair(surface, bounds, y, x, left_text, right_text)
+          write_at(surface, bounds, y, x, left_text)
+          write_at(surface, bounds, y, x + 2, right_text)
+        end
 
-            # Active indicator line
-            indicator_char = "#{COLOR_TEXT_ACCENT}▬#{Terminal::ANSI::RESET}"
-            indicator_width = [content.length, width - 2].min
-            indicator_start = x_pos + [(width - indicator_width) / 2, 0].max
+        def xpad_for(x, padding)
+          x + padding
+        end
 
-            (0...indicator_width).each do |i|
-              surface.write(bounds, y_pos + 2, indicator_start + i, indicator_char)
-            end
-          else
-            # Inactive tab styling
-            icon_text = "#{COLOR_TEXT_DIM}#{icon}#{Terminal::ANSI::RESET}"
+        def render_active(surface, bounds, x, y1, y2, w, icon, label, reset)
+          icon_text = "#{COLOR_TEXT_ACCENT}#{icon}#{reset}"
+          label_text = "#{COLOR_TEXT_PRIMARY}#{label}#{reset}"
+          content = "#{icon} #{label}"
+          content_len = content.length
+          padding = [(w - content_len) / 2, 0].max
+          xpad = xpad_for(x, padding)
+          write_pair(surface, bounds, y1, xpad, icon_text, label_text)
+          indicator_char = "#{COLOR_TEXT_ACCENT}▬#{reset}"
+          indicator_width = [content_len, w - 2].min
+          indicator_start = x + [(w - indicator_width) / 2, 0].max
+          (0...indicator_width).each { |i| write_at(surface, bounds, y2, indicator_start + i, indicator_char) }
+        end
 
-            # Show key hint for inactive tabs
-            key_hint = "#{COLOR_TEXT_DIM}[#{key}]#{Terminal::ANSI::RESET}"
-
-            # Center the icon
-            content_width = 1 # Just icon for inactive
-            padding = [(width - content_width) / 2, 0].max
-
-            surface.write(bounds, y_pos + 1, x_pos + padding, icon_text)
-
-            # Show key hint at bottom for inactive tabs
-            key_padding = [(width - 3) / 2, 0].max
-            surface.write(bounds, y_pos + 2, x_pos + key_padding, key_hint)
-          end
+        def render_inactive(surface, bounds, x, y1, y2, w, icon, key, reset)
+          icon_text = "#{COLOR_TEXT_DIM}#{icon}#{reset}"
+          key_hint = "#{COLOR_TEXT_DIM}[#{key}]#{reset}"
+          content_width = 1
+          padding = [(w - content_width) / 2, 0].max
+          xpad = xpad_for(x, padding)
+          write_at(surface, bounds, y1, xpad, icon_text)
+          key_padding = [(w - 3) / 2, 0].max
+          write_at(surface, bounds, y2, x + key_padding, key_hint)
         end
       end
     end

@@ -99,7 +99,8 @@ module EbookReader
     ensure
       begin
         FileUtils.rm_f(fake_epub) if defined?(fake_epub)
-        FileUtils.rm_rf(cache.cache_dir) if defined?(cache) && cache&.cache_dir
+        dir = cache&.cache_dir if defined?(cache)
+        FileUtils.rm_rf(dir) if dir
       rescue StandardError
       end
     end

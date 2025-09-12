@@ -18,146 +18,122 @@ module EbookReader
 
         private
 
-        def render_divider(surface, bounds, col_width)
-          (3..[bounds.height - 1, 4].max).each do |row|
-            surface.write(bounds, row, col_width + 3,
-                          "#{EbookReader::Constants::UIConstants::BORDER_PRIMARY}│#{Terminal::ANSI::RESET}")
-          end
-        end
+        # Divider provided by BaseViewRenderer#draw_divider
 
-        def render_column_lines(surface, bounds, lines, start_col, col_width, _config,
-                                context = nil)
-          draw_lines(surface, bounds, lines, 3, start_col, col_width, context)
+        def render_column_lines(surface, bounds, lines, start_col, col_width, context = nil)
+          params = Models::RenderParams.new(start_row: 3, col_start: start_col,
+                                            col_width: col_width, context: context)
+          draw_lines(surface, bounds, lines, params)
         end
 
         # Context-based rendering methods
         def render_dynamic_mode_with_context(surface, bounds, context)
-          page_manager = context.page_calculator
-          col_width, content_height = layout_metrics(bounds.width, bounds.height, :split)
-          spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config)
-          displayable = adjust_for_line_spacing(content_height, spacing)
+          page_calculator = context.page_calculator
+          col_width, _, _, displayable = compute_layout(bounds, :split,
+                                                        context.config)
 
           chapter = context.current_chapter
           render_chapter_header_with_context(surface, bounds, context, chapter) if chapter
 
-          if page_manager && (left_pd = page_manager.get_page(context.current_page_index))
-            render_dynamic_left_column_with_context(surface, bounds, left_pd[:lines], col_width,
-                                                    context)
-            render_divider(surface, bounds, col_width)
-            if (right_pd = page_manager.get_page(context.current_page_index + 1))
-              render_dynamic_right_column_with_context(surface, bounds, right_pd[:lines],
-                                                       col_width, context)
-            end
+          idx = context.current_page_index
+          if page_calculator && (left_pd = page_calculator.get_page(idx))
+            render_dynamic_from_page_data(surface, bounds, context, col_width, left_pd,
+                                          page_calculator.get_page(idx + 1))
             return
           end
 
           # Fallback when dynamic map not ready yet
-          base_offset = (context.current_page_index || 0) * [displayable, 1].max
-          left_lines = begin
-            chapter_index = context.state.get(%i[reader current_chapter]) || 0
-            chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies&.registered?(:wrapping_service) && chapter
-              ws = @dependencies.resolve(:wrapping_service)
-              ws.wrap_window(chapter.lines || [], chapter_index, col_width, base_offset,
-                             displayable)
-            else
-              (chapter&.lines || [])[base_offset, displayable] || []
-            end
-          end
-          render_column_lines(surface, bounds, left_lines, 1, col_width, context.config, context)
-          render_divider(surface, bounds, col_width)
-          right_lines = begin
-            chapter_index = context.state.get(%i[reader current_chapter]) || 0
-            chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies&.registered?(:wrapping_service) && chapter
-              ws = @dependencies.resolve(:wrapping_service)
-              ws.wrap_window(chapter.lines || [], chapter_index, col_width,
-                             base_offset + displayable, displayable)
-            else
-              (chapter&.lines || [])[base_offset + displayable, displayable] || []
-            end
-          end
-          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width,
-                              context.config, context)
+          base_offset = (idx || 0) * [displayable, 1].max
+          render_dynamic_fallback(surface, bounds, context, col_width, base_offset, displayable)
         end
 
         def render_absolute_mode_with_context(surface, bounds, context)
           chapter = context.current_chapter
           return unless chapter
 
-          col_width, content_height = layout_metrics(bounds.width, bounds.height, :split)
-          display_height = adjust_for_line_spacing(content_height, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
+          bw = bounds.width
+          bh = bounds.height
+          col_width, content_height = layout_metrics(bw, bh, :split)
+          spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config)
+          display_height = adjust_for_line_spacing(content_height, spacing)
 
-          return unless context&.state
-
-          chapter_index = context.state.get(%i[reader current_chapter]) || 0
-          left_offset  = context.state.get(%i[reader left_page]) || 0
-          right_offset = context.state.get(%i[reader right_page]) || display_height
+          st = context&.state
+          return unless st
+          left_offset  = st.get(%i[reader left_page]) || 0
+          right_offset = st.get(%i[reader right_page]) || display_height
 
           # Render components
-          render_chapter_header_with_context(surface, bounds, context, chapter)
-          left_lines = begin
-            chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies&.registered?(:wrapping_service) && chapter
-              ws = @dependencies.resolve(:wrapping_service)
-              ws.wrap_window(chapter.lines || [], chapter_index, col_width, left_offset,
-                             display_height)
-            else
-              (chapter&.lines || [])[left_offset, display_height] || []
-            end
-          end
-          render_column_lines(surface, bounds, left_lines, 1, col_width, context.config, context)
-          render_divider(surface, bounds, col_width)
-          right_lines = begin
-            chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies&.registered?(:wrapping_service) && chapter
-              ws = @dependencies.resolve(:wrapping_service)
-              ws.wrap_window(chapter.lines || [], chapter_index, col_width, right_offset,
-                             display_height)
-            else
-              (chapter&.lines || [])[right_offset, display_height] || []
-            end
-          end
-          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width,
-                              context.config, context)
+          render_chapter_header_with_context(surface, bounds, st, chapter)
+          col = ColumnContext.new(col_width: col_width, display_height: display_height,
+                                  left_offset: left_offset, right_offset: right_offset)
+          render_absolute_columns(surface, bounds, context, col)
         end
 
-        def render_chapter_header_with_context(surface, bounds, context, chapter)
-          return unless context&.state
-
-          chapter_info = "[#{context.state.get(%i[reader
-                                                  current_chapter]) + 1}] #{chapter.title || 'Unknown'}"
+        def render_chapter_header_with_context(surface, bounds, st, chapter)
+          idx = st.get(%i[reader current_chapter]) + 1
+          info = "[#{idx}] #{chapter.title || 'Unknown'}"
+          reset = Terminal::ANSI::RESET
           surface.write(bounds, 1, 1,
-                        EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + chapter_info[0, bounds.width - 2].to_s + Terminal::ANSI::RESET)
+                        EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + info[0, bounds.width - 2].to_s + reset)
         end
 
-        def render_dynamic_left_column_with_context(surface, bounds, lines, col_width, context)
-          render_column_lines(surface, bounds, lines, 1, col_width, context.config, context)
+        def render_dynamic_left_column_with_context(surface, bounds, lines, col_width,
+                                                    context)
+          render_column_lines(surface, bounds, lines, 1, col_width, context)
         end
 
-        def render_dynamic_right_column_with_context(surface, bounds, lines, col_width, context)
-          render_column_lines(surface, bounds, lines, col_width + 5, col_width, context.config,
-                              context)
+        def render_dynamic_right_column_with_context(surface, bounds, lines, col_width,
+                                                     context)
+          render_column_lines(surface, bounds, lines, col_width + 5, col_width, context)
         end
 
-        def render_left_column_with_context(surface, bounds, wrapped, context, col_width,
+        def render_left_column_with_context(surface, bounds, wrapped, st, col_width,
                                             display_height)
-          return unless context&.state
-
-          left_lines = wrapped.slice(context.state.get(%i[reader left_page]) || 0,
+          left_lines = wrapped.slice(st.get(%i[reader left_page]) || 0,
                                      display_height) || []
-          render_column_lines(surface, bounds, left_lines, 1, col_width, context.config,
-                              context)
+          render_column_lines(surface, bounds, left_lines, 1, col_width, nil)
         end
 
-        def render_right_column_with_context(surface, bounds, wrapped, context, col_width,
+        def render_right_column_with_context(surface, bounds, wrapped, st, col_width,
                                              display_height)
-          return unless context&.state
-
-          right_lines = wrapped.slice(context.state.get(%i[reader right_page]) || 0,
+          right_lines = wrapped.slice(st.get(%i[reader right_page]) || 0,
                                       display_height) || []
-          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width,
-                              context.config, context)
+          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width, nil)
+        end
+
+        def render_dynamic_from_page_data(surface, bounds, context, col_width, left_pd, right_pd)
+          render_column_lines(surface, bounds, left_pd[:lines], 1, col_width, context)
+          draw_divider(surface, bounds, col_width)
+          return unless right_pd
+
+          render_column_lines(surface, bounds, right_pd[:lines], col_width + 5, col_width, context)
+        end
+
+        def render_dynamic_fallback(surface, bounds, context, col_width, base_offset, displayable)
+          left_lines = fetch_wrapped_lines(context, col_width, base_offset, displayable)
+          render_column_lines(surface, bounds, left_lines, 1, col_width, context)
+          draw_divider(surface, bounds, col_width)
+          right_lines = fetch_wrapped_lines(context, col_width, base_offset + displayable,
+                                            displayable)
+          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width, context)
+        end
+
+        ColumnContext = Struct.new(:col_width, :display_height, :left_offset, :right_offset, keyword_init: true)
+
+        def render_absolute_columns(surface, bounds, context, col)
+          cw = col.col_width
+          dh = col.display_height
+          left_lines = fetch_wrapped_lines(context, cw, col.left_offset, dh)
+          render_column_lines(surface, bounds, left_lines, 1, cw, context)
+          draw_divider(surface, bounds, cw)
+          right_lines = fetch_wrapped_lines(context, cw, col.right_offset, dh)
+          render_column_lines(surface, bounds, right_lines, cw + 5, cw, context)
+        end
+
+        def fetch_wrapped_lines(context, col_width, offset, length)
+          st = context.state
+          chapter_index = st.get(%i[reader current_chapter]) || 0
+          super(context.document, chapter_index, col_width, offset, length)
         end
       end
     end

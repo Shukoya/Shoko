@@ -39,16 +39,18 @@ module EbookReader
       end
 
       def render_single_view_header(surface, bounds, view_model, width)
+        reset = Terminal::ANSI::RESET
         title_text = view_model.document_title.to_s
         centered_col = [(width - title_text.length) / 2, 1].max
-        surface.write(bounds, 1, centered_col, "#{COLOR_TEXT_PRIMARY}#{title_text}#{Terminal::ANSI::RESET}")
+        surface.write(bounds, 1, centered_col, "#{COLOR_TEXT_PRIMARY}#{title_text}#{reset}")
       end
 
       def render_default_header(surface, bounds, width)
-        surface.write(bounds, 1, 1, "#{COLOR_TEXT_PRIMARY}Reader#{Terminal::ANSI::RESET}")
+        reset = Terminal::ANSI::RESET
+        surface.write(bounds, 1, 1, "#{COLOR_TEXT_PRIMARY}Reader#{reset}")
         right_text = 'q:Quit ?:Help t:ToC B:Bookmarks'
         right_col = [width - right_text.length + 1, 1].max
-        surface.write(bounds, 1, right_col, "#{COLOR_TEXT_PRIMARY}#{right_text}#{Terminal::ANSI::RESET}")
+        surface.write(bounds, 1, right_col, "#{COLOR_TEXT_PRIMARY}#{right_text}#{reset}")
       end
     end
   end

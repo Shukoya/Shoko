@@ -8,10 +8,10 @@ module EbookReader
     class BaseComponent
       include ComponentInterface
 
-      attr_reader :services
+      attr_reader :dependencies
 
-      def initialize(services = nil)
-        @services = services
+      def initialize(dependencies = nil)
+        @dependencies = dependencies
         @initialized = false
         @needs_update = true
       end
@@ -20,7 +20,7 @@ module EbookReader
       # @param surface [Surface] terminal surface wrapper
       # @param bounds [Rect] local bounds for this component
       def render(surface, bounds)
-        mount unless @initialized
+        ensure_mounted
 
         # Always render for now to debug display issues
         do_render(surface, bounds)
@@ -52,18 +52,12 @@ module EbookReader
 
       # Called once when component is first initialized with a parent
       def mount
-        return if @initialized
-
-        on_mount
-        @initialized = true
+        ensure_mounted
       end
 
       # Called when component is removed from the component tree
       def unmount
-        return unless @initialized
-
-        on_unmount
-        @initialized = false
+        ensure_unmounted
       end
 
       # Mark component as needing a re-render
@@ -94,6 +88,22 @@ module EbookReader
       # Observer pattern support for state changes
       def state_changed(_path, _old_value, _new_value)
         invalidate
+      end
+
+      private
+
+      def ensure_mounted
+        return if @initialized
+
+        on_mount
+        @initialized = true
+      end
+
+      def ensure_unmounted
+        return unless @initialized
+
+        on_unmount
+        @initialized = false
       end
     end
   end

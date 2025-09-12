@@ -10,12 +10,12 @@ module EbookReader
 
       def scan_all_directories
         all_dirs = build_directory_list
-        warn "Scanning directories: #{all_dirs.join(', ')}" if EPUBFinder::DEBUG_MODE
+        warn_debug "Scanning directories: #{all_dirs.join(', ')}"
 
         all_dirs.each do |dir|
           break if @context.epubs.length >= EPUBFinder::MAX_FILES
 
-          warn "Scanning: #{dir}" if EPUBFinder::DEBUG_MODE
+          warn_debug "Scanning: #{dir}"
           scan_directory(dir)
         end
       end
@@ -62,7 +62,7 @@ module EbookReader
       rescue Errno::EACCES, Errno::ENOENT, Errno::EPERM
         # Skip directories we can't access
       rescue StandardError => e
-        warn "Error scanning #{dir}: #{e.message}" if EPUBFinder::DEBUG_MODE
+        warn_debug "Error scanning #{dir}: #{e.message}"
       end
 
       def process_entries(dir)
@@ -111,6 +111,12 @@ module EbookReader
           'modified' => File.mtime(path).iso8601,
           'dir' => File.dirname(path),
         }
+      end
+
+      def debug? = EPUBFinder::DEBUG_MODE
+
+      def warn_debug(msg)
+        warn msg if debug?
       end
     end
   end

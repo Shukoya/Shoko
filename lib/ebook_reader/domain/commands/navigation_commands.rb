@@ -22,14 +22,17 @@ module EbookReader
         end
 
         def can_execute?(context, _params = {})
-          context.dependencies.registered?(:navigation_service) &&
-            context.dependencies.registered?(:state_store)
+          deps = context.dependencies
+          deps.registered?(:navigation_service) && deps.registered?(:state_store)
         end
 
         protected
 
         def perform(context, _params = {})
-          navigation_service = context.dependencies.resolve(:navigation_service)
+          deps = context.dependencies
+          navigation_service = deps.resolve(:navigation_service)
+          current_state = deps.resolve(:state_store).current_state
+          current_chapter = current_state.dig(:reader, :current_chapter) || 0
 
           case @action
           when :next_page
@@ -37,12 +40,8 @@ module EbookReader
           when :prev_page
             navigation_service.prev_page
           when :next_chapter
-            current_state = context.dependencies.resolve(:state_store).current_state
-            current_chapter = current_state.dig(:reader, :current_chapter) || 0
             navigation_service.jump_to_chapter(current_chapter + 1)
           when :prev_chapter
-            current_state = context.dependencies.resolve(:state_store).current_state
-            current_chapter = current_state.dig(:reader, :current_chapter) || 0
             navigation_service.jump_to_chapter([current_chapter - 1, 0].max)
           when :go_to_start
             navigation_service.go_to_start

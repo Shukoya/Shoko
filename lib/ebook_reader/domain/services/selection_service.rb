@@ -31,14 +31,16 @@ module EbookReader
 
           start_pos = normalized[:start]
           end_pos = normalized[:end]
+          sy = start_pos[:y]
+          ey = end_pos[:y]
 
           column_bounds = coordinate_service.column_bounds_for(start_pos, rendered_lines)
           return '' unless column_bounds
 
           text_lines = []
 
-          (start_pos[:y]..end_pos[:y]).each do |y|
-            terminal_row = coordinate_service.mouse_to_terminal(0, y)[:y]
+          (sy..ey).each do |y|
+            terminal_row = y + 1
 
             parts = []
             rendered_lines.each_value do |line_info|
@@ -50,15 +52,16 @@ module EbookReader
               next unless coordinate_service.column_overlaps?(line_start, line_end, column_bounds)
 
               line_text = line_info[:text]
-              row_start_x = y == start_pos[:y] ? start_pos[:x] : column_bounds[:start]
-              row_end_x   = y == end_pos[:y]   ? end_pos[:x]   : column_bounds[:end]
+              row_start_x = y == sy ? start_pos[:x] : column_bounds[:start]
+              row_end_x   = y == ey ? end_pos[:x]   : column_bounds[:end]
 
               next if row_end_x < line_start || row_start_x > line_end
 
               start_idx = [row_start_x - line_start, 0].max
-              end_idx   = [row_end_x - line_start, line_text.length - 1].min
+              len = line_text.length
+              end_idx   = [row_end_x - line_start, len - 1].min
 
-              next unless end_idx >= start_idx && start_idx < line_text.length
+              next unless end_idx >= start_idx && start_idx < len
 
               parts << { col: line_start, text: line_text[start_idx..end_idx] }
             end

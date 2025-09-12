@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_service'
-require_relative '../../services/chapter_cache'
+require_relative 'internal/chapter_cache'
 
 module EbookReader
   module Domain
@@ -12,7 +12,7 @@ module EbookReader
         WINDOW_CACHE_LIMIT = 200
         def initialize(dependencies)
           super
-          @chapter_cache = EbookReader::Services::ChapterCache.new
+          @chapter_cache = EbookReader::Domain::Services::Internal::ChapterCache.new
           @window_cache = Hash.new { |h, k| h[k] = { store: {}, order: [] } }
         end
 
@@ -44,11 +44,14 @@ module EbookReader
         # @param length [Integer] number of wrapped lines to return
         # @return [Array<String>] slice of wrapped lines covering the requested window
         def wrap_window(lines, chapter_index, width, start, length)
-          return [] if lines.nil? || width.to_i <= 0 || length.to_i <= 0
+          width_i = width.to_i
+          length_i = length.to_i
+          start_i = start.to_i
+          return [] if lines.nil? || width_i <= 0 || length_i <= 0
 
-          target_end = [start.to_i, 0].max + length.to_i - 1
-          key = "#{chapter_index}_#{width}"
-          cached = @window_cache[key][:store][[start.to_i, length.to_i]]
+          target_end = [start_i, 0].max + length_i - 1
+          key = "#{chapter_index}_#{width_i}"
+          cached = @window_cache[key][:store][[start_i, length_i]]
           return cached if cached
 
           wrapped = []
@@ -68,7 +71,7 @@ module EbookReader
             line.split(/\s+/).each do |word|
               if current.empty?
                 current = word
-              elsif current.length + 1 + word.length <= width
+              elsif current.length + 1 + word.length <= width_i
                 current = "#{current} #{word}"
               else
                 wrapped << current
@@ -78,11 +81,11 @@ module EbookReader
             wrapped << current unless current.empty?
           end
 
-          start_index = [start.to_i, 0].max
+          start_index = [start_i, 0].max
           return [] if start_index >= wrapped.length
 
-          slice = wrapped[start_index, length.to_i] || []
-          cache_put(key, [start.to_i, length.to_i], slice)
+          slice = wrapped[start_index, length_i] || []
+          cache_put(key, [start_i, length_i], slice)
           slice
         end
 
@@ -90,9 +93,60 @@ module EbookReader
           wrap_window(lines, chapter_index, width, start, length)
         end
 
+        # Wrap the visible window and prefetch ±N pages around it in the background.
+        # This centralizes the behavior that was previously embedded in ReaderController.
+        #
+        # @param doc [Object] document responding to #get_chapter(index)
+        # @param chapter_index [Integer]
+        # @param col_width [Integer]
+        # @param offset [Integer] wrapped-line offset
+        # @param display_height [Integer] lines per page
+        # @param pre_pages [Integer,nil] optional number of pages to prefetch; defaults from config
+        # @return [Array<String>] visible wrapped lines for the requested window
+        def fetch_window_and_prefetch(doc, chapter_index, col_width, offset, display_height,
+                                      pre_pages = nil)
+          return [] unless doc && display_height.to_i.positive?
+
+          chapter = doc.get_chapter(chapter_index)
+          return [] unless chapter
+
+          lines = chapter.lines || []
+          start_i = [offset.to_i, 0].max
+          length_i = display_height.to_i
+
+          visible = wrap_window(lines, chapter_index, col_width, start_i, length_i)
+
+          begin
+            pages = pre_pages
+            if pages.nil?
+              st = resolve(:state_store) if registered?(:state_store)
+              pages = begin
+                (st&.dig(:config,
+                         :prefetch_pages) || st&.get(%i[config prefetch_pages]) || 20).to_i
+              rescue StandardError
+                20
+              end
+            end
+            pages = pages.clamp(0, 200)
+            window = pages * length_i
+            prefetch_start = [start_i - window, 0].max
+            prefetch_end   = start_i + window + (length_i - 1)
+            prefetch_len   = prefetch_end - prefetch_start + 1
+            Thread.new do
+              prefetch_windows(lines, chapter_index, col_width, prefetch_start, prefetch_len)
+            rescue StandardError
+              # ignore background failures
+            end
+          rescue StandardError
+            # best-effort prefetch
+          end
+
+          visible
+        end
+
         # Clear all cached wrapped lines
         def clear_cache
-          @chapter_cache = EbookReader::Services::ChapterCache.new
+          @chapter_cache = EbookReader::Domain::Services::Internal::ChapterCache.new
           @window_cache.clear
         end
 

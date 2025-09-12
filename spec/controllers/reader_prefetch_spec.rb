@@ -30,13 +30,11 @@ RSpec.describe EbookReader::ReaderController do
   end
 
   it 'prefetches ±20 pages around current page when fetching window' do
-    # Spy wrapping service to assert prefetch arguments
-    wrapping = instance_double('WrappingService')
-    allow(wrapping).to receive(:wrap_window).and_return(Array.new(10, 'x'))
-    allow(wrapping).to receive(:prefetch_windows)
-
+    # Use real wrapping service but spy on methods
     container = EbookReader::Domain::ContainerFactory.create_default_container
-    container.register(:wrapping_service, wrapping)
+    wrapping = container.resolve(:wrapping_service)
+    allow(wrapping).to receive(:wrap_window).and_return(Array.new(10, 'x'))
+    allow(wrapping).to receive(:prefetch_windows).and_call_original
 
     ctrl = described_class.new('/tmp/fake.epub', nil, container)
 
@@ -46,7 +44,8 @@ RSpec.describe EbookReader::ReaderController do
     offset = 100
     display_height = 10
 
-    ctrl.send(:wrapped_window_for, chapter_index, col_width, offset, display_height)
+    # Invoke the new service API via the resolved wrapping service
+    wrapping.fetch_window_and_prefetch(ctrl.doc, chapter_index, col_width, offset, display_height)
     # Give background prefetch thread a tick
     sleep 0.01
 

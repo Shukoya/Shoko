@@ -9,6 +9,10 @@ require_relative 'reading/bookmarks_renderer'
 
 module EbookReader
   module Components
+    # ContentComponent coordinates the main reading content area.
+    # It switches between help/TOC/bookmarks screens and the active
+    # view renderer based on state, and ensures rendered lines are
+    # reset each frame for selection/highlighting overlays.
     class ContentComponent < BaseComponent
       def initialize(controller)
         super(controller&.dependencies) # Initialize BaseComponent with dependencies
@@ -45,9 +49,6 @@ module EbookReader
 
       def do_render(surface, bounds)
         state = @controller.state
-
-        # Reset rendered lines registry for selection/highlighting
-        @controller.state.dispatch(EbookReader::Domain::Actions::UpdateRenderedLinesAction.new({}))
 
         case state.get(%i[reader mode])
         when :help

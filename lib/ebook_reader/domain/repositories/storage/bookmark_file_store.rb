@@ -5,6 +5,7 @@ require 'fileutils'
 require_relative '../../../constants'
 require_relative '../../models/bookmark'
 require_relative '../../models/bookmark_data'
+require_relative 'file_store_utils'
 
 module EbookReader
   module Domain
@@ -46,15 +47,16 @@ module EbookReader
             key = path.to_s
             list = all[key] || []
             # Delete by matching serialized representation
-            if bookmark.respond_to?(:to_h)
-              target = bookmark.to_h
-              list.reject! { |h| equivalent?(h, target) }
-            else
-              # Best-effort: match by position
-              chapter = bookmark.respond_to?(:chapter_index) ? bookmark.chapter_index : bookmark[:chapter_index]
-              offset = bookmark.respond_to?(:line_offset) ? bookmark.line_offset : bookmark[:line_offset]
-              list.reject! { |h| h['chapter'] == chapter && h['line_offset'] == offset }
-            end
+            predicate = if bookmark.respond_to?(:to_h)
+                          target = bookmark.to_h
+                          ->(h) { equivalent?(h, target) }
+                        else
+                          # Best-effort: match by position
+                          chapter = bookmark.respond_to?(:chapter_index) ? bookmark.chapter_index : bookmark[:chapter_index]
+                          offset = bookmark.respond_to?(:line_offset) ? bookmark.line_offset : bookmark[:line_offset]
+                          ->(h) { h['chapter'] == chapter && h['line_offset'] == offset }
+                        end
+            list.reject!(&predicate)
             list.empty? ? all.delete(key) : all[key] = list
             save_all(all)
             true
@@ -71,11 +73,7 @@ module EbookReader
           end
 
           def load_all
-            return {} unless File.exist?(file_path)
-
-            JSON.parse(File.read(file_path))
-          rescue StandardError
-            {}
+            FileStoreUtils.load_json_or_empty(file_path)
           end
 
           def save_all(data)

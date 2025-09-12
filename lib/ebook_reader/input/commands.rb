@@ -21,7 +21,7 @@ module EbookReader
           command.execute(context, params)
         when Symbol
           # Try to convert to domain command first
-          if DomainCommandBridge.has_domain_command?(command)
+          if DomainCommandBridge.domain_command?(command)
             domain_command = DomainCommandBridge.symbol_to_command(command, context)
             return execute(domain_command, context, key)
           end
@@ -33,8 +33,10 @@ module EbookReader
 
           context.public_send(command)
         when Proc
-          return command.call(context, key) if command.arity.abs >= 2
-          return command.call(key) if command.arity.abs >= 1
+          ar = command.arity
+          ar_abs = ar.abs
+          return command.call(context, key) if ar_abs >= 2
+          return command.call(key) if ar_abs >= 1
 
           command.call
         when Array

@@ -141,24 +141,26 @@ module EbookReader
         private
 
         def validate_required_attributes
-          return unless self.class.required_attributes
+          klass = self.class
+          required = klass.required_attributes
+          return unless required
 
-          missing = self.class.required_attributes - @attributes.keys
+          missing = required - @attributes.keys
           return if missing.empty?
 
           raise ArgumentError, "Missing required attributes: #{missing.join(', ')}"
         end
 
         def validate_attribute_types
-          return unless self.class.typed_attributes
+          klass = self.class
+          typed = klass.typed_attributes
+          return unless typed
 
-          self.class.typed_attributes.each do |attr, type|
+          typed.each do |attr, type|
             value = @attributes[attr]
             next if value.nil? # Allow nil values
 
-            unless value.is_a?(type)
-              raise TypeError, "Attribute #{attr} must be of type #{type}, got #{value.class}"
-            end
+            raise TypeError, "Attribute #{attr} must be of type #{type}, got #{value.class}" unless value.is_a?(type)
           end
         end
       end

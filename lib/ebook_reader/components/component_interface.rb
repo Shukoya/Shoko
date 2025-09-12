@@ -59,9 +59,7 @@ module EbookReader
         required_methods = %i[mount unmount render]
         missing = required_methods.reject { |method| klass.method_defined?(method) }
 
-        unless missing.empty?
-          raise ArgumentError, "#{klass} missing required methods: #{missing.join(', ')}"
-        end
+        raise ArgumentError, "#{klass} missing required methods: #{missing.join(', ')}" unless missing.empty?
 
         true
       end

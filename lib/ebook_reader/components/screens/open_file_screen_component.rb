@@ -58,10 +58,11 @@ module EbookReader
         private
 
         def truncate_input(text, max_width)
-          return text if text.length <= max_width
+          len = text.length
+          return text if len <= max_width
 
           # Show end of path if too long
-          excess = text.length - max_width + 3
+          excess = len - max_width + 3
           "...#{text[excess..]}"
         end
       end

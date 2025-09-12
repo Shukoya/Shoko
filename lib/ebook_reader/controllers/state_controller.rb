@@ -11,10 +11,9 @@ module EbookReader
         @dependencies = dependencies
         @terminal_service = @dependencies.resolve(:terminal_service)
         # Prefer repositories via DI
-        if @dependencies.respond_to?(:resolve)
-          @progress_repository = @dependencies.resolve(:progress_repository)
-        end
-        return unless @dependencies.respond_to?(:resolve)
+        has_resolve = @dependencies.respond_to?(:resolve)
+        @progress_repository = @dependencies.resolve(:progress_repository) if has_resolve
+        return unless has_resolve
 
         @bookmark_repository = @dependencies.resolve(:bookmark_repository)
       end
@@ -23,7 +22,7 @@ module EbookReader
         return unless @path && @doc
 
         progress_data = collect_progress_data
-        canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
+        canonical = canonical_path_for_doc
 
         @progress_repository.save_for_book(canonical,
                                            chapter_index: progress_data[:chapter],
@@ -31,7 +30,7 @@ module EbookReader
       end
 
       def load_progress
-        canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
+        canonical = canonical_path_for_doc
         progress = @progress_repository.find_by_book_path(canonical)
         # Fallback: attempt original open path if canonical not found (for legacy records)
         progress = @progress_repository.find_by_book_path(@path) if !progress && @path != canonical
@@ -41,26 +40,21 @@ module EbookReader
       end
 
       def load_bookmarks
-        canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
+        canonical = canonical_path_for_doc
         bookmarks = @bookmark_repository.find_by_book_path(canonical)
         @state.dispatch(EbookReader::Domain::Actions::UpdateBookmarksAction.new(bookmarks))
       end
 
       def add_bookmark
         # Basic bookmark functionality - store current position
-        bookmark_data = {
-          chapter: @state.get(%i[reader current_chapter]),
-          page: @state.get(%i[reader current_page_index]),
-          timestamp: Time.now,
-        }
+        current_chapter = @state.get(%i[reader current_chapter])
+        current_page_index = @state.get(%i[reader current_page_index])
+        bookmark_data = { chapter: current_chapter, page: current_page_index, timestamp: Time.now }
 
         # Persist and refresh list
-        canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
-        line_offset = if Domain::Selectors::ConfigSelectors.view_mode(@state) == :split
-                        @state.get(%i[reader left_page])
-                      else
-                        @state.get(%i[reader single_page])
-                      end
+        canonical = canonical_path_for_doc
+        view_mode = Domain::Selectors::ConfigSelectors.view_mode(@state)
+        line_offset = view_mode == :split ? @state.get(%i[reader left_page]) : @state.get(%i[reader single_page])
         text_snippet = ''
         begin
           @bookmark_repository.add_for_book(canonical,
@@ -73,35 +67,37 @@ module EbookReader
         end
         @state.dispatch(EbookReader::Domain::Actions::UpdateBookmarksAction.new(bookmarks))
 
-        set_message("Bookmark added at Chapter #{@state.get(%i[reader
-                                                               current_chapter]) + 1}, Page #{@state.get(%i[
-                                                                                                           reader current_page
-                                                                                                         ])}")
+        curr_ch = current_chapter
+        curr_page = @state.get(%i[reader current_page])
+        set_message("Bookmark added at Chapter #{curr_ch + 1}, Page #{curr_page}")
       end
 
       def jump_to_bookmark
-        bookmarks = @state.get(%i[reader bookmarks])
-        bookmark = bookmarks[@state.get(%i[reader bookmark_selected])]
+        bookmarks = bookmarks_list
+        selected_idx = @state.get(%i[reader bookmark_selected])
+        bookmark = bookmarks[selected_idx]
         return unless bookmark
 
         @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(bookmark.chapter_index))
-        @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(single_page: bookmark.line_offset,
-                                                                           left_page: bookmark.line_offset))
+        offset = bookmark.line_offset
+        @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(single_page: offset,
+                                                                           left_page: offset))
         save_progress
         @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
       end
 
       def delete_selected_bookmark
-        bookmarks = @state.get(%i[reader bookmarks])
-        bookmark = bookmarks[@state.get(%i[reader bookmark_selected])]
+        bookmarks = bookmarks_list
+        selected_idx = @state.get(%i[reader bookmark_selected])
+        bookmark = bookmarks[selected_idx]
         return unless bookmark
 
-        canonical = @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
+        canonical = canonical_path_for_doc
         @bookmark_repository.delete_for_book(canonical, bookmark)
         load_bookmarks
-        if @state.get(%i[reader bookmarks]).any?
-          max_selected = [@state.get(%i[reader bookmark_selected]),
-                          @state.get(%i[reader bookmarks]).length - 1].min
+        current_bookmarks = bookmarks_list
+        if current_bookmarks.any?
+          max_selected = [selected_idx, current_bookmarks.length - 1].min
           @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(bookmark_selected: max_selected))
         end
         set_message(Constants::Messages::BOOKMARK_DELETED)
@@ -137,6 +133,14 @@ module EbookReader
       end
 
       private
+
+      def canonical_path_for_doc
+        @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
+      end
+
+      def bookmarks_list
+        @state.get(%i[reader bookmarks])
+      end
 
       def collect_progress_data
         page_calculator = @dependencies.resolve(:page_calculator)
@@ -205,11 +209,11 @@ module EbookReader
           end
           # Store pending precise restore to be applied after background map build
           @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(
-                           pending_progress: {
-                             chapter_index: @state.get(%i[reader current_chapter]),
-                             line_offset: line_offset,
-                           }
-                         ))
+                            pending_progress: {
+                              chapter_index: @state.get(%i[reader current_chapter]),
+                              line_offset: line_offset,
+                            }
+                          ))
         else
           # Absolute page mode
           page_offsets = line_offset

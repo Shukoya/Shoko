@@ -15,6 +15,8 @@
 #   reader.run
 
 # Core infrastructure - must be loaded first
+# Our minimal ZIP reader lives at lib/zip.rb, and a top-level zip.rb wrapper ensures
+# `require 'zip'` in specs loads it. Keep this require close for clarity.
 require_relative 'zip'
 require_relative 'ebook_reader/infrastructure/logger'
 require_relative 'ebook_reader/infrastructure/validator'
@@ -115,6 +117,7 @@ require_relative 'ebook_reader/domain/actions/update_popup_menu_action'
 require_relative 'ebook_reader/domain/actions/update_rendered_lines_action'
 require_relative 'ebook_reader/domain/actions/update_ui_loading_action'
 require_relative 'ebook_reader/domain/actions/update_pagination_state_action'
+require_relative 'ebook_reader/domain/actions/update_reader_meta_action'
 require_relative 'ebook_reader/domain/actions/update_annotations_action'
 require_relative 'ebook_reader/domain/actions/update_menu_action'
 require_relative 'ebook_reader/domain/actions/action_creators'
@@ -133,6 +136,11 @@ require_relative 'ebook_reader/ui/view_models/reader_view_model'
 
 # Application layer - new architecture
 require_relative 'ebook_reader/application/unified_application'
+require_relative 'ebook_reader/application/reader_view_model_builder'
+require_relative 'ebook_reader/application/reader_startup_orchestrator'
+require_relative 'ebook_reader/application/frame_coordinator'
+require_relative 'ebook_reader/application/render_pipeline'
+require_relative 'ebook_reader/application/pagination_orchestrator'
 # Removed unused: reader_application, menu_application
 
 # Controller layer - focused controllers replacing god class
@@ -166,7 +174,6 @@ require_relative 'ebook_reader/components/screens/base_screen_component'
 require_relative 'ebook_reader/components/screens/menu_screen_component'
 require_relative 'ebook_reader/components/screens/annotation_detail_screen_component'
 require_relative 'ebook_reader/components/screens/annotation_editor_screen_component'
-require_relative 'ebook_reader/ui/loading_overlay'
 
 # UI components
 require_relative 'ebook_reader/main_menu'

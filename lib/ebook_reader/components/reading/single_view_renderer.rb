@@ -7,7 +7,7 @@ module EbookReader
     module Reading
       # Renderer for single-view reading mode (supports both dynamic and absolute page numbering)
       class SingleViewRenderer < BaseViewRenderer
-        def initialize(page_numbering_mode = :absolute, dependencies)
+        def initialize(dependencies, page_numbering_mode: :absolute)
           super(dependencies)
           @page_numbering_mode = page_numbering_mode
         end
@@ -22,81 +22,74 @@ module EbookReader
 
         private
 
-        def render_dynamic_lines(surface, bounds, lines, start_row, col_start, col_width, _config,
-                                 context = nil)
-          draw_lines(surface, bounds, lines, start_row, col_start, col_width, context)
+        def render_dynamic_lines(surface, bounds, lines, params)
+          draw_lines(surface, bounds, lines, params)
         end
 
-        def render_absolute_lines(surface, bounds, lines, start_row, col_start, col_width, _config,
-                                  context = nil, _displayable = nil)
-          draw_lines(surface, bounds, lines, start_row, col_start, col_width, context)
+        def render_absolute_lines(surface, bounds, lines, params)
+          draw_lines(surface, bounds, lines, params)
         end
 
         # Context-based rendering methods
         def render_dynamic_mode_with_context(surface, bounds, context)
-          page_manager = context.page_calculator
-          col_width, content_height = layout_metrics(bounds.width, bounds.height, :single)
-          col_start = [(bounds.width - col_width) / 2, 1].max
-          spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config)
-          displayable = adjust_for_line_spacing(content_height, spacing)
+          page_calculator = context.page_calculator
+          st = context&.state
+          col_width, content_height, spacing, displayable = compute_layout(bounds, :single,
+                                                                           context.config)
+          col_start = center_start_col(bounds.width, col_width)
 
-          if page_manager && (pd = page_manager.get_page(context.current_page_index))
-            start_row = calculate_center_start_row(content_height, pd[:lines].size, spacing)
-            render_dynamic_lines(surface, bounds, pd[:lines], start_row, col_start, col_width,
-                                 context.config, context)
+          if page_calculator && (pd = page_calculator.get_page(context.current_page_index))
+            dyn_lines = pd[:lines]
+            start_row = calculate_center_start_row(content_height, dyn_lines.size, spacing)
+            params = Models::RenderParams.new(start_row: start_row, col_start: col_start,
+                                              col_width: col_width, context: context)
+            render_dynamic_lines(surface, bounds, dyn_lines, params)
             return
           end
 
           # Fallback when dynamic map not ready yet: use pending precise line_offset if available
-          pending = context.state.get(%i[reader pending_progress]) if context&.state
-          line_offset = pending && (pending[:line_offset] || pending['line_offset'])
-          offset = if line_offset
-                     line_offset.to_i
-                   else
-                     (context.current_page_index || 0) * [displayable, 1].max
-                   end
-          lines = begin
-            chapter_index = context.state.get(%i[reader current_chapter]) || 0
-            chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies&.registered?(:wrapping_service) && chapter
-              ws = @dependencies.resolve(:wrapping_service)
-              ws.wrap_window(chapter.lines || [], chapter_index, col_width, offset, displayable)
-            else
-              (chapter&.lines || [])[offset, displayable] || []
-            end
-          end
+          offset = compute_dynamic_offset(context, displayable)
+          chapter_index = st.get(%i[reader current_chapter]) || 0 if st
+          chapter_index ||= 0
+          lines = fetch_wrapped_lines(context.document, chapter_index, col_width, offset,
+                                      displayable)
           start_row = calculate_center_start_row(content_height, lines.size, spacing)
-          render_dynamic_lines(surface, bounds, lines, start_row, col_start, col_width,
-                               context.config, context)
+          params = Models::RenderParams.new(start_row: start_row, col_start: col_start,
+                                            col_width: col_width, context: context)
+          render_dynamic_lines(surface, bounds, lines, params)
         end
 
         def render_absolute_mode_with_context(surface, bounds, context)
           chapter = context.current_chapter
           return unless chapter
 
-          col_width, content_height = layout_metrics(bounds.width, bounds.height, :single)
-          col_start = [(bounds.width - col_width) / 2, 1].max
-          displayable = adjust_for_line_spacing(content_height, EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config))
+          col_width, content_height, spacing, _displayable = compute_layout(bounds, :single,
+                                                                            context.config)
+          col_start = center_start_col(bounds.width, col_width)
 
-          return unless context&.state
+          st = context&.state
+          return unless st
 
-          offset = context.state.get(%i[reader single_page]) || 0
-          chapter_index = context.state.get(%i[reader current_chapter]) || 0
-          lines = begin
-            chapter = context.document&.get_chapter(chapter_index)
-            if @dependencies&.registered?(:wrapping_service) && chapter
-              ws = @dependencies.resolve(:wrapping_service)
-              ws.wrap_window(chapter.lines || [], chapter_index, col_width, offset, displayable)
-            else
-              (chapter&.lines || [])[offset, displayable] || []
-            end
-          end
-          spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config)
+          offset = st.get(%i[reader single_page]) || 0
+          chapter_index = st.get(%i[reader current_chapter]) || 0
+          lines = fetch_wrapped_lines(context.document, chapter_index, col_width, offset,
+                                      _displayable)
           start_row = calculate_center_start_row(content_height, lines.size, spacing)
 
-          render_absolute_lines(surface, bounds, lines, start_row, col_start, col_width, context.config,
-                                context, displayable)
+          params = Models::RenderParams.new(start_row: start_row, col_start: col_start,
+                                            col_width: col_width, context: context)
+          render_absolute_lines(surface, bounds, lines, params)
         end
+
+        def compute_dynamic_offset(context, displayable)
+          pending = context.state.get(%i[reader pending_progress]) if context&.state
+          line_offset = pending && (pending[:line_offset] || pending['line_offset'])
+          return line_offset.to_i if line_offset
+
+          (context.current_page_index || 0) * [displayable, 1].max
+        end
+
+        # helpers provided by BaseViewRenderer
       end
     end
   end

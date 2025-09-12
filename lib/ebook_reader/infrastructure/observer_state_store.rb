@@ -73,10 +73,11 @@ module EbookReader
 
       def notify_observers_for_updates(old_state, updates)
         updates.each do |path, new_value|
-          old_value = get_nested_value(old_state, Array(path))
+          arr = Array(path)
+          old_value = get_nested_value(old_state, arr)
           next if old_value == new_value
 
-          normalized_path = normalize_path(Array(path))
+          normalized_path = normalize_path(arr)
           notify_observers(normalized_path, old_value, new_value)
         end
       end
@@ -98,9 +99,10 @@ module EbookReader
 
       # Notify observers watching parent paths (e.g., [:reader] when [:reader, :mode] changes)
       def notify_parent_path_observers(path, old_value, new_value)
-        return if path.length <= 1
+        len = path.length
+        return if len <= 1
 
-        (1...path.length).each do |i|
+        (1...len).each do |i|
           parent_path = path[0, i]
           @observers_by_path[parent_path].each do |observer|
             safe_notify(observer, path, old_value, new_value)

@@ -14,14 +14,15 @@ module EbookReader
         end
 
         def can_execute?(context, _params = {})
-          context.dependencies.registered?(:bookmark_service) &&
-            context.dependencies.registered?(:state_store)
+          deps = context.dependencies
+          deps.registered?(:bookmark_service) && deps.registered?(:state_store)
         end
 
         protected
 
         def perform(context, params = {})
-          bookmark_service = context.dependencies.resolve(:bookmark_service)
+          deps = context.dependencies
+          bookmark_service = deps.resolve(:bookmark_service)
 
           case @action
           when :add
@@ -49,9 +50,7 @@ module EbookReader
         def handle_remove_bookmark(service, params)
           bookmark = params[:bookmark]
 
-          unless bookmark
-            raise ValidationError.new('Bookmark required for remove action', command_name: name)
-          end
+          raise ValidationError.new('Bookmark required for remove action', command_name: name) unless bookmark
 
           service.remove_bookmark(bookmark)
         end
@@ -66,9 +65,7 @@ module EbookReader
         def handle_jump_to_bookmark(service, params)
           bookmark = params[:bookmark]
 
-          unless bookmark
-            raise ValidationError.new('Bookmark required for jump_to action', command_name: name)
-          end
+          raise ValidationError.new('Bookmark required for jump_to action', command_name: name) unless bookmark
 
           service.jump_to_bookmark(bookmark)
         end
@@ -125,7 +122,8 @@ module EbookReader
         end
 
         def handle_select_current(context)
-          state_store = context.dependencies.resolve(:state_store)
+          deps = context.dependencies
+          state_store = deps.resolve(:state_store)
           current_state = state_store.current_state
 
           bookmarks = current_state.dig(:reader, :bookmarks) || []
@@ -134,7 +132,7 @@ module EbookReader
           return unless selected_index < bookmarks.size
 
           bookmark = bookmarks[selected_index]
-          bookmark_service = context.dependencies.resolve(:bookmark_service)
+          bookmark_service = deps.resolve(:bookmark_service)
           bookmark_service.jump_to_bookmark(bookmark)
 
           # Switch back to reading mode
@@ -142,7 +140,8 @@ module EbookReader
         end
 
         def handle_delete_current(context)
-          state_store = context.dependencies.resolve(:state_store)
+          deps = context.dependencies
+          state_store = deps.resolve(:state_store)
           current_state = state_store.current_state
 
           bookmarks = current_state.dig(:reader, :bookmarks) || []
@@ -151,14 +150,15 @@ module EbookReader
           return unless selected_index < bookmarks.size
 
           bookmark = bookmarks[selected_index]
-          bookmark_service = context.dependencies.resolve(:bookmark_service)
+          bookmark_service = deps.resolve(:bookmark_service)
           bookmark_service.remove_bookmark(bookmark)
 
           # Adjust selection if needed
           new_bookmarks = bookmark_service.get_bookmarks
-          return unless selected_index >= new_bookmarks.size && new_bookmarks.size.positive?
+          nb_size = new_bookmarks.size
+          return unless selected_index >= nb_size && nb_size.positive?
 
-          state_store.set(%i[reader bookmark_selected], new_bookmarks.size - 1)
+          state_store.set(%i[reader bookmark_selected], nb_size - 1)
         end
       end
 

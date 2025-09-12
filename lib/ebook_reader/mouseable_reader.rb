@@ -36,9 +36,6 @@ module EbookReader
 
     def draw_screen
       # Render the base UI via components
-      rendered_lines = @state.get(%i[reader rendered_lines])
-      rendered_lines.clear
-      @state.dispatch(Domain::Actions::UpdateRenderedLinesAction.new(rendered_lines))
       super
 
       # Overlay and frame end are handled by ReaderController now
@@ -108,9 +105,10 @@ module EbookReader
 
     def handle_selection_end
       @state.dispatch(Domain::Actions::UpdateSelectionAction.new(@mouse_handler.selection_range))
-      return unless @state.get(%i[reader selection])
+      sel = @state.get(%i[reader selection])
+      return unless sel
 
-      @selected_text = extract_selected_text(@state.get(%i[reader selection]))
+      @selected_text = extract_selected_text(sel)
 
       if @selected_text && !@selected_text.strip.empty?
         show_popup_menu
@@ -168,14 +166,15 @@ module EbookReader
     end
 
     def copy_to_clipboard(text)
+      ui = @dependencies.resolve(:ui_controller)
       @clipboard_service.copy_with_feedback(text) do |message|
-        @dependencies.resolve(:ui_controller).set_message(message)
+        ui.set_message(message)
       rescue StandardError
         # best-effort
       end
     rescue Domain::Services::ClipboardService::ClipboardError => e
       begin
-        @dependencies.resolve(:ui_controller).set_message("Copy failed: #{e.message}")
+        ui.set_message("Copy failed: #{e.message}")
       rescue StandardError
         # ignore
       end

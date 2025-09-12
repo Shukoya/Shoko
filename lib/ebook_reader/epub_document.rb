@@ -119,7 +119,8 @@ module EbookReader
       container_xml = @zip.read('META-INF/container.xml')
       begin
         container = REXML::Document.new(container_xml)
-        rootfile = container.elements['//rootfile'] || container.elements['//container:rootfile']
+        elems = container.elements
+        rootfile = elems['//rootfile'] || elems['//container:rootfile']
         if rootfile
           opf_path = rootfile.attributes['full-path']
           return opf_path if opf_path && @zip.find_entry(opf_path)
@@ -178,10 +179,11 @@ module EbookReader
     # chapter so the rest of the book can still be viewed. Titles are
     # extracted from the HTML when available or generated automatically.
     def load_chapter(entry)
+      fp = entry.file_path
       content = if @zip
-                  read_entry_content(@zip, entry.file_path)
+                  read_entry_content(@zip, fp)
                 else
-                  read_file_content(entry.file_path)
+                  read_file_content(fp)
                 end
       create_chapter_from_content(content, entry.number, entry.title)
     rescue Errno::ENOENT, Zip::Error, REXML::ParseException
@@ -237,23 +239,24 @@ module EbookReader
       manifest = cache.load_manifest
       return false unless manifest&.spine&.any?
 
-      @title = manifest.title unless manifest.title.to_s.empty?
-      @opf_path = manifest.opf_path
-      @spine_relative_paths = manifest.spine
+      m = manifest
+      title_str = m.title.to_s
+      @title = title_str unless title_str.empty?
+      @opf_path = m.opf_path
+      @spine_relative_paths = m.spine
       @cache_dir = cache.cache_dir
-      @source_path = manifest.epub_path.to_s unless manifest.epub_path.to_s.empty?
+      epub_path_str = m.epub_path.to_s
+      @source_path = epub_path_str unless epub_path_str.empty?
 
       # Validate cached files exist
-      return false unless File.exist?(cache.cache_abs_path('META-INF/container.xml'))
-      return false unless File.exist?(cache.cache_abs_path(@opf_path))
-      return false unless @spine_relative_paths.all? do |rel|
-        File.exist?(cache.cache_abs_path(rel))
-      end
+      return false unless File.exist?(cache_abs(cache, 'META-INF/container.xml'))
+      return false unless File.exist?(cache_abs(cache, @opf_path))
+      abs_paths = @spine_relative_paths.map { |rel| cache_abs(cache, rel) }
+      return false unless abs_paths.all? { |p| File.exist?(p) }
 
       # Build chapter refs pointing to cached files
       @chapters = []
-      @spine_relative_paths.each_with_index do |rel, idx|
-        abs = cache.cache_abs_path(rel)
+      abs_paths.each_with_index do |abs, idx|
         @chapters << ChapterRef.new(file_path: abs, number: idx + 1, title: nil)
       end
       @loaded_from_cache = true
@@ -283,13 +286,16 @@ module EbookReader
       return false unless serializer && manifest_path
 
       data = serializer.load_file(manifest_path)
-      return false unless data.is_a?(Hash) && data['spine'].is_a?(Array)
+      spine_val = hget(data, :spine)
+      return false unless data.is_a?(Hash) && spine_val.is_a?(Array)
 
       @cache_dir = dir
-      @title = data['title'].to_s if data['title']
-      @opf_path = data['opf_path'].to_s
-      @spine_relative_paths = data['spine'].map(&:to_s)
-      @source_path = data['epub_path'].to_s unless data['epub_path'].to_s.empty?
+      title_v = hget(data, :title)
+      @title = title_v.to_s if title_v
+      @opf_path = s(hget(data, :opf_path))
+      @spine_relative_paths = (spine_val || []).map { |x| x.to_s }
+      epub_path_v = s(hget(data, :epub_path))
+      @source_path = epub_path_v unless epub_path_v.empty?
 
       return false unless File.exist?(File.join(@cache_dir, 'META-INF', 'container.xml'))
       return false unless File.exist?(File.join(@cache_dir, @opf_path))
@@ -329,6 +335,27 @@ module EbookReader
       )
       cache.write_manifest!(manifest)
       @cache_dir = cache.cache_dir
+    end
+  end
+end
+
+module EbookReader
+  class EPUBDocument
+    private
+
+    # Indifferent hash access (symbol/string)
+    def hget(h, key)
+      h[key] || h[key.to_s]
+    end
+
+    # Safe string
+    def s(val)
+      val.to_s
+    end
+
+    # Cache absolute path helper
+    def cache_abs(cache, rel)
+      cache.cache_abs_path(rel)
     end
   end
 end

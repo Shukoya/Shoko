@@ -46,13 +46,7 @@ module EbookReader
 
           # Save progress before quitting
           save_progress(context)
-          # Fallback: update state store
-          if context.respond_to?(:state)
-            context.state.dispatch(EbookReader::Domain::Actions::QuitToMenuAction.new)
-          else
-            state_store = context.dependencies.resolve(:state_store)
-            state_store.set(%i[reader running], false)
-          end
+          state_store_for(context).set(%i[reader running], false)
         end
 
         def handle_quit_application(context)
@@ -68,16 +62,12 @@ module EbookReader
           # Prefer controller implementation to preserve renderer reset side effects
           return context.toggle_view_mode if context.respond_to?(:toggle_view_mode)
 
-          # Fallback: dispatch action
-          if context.respond_to?(:state)
-            context.state.dispatch(EbookReader::Domain::Actions::ToggleViewModeAction.new)
-          else
-            state_store = context.dependencies.resolve(:state_store)
-            current_state = state_store.current_state
-            current_mode = current_state.dig(:reader, :view_mode) || :split
-            new_mode = current_mode == :split ? :single : :split
-            state_store.update({ %i[reader view_mode] => new_mode })
-          end
+          # Fallback: update state via state store
+          state_store = state_store_for(context)
+          current_state = state_store.current_state
+          current_mode = current_state.dig(:reader, :view_mode) || :split
+          new_mode = current_mode == :split ? :single : :split
+          state_store.update({ %i[reader view_mode] => new_mode })
         end
 
         def handle_show_help(context)
@@ -88,38 +78,27 @@ module EbookReader
         def handle_show_toc(context)
           return context.open_toc if context.respond_to?(:open_toc)
 
-          if context.respond_to?(:state)
-            context.state.dispatch(EbookReader::Domain::Actions::SwitchReaderModeAction.new(mode: :toc))
-          else
-            context.dependencies.resolve(:state_store).set(%i[reader mode], :toc)
-          end
+          state_store_for(context).set(%i[reader mode], :toc)
         end
 
         def handle_show_bookmarks(context)
           return context.open_bookmarks if context.respond_to?(:open_bookmarks)
 
-          if context.respond_to?(:state)
-            context.state.dispatch(EbookReader::Domain::Actions::SwitchReaderModeAction.new(mode: :bookmarks))
-          else
-            context.dependencies.resolve(:state_store).set(%i[reader mode], :bookmarks)
-          end
+          state_store_for(context).set(%i[reader mode], :bookmarks)
         end
 
         def handle_show_annotations(context)
           return context.open_annotations if context.respond_to?(:open_annotations)
 
-          if context.respond_to?(:state)
-            context.state.dispatch(EbookReader::Domain::Actions::SwitchReaderModeAction.new(mode: :annotations))
-          else
-            context.dependencies.resolve(:state_store).set(%i[reader mode], :annotations)
-          end
+          state_store_for(context).set(%i[reader mode], :annotations)
         end
 
         def save_progress(context)
           # This would integrate with a progress persistence service
-          return unless context.dependencies.registered?(:progress_service)
+          deps = context.dependencies
+          return unless deps.registered?(:progress_service)
 
-          progress_service = context.dependencies.resolve(:progress_service)
+          progress_service = deps.resolve(:progress_service)
           return unless progress_service.respond_to?(:save_current_progress)
 
           progress_service.save_current_progress
@@ -168,7 +147,8 @@ module EbookReader
         def load_toc_if_needed(context)
           # This would integrate with document service to load TOC
           # For now, just mark that TOC is needed
-          state_store = context.dependencies.resolve(:state_store)
+          deps = context.dependencies
+          state_store = deps.resolve(:state_store)
           current_state = state_store.current_state
 
           return if current_state.dig(:reader, :toc_loaded)
@@ -177,12 +157,13 @@ module EbookReader
         end
 
         def refresh_bookmarks(context)
-          return unless context.dependencies.registered?(:bookmark_service)
+          deps = context.dependencies
+          return unless deps.registered?(:bookmark_service)
 
-          bookmark_service = context.dependencies.resolve(:bookmark_service)
+          bookmark_service = deps.resolve(:bookmark_service)
           bookmarks = bookmark_service.get_bookmarks
 
-          state_store = context.dependencies.resolve(:state_store)
+          state_store = deps.resolve(:state_store)
           state_store.set(%i[reader bookmarks], bookmarks)
         end
       end
@@ -224,3 +205,7 @@ module EbookReader
     end
   end
 end
+        def state_store_for(context)
+          return context.state if context.respond_to?(:state)
+          context.dependencies.resolve(:state_store)
+        end

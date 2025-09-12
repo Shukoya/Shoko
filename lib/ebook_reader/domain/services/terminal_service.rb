@@ -9,7 +9,10 @@ module EbookReader
       class TerminalService < BaseService
         # Maintain a global session depth so nested setup/cleanup calls
         # (e.g., menu -> reader) don't flicker or drop to shell.
-        @@session_depth = 0
+        class << self
+          attr_accessor :session_depth
+        end
+        @session_depth = 0
 
         def enable_mouse
           Terminal.enable_mouse
@@ -36,15 +39,21 @@ module EbookReader
         end
 
         def setup
-          @@session_depth += 1
-          return if @@session_depth > 1
+          sd = TerminalService.session_depth || 0
+          sd += 1
+          TerminalService.session_depth = sd
+          return if sd > 1
 
           Terminal.setup
         end
 
         def cleanup
-          @@session_depth -= 1 if @@session_depth.positive?
-          return if @@session_depth.positive?
+          sd = TerminalService.session_depth
+          if sd && sd.positive?
+            sd -= 1
+            TerminalService.session_depth = sd
+          end
+          return if sd&.positive?
 
           Terminal.cleanup
         end
@@ -55,6 +64,23 @@ module EbookReader
 
         def read_key_blocking
           Terminal.read_key_blocking
+        end
+
+        # Read one blocking key, then drain a few non-blocking extras.
+        # Returns an array of keys, or [] if nothing was read.
+        #
+        # @param limit [Integer] maximum total keys to return
+        # @return [Array<String>]
+        def read_keys_blocking(limit: 10)
+          first = read_key_blocking
+          return [] unless first
+
+          keys = [first]
+          while (extra = read_key)
+            keys << extra
+            break if keys.size >= limit
+          end
+          keys
         end
 
         # Create a surface for component rendering

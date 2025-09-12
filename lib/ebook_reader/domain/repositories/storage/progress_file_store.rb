@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'time'
 require_relative '../../../constants'
+require_relative 'file_store_utils'
 
 module EbookReader
   module Domain
@@ -33,11 +34,7 @@ module EbookReader
           end
 
           def load_all
-            return {} unless File.exist?(file_path)
-
-            JSON.parse(File.read(file_path))
-          rescue StandardError
-            {}
+            FileStoreUtils.load_json_or_empty(file_path)
           end
 
           private

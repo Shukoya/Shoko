@@ -7,8 +7,9 @@ module EbookReader
 
       # Root directory for reader cache: ${XDG_CACHE_HOME:-~/.cache}/reader
       def reader_root
-        cache_root = if ENV['XDG_CACHE_HOME'] && !ENV['XDG_CACHE_HOME'].empty?
-                       ENV['XDG_CACHE_HOME']
+        env_home = ENV['XDG_CACHE_HOME']
+        cache_root = if env_home && !env_home.empty?
+                       env_home
                      else
                        File.join(Dir.home, '.cache')
                      end

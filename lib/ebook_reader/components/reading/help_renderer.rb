@@ -40,13 +40,15 @@ module EbookReader
         ].freeze
 
         def render_with_context(surface, bounds, _context)
-          start_row = [(bounds.height - HELP_LINES.size) / 2, 1].max
+          b_height = bounds.height
+          b_width  = bounds.width
+          start_row = [(b_height - HELP_LINES.size) / 2, 1].max
 
           HELP_LINES.each_with_index do |line, idx|
             row = start_row + idx
-            break if row >= bounds.height - 2
+            break if row >= b_height - 2
 
-            col = [(bounds.width - line.length) / 2, 1].max
+            col = [(b_width - line.length) / 2, 1].max
             surface.write(bounds, row, col,
                           EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + line + Terminal::ANSI::RESET)
           end

@@ -26,11 +26,16 @@ module EbookReader
       def handle_event(event)
         return nil unless event
 
-        if event[:button].zero? && !event[:released] # Left button pressed
-          start_selection(event[:x], event[:y])
-        elsif event[:button] == 32 && @selecting # Mouse dragged
-          update_selection(event[:x], event[:y])
-        elsif event[:released] && @selecting # Button released
+        btn = event[:button]
+        rel = event[:released]
+        x = event[:x]
+        y = event[:y]
+
+        if btn.zero? && !rel # Left button pressed
+          start_selection(x, y)
+        elsif btn == 32 && @selecting # Mouse dragged
+          update_selection(x, y)
+        elsif rel && @selecting # Button released
           finish_selection
         end
       end
@@ -43,8 +48,9 @@ module EbookReader
         end_pos = @selection_end
 
         # Ensure start comes before end
-        if start_pos[:y] > end_pos[:y] ||
-           (start_pos[:y] == end_pos[:y] && start_pos[:x] > end_pos[:x])
+        sy = start_pos[:y]
+        ey = end_pos[:y]
+        if sy > ey || (sy == ey && start_pos[:x] > end_pos[:x])
           start_pos, end_pos = end_pos, start_pos
         end
 
