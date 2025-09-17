@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative 'base_view_renderer'
+require_relative '../ui/list_helpers'
+require_relative '../../domain/models/toc_entry'
 
 module EbookReader
   module Components
@@ -12,14 +14,23 @@ module EbookReader
           st = context&.state
           doc = context&.document
           return unless st && doc
-          selected_index = st.get(%i[reader toc_selected]) || 0
+
+          selected_chapter_index = st.get(%i[reader toc_selected]) || 0
+          entries = doc.respond_to?(:toc_entries) ? doc.toc_entries : []
+          entries = fallback_entries(doc.chapters) if entries.nil? || entries.empty?
+
+          selected_entry_index = find_entry_index(entries, selected_chapter_index)
 
           render_header(surface, bounds)
-          render_chapters_list(surface, bounds, doc.chapters, selected_index)
+          render_entries_list(surface, bounds, entries, selected_entry_index,
+                              selected_chapter_index)
           render_footer(surface, bounds)
         end
 
         private
+
+        EntryCtx = Struct.new(:entry, :index, :selected_entry_index, :selected_chapter_index, :y,
+                              keyword_init: true)
 
         def render_header(surface, bounds)
           w = bounds.width
@@ -30,38 +41,84 @@ module EbookReader
                         "#{EbookReader::Constants::UIConstants::COLOR_TEXT_DIM}[t/ESC] Back to Reading#{reset}")
         end
 
-        def render_chapters_list(surface, bounds, chapters, selected_index)
-          return if chapters.empty?
+        def render_entries_list(surface, bounds, entries, selected_entry_index, selected_chapter_index)
+          return if entries.empty?
 
           list_start = 4
           list_height = bounds.height - 6
 
-          visible_start = [selected_index - (list_height / 2), 0].max
-          visible_end = [visible_start + list_height, chapters.length].min
-
-          (visible_start...visible_end).each_with_index do |idx, row|
-            chapter = chapters[idx]
-            ctx = ItemCtx.new(chapter: chapter, index: idx, selected_index: selected_index, y: list_start + row)
-            render_chapter_item(surface, bounds, ctx)
+          window_start, items = EbookReader::Components::UI::ListHelpers.slice_visible(entries,
+                                                                                       list_height,
+                                                                                       selected_entry_index)
+          items.each_with_index do |entry, row|
+            idx = window_start + row
+            y = list_start + row
+            ctx = EntryCtx.new(entry: entry,
+                               index: idx,
+                               selected_entry_index: selected_entry_index,
+                               selected_chapter_index: selected_chapter_index,
+                               y: y)
+            render_entry(surface, bounds, ctx)
           end
         end
 
-        def render_chapter_item(surface, bounds, ctx)
-          w = bounds.width
+        def render_entry(surface, bounds, ctx)
+          entry = ctx.entry
           reset = Terminal::ANSI::RESET
-          y = ctx.y
-          idx = ctx.index
-          selected = (idx == ctx.selected_index)
-          line = (ctx.chapter.title || 'Untitled')[0, w - 6]
+          width = bounds.width
+          title = entry_title(entry)
+          indent = '  ' * [entry.level, 0].max
+          line = (indent + title)[0, width - 6]
 
-          if selected
-            surface.write(bounds, y, 2,
-                          "#{EbookReader::Constants::UIConstants::SELECTION_POINTER_COLOR}#{EbookReader::Constants::UIConstants::SELECTION_POINTER}#{reset}")
-            surface.write(bounds, y, 4,
-                          EbookReader::Constants::UIConstants::SELECTION_HIGHLIGHT + line + reset)
-          else
-            surface.write(bounds, y, 4,
-                          EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + line + reset)
+          selected = entry.chapter_index && entry.chapter_index == ctx.selected_chapter_index
+          pointer = if selected
+                      EbookReader::Constants::UIConstants::SELECTION_POINTER_COLOR + EbookReader::Constants::UIConstants::SELECTION_POINTER + reset
+                    else
+                      '  '
+                    end
+
+          base_color = if entry.level.zero?
+                         EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT
+                       elsif entry.navigable
+                         EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY
+                       else
+                         EbookReader::Constants::UIConstants::COLOR_TEXT_DIM
+                       end
+
+          line_text = if selected
+                        EbookReader::Constants::UIConstants::SELECTION_HIGHLIGHT + indent + title + reset
+                      else
+                        base_color + indent + title + reset
+                      end
+
+          pointer_text = if selected
+                           pointer
+                         elsif entry.navigable
+                           EbookReader::Constants::UIConstants::COLOR_TEXT_DIM + '○ ' + reset
+                         else
+                           '  '
+                         end
+
+          surface.write(bounds, ctx.y, 2, pointer_text)
+          surface.write(bounds, ctx.y, 4, line_text)
+        end
+
+        def entry_title(entry)
+          title = entry.title || 'Untitled'
+          entry.level.zero? ? title.upcase : title
+        end
+
+        def find_entry_index(entries, chapter_index)
+          entries.find_index { |entry| entry.chapter_index == chapter_index } || 0
+        end
+
+        def fallback_entries(chapters)
+          chapters.each_with_index.map do |chapter, idx|
+            Domain::Models::TOCEntry.new(title: chapter.title || "Chapter #{idx + 1}",
+                                         href: nil,
+                                         level: 1,
+                                         chapter_index: idx,
+                                         navigable: true)
           end
         end
 

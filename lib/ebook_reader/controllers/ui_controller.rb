@@ -230,9 +230,19 @@ module EbookReader
         tab = @state.get(%i[reader sidebar_active_tab])
         key, action_key, max = case tab
                                when :toc
-                                 cur = @state.get(%i[reader sidebar_toc_selected]) || 0
-                                 max = (@dependencies.resolve(:document)&.chapters&.length || 1) - 1
-                                 [:sidebar_toc_selected, :toc_selected, max]
+                                 doc = @dependencies.resolve(:document)
+                                 indices = navigable_toc_indices_for(doc)
+                                 cur = @state.get(%i[reader sidebar_toc_selected]) || indices.first || 0
+                                 target = if delta.positive?
+                                            indices.find { |idx| idx > cur } || indices.last || cur
+                                          elsif delta.negative?
+                                            indices.reverse.find { |idx| idx < cur } || indices.first || cur
+                                          else
+                                            cur
+                                          end
+                                 updates = { sidebar_toc_selected: target, toc_selected: target }
+                                 @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(updates))
+                                 return
                                when :annotations
                                  cur = @state.get(%i[reader sidebar_annotations_selected]) || 0
                                  max = (@state.get(%i[reader annotations]) || []).length - 1
@@ -250,6 +260,21 @@ module EbookReader
         max0 = [max, 0].max
         new_val = (current + delta).clamp(0, max0)
         @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(action_key => new_val))
+      end
+
+      def navigable_toc_indices_for(doc)
+        entries = if doc.respond_to?(:toc_entries)
+                    Array(doc.toc_entries)
+                  else
+                    []
+                  end
+        indices = entries.map(&:chapter_index).compact.uniq.sort
+        if indices.empty?
+          chapters_count = doc&.chapters&.length.to_i
+          (0...chapters_count).to_a
+        else
+          indices
+        end
       end
 
       def handle_create_annotation_action(action_data)

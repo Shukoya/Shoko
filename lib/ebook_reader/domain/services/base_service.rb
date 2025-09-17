@@ -28,11 +28,15 @@ module EbookReader
 
         # Resolve a dependency from the container
         def resolve(dependency_name)
+          return unless @dependencies.respond_to?(:resolve)
+
           @dependencies.resolve(dependency_name)
         end
 
         # Check if a dependency is registered
         def registered?(dependency_name)
+          return false unless @dependencies.respond_to?(:registered?)
+
           @dependencies.registered?(dependency_name)
         end
 

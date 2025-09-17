@@ -8,6 +8,7 @@ require 'rexml/document'
 require_relative 'helpers/html_processor'
 require_relative 'helpers/opf_processor'
 require_relative 'domain/models/chapter'
+require_relative 'domain/models/toc_entry'
 require 'json'
 require 'fileutils'
 require_relative 'infrastructure/epub_cache'
@@ -15,11 +16,11 @@ require_relative 'infrastructure/epub_cache'
 module EbookReader
   # EPUB document class
   class EPUBDocument
-    attr_reader :title, :chapters, :language, :source_path, :cache_dir
+    attr_reader :title, :chapters, :language, :source_path, :cache_dir, :toc_entries
 
-    ChapterRef = Struct.new(:file_path, :number, :title, keyword_init: true)
+    ChapterRef = Struct.new(:file_path, :number, :title, :href, keyword_init: true)
 
-    def initialize(path)
+    def initialize(path, formatting_service: nil)
       @path = path
       @title = File.basename(path, '.epub').tr('_', ' ')
       @language = 'en_US'
@@ -31,6 +32,8 @@ module EbookReader
       @authors = []
       @loaded_from_cache = false
       @source_path = @path
+      @formatting_service = formatting_service
+      @toc_entries = []
 
       # Try to use cache first; fall back to parsing the EPUB
       # Allow opening directly from a cache directory (Library open)
@@ -48,6 +51,7 @@ module EbookReader
           Infrastructure::Logger.debug('Background cache thread failed', error: e.message)
         end
       end
+      rebuild_toc_entries! if @toc_entries.empty?
     rescue StandardError => e
       create_error_chapter(e)
     end
@@ -107,9 +111,12 @@ module EbookReader
           number: '1',
           title: 'Error Loading',
           lines: ["Error: #{error.message}"],
-          metadata: nil
+          metadata: nil,
+          blocks: nil,
+          raw_content: nil
         ),
       ]
+      @toc_entries = []
     end
 
     # Locate the OPF package file which describes the contents of the
@@ -157,10 +164,11 @@ module EbookReader
 
       # Process spine without loading chapter content
       @spine_relative_paths = []
-      processor.process_spine(manifest, chapter_titles) do |file_path, number, title|
-        @chapters << ChapterRef.new(file_path:, number:, title:)
+      processor.process_spine(manifest, chapter_titles) do |file_path, number, title, href|
+        @chapters << ChapterRef.new(file_path:, number:, title:, href: resolve_href_reference(href))
         @spine_relative_paths << file_path
       end
+      assign_toc_entries(processor.toc_entries)
     end
 
     def ensure_chapters_exist
@@ -170,8 +178,11 @@ module EbookReader
         number: '1',
         title: 'Empty Book',
         lines: ['This EPUB appears to be empty.'],
-        metadata: nil
+        metadata: nil,
+        blocks: nil,
+        raw_content: nil
       )
+      @toc_entries = []
     end
 
     # Load a single chapter HTML file and convert it to plain text lines.
@@ -196,23 +207,119 @@ module EbookReader
 
     def create_chapter_from_content(content, number, title_from_ncx)
       title = extract_chapter_title(content, number, title_from_ncx)
-      lines = extract_chapter_lines(content)
-
-      Domain::Models::Chapter.new(
+      chapter = Domain::Models::Chapter.new(
         number: number.to_s,
         title: title,
-        lines: lines,
-        metadata: nil
+        lines: nil,
+        metadata: nil,
+        blocks: nil,
+        raw_content: content
       )
+      ensure_formatted_chapter(chapter, number)
+      chapter.lines ||= fallback_plain_lines(content)
+      chapter
     end
 
     def extract_chapter_title(content, number, title_from_ncx)
       title_from_ncx || Helpers::HTMLProcessor.extract_title(content) || "Chapter #{number}"
     end
 
-    def extract_chapter_lines(content)
+    def ensure_formatted_chapter(chapter, number)
+      return unless @formatting_service && chapter
+
+      chapter_index = number.to_i - 1
+      chapter_index = 0 if chapter_index.negative?
+      begin
+        @formatting_service.ensure_formatted!(self, chapter_index, chapter)
+      rescue StandardError
+        # Fallback handled by caller
+      end
+    end
+
+    def fallback_plain_lines(content)
       text = Helpers::HTMLProcessor.html_to_text(content)
-      text.split("\n").reject { |line| line.strip.empty? }
+      text.split("\n").map(&:rstrip)
+    end
+
+    def assign_toc_entries(entries)
+     raw_entries = entries || []
+     href_to_index = {}
+     @chapters.each_with_index do |ref, idx|
+       next unless ref&.href
+
+       href_to_index[ref.href] = idx
+     end
+
+      @toc_entries = raw_entries.map do |entry|
+        level = entry[:level].to_i
+        href = entry[:href]
+        resolved = resolve_href_reference(href)
+        chapter_index = href_to_index[resolved]
+        if chapter_index && (ref = @chapters[chapter_index]) && ref.respond_to?(:title=)
+          ref.title = entry[:title]
+        end
+        Domain::Models::TOCEntry.new(
+          title: entry[:title],
+          href: href,
+          level: level,
+          chapter_index: chapter_index,
+          navigable: !chapter_index.nil?
+        )
+      end
+    end
+
+    def rebuild_toc_entries!
+      return unless @opf_path
+
+      zip = nil
+      processor = nil
+      if File.file?(@path)
+        zip = Zip::File.open(@path)
+        processor = Helpers::OPFProcessor.new(@opf_path, zip: zip)
+      else
+        base_dir = @cache_dir || File.dirname(@path)
+        processor = Helpers::OPFProcessor.new(File.join(base_dir, @opf_path))
+      end
+      manifest = processor.build_manifest_map
+      chapter_titles = processor.extract_chapter_titles(manifest)
+      processor.process_spine(manifest, chapter_titles) do |file_path, number, title, href|
+        index = number - 1
+        if (ref = @chapters[index])
+          ref.file_path ||= file_path if ref.respond_to?(:file_path=)
+          ref.title = title if ref.respond_to?(:title=)
+        end
+      end
+      assign_toc_entries(processor.toc_entries)
+    rescue StandardError
+      @toc_entries ||= []
+    ensure
+      zip&.close
+    end
+
+    def resolve_href_reference(href, include_anchor: false)
+      return nil unless href
+
+      base = @opf_path ? File.dirname(@opf_path) : '.'
+      core, anchor = href.split('#', 2)
+      cleaned = File.expand_path(File.join('/', base, core), '/')
+      cleaned.sub!(%r{^/}, '')
+      return cleaned unless include_anchor && anchor
+
+      "#{cleaned}##{anchor}"
+    end
+
+    def load_cached_toc_entries
+      return [] unless @opf_path && @cache_dir
+
+      opf_full_path = File.join(@cache_dir, @opf_path)
+      return [] unless File.exist?(opf_full_path)
+
+      processor = Helpers::OPFProcessor.new(opf_full_path)
+      manifest = processor.build_manifest_map
+      processor.extract_chapter_titles(manifest)
+      processor.toc_entries
+    rescue StandardError
+      []
     end
 
     # Utility method to read a file as UTF-8 while stripping any UTF-8
@@ -257,9 +364,12 @@ module EbookReader
       # Build chapter refs pointing to cached files
       @chapters = []
       abs_paths.each_with_index do |abs, idx|
-        @chapters << ChapterRef.new(file_path: abs, number: idx + 1, title: nil)
+        rel = @spine_relative_paths[idx]
+        @chapters << ChapterRef.new(file_path: abs, number: idx + 1, title: nil,
+                                    href: resolve_href_reference(rel))
       end
       @loaded_from_cache = true
+      assign_toc_entries(load_cached_toc_entries)
       true
     end
 
@@ -303,9 +413,11 @@ module EbookReader
       @chapters = []
       @spine_relative_paths.each_with_index do |rel, idx|
         abs = File.join(@cache_dir, rel)
-        @chapters << ChapterRef.new(file_path: abs, number: idx + 1, title: nil)
+        @chapters << ChapterRef.new(file_path: abs, number: idx + 1, title: nil,
+                                    href: resolve_href_reference(rel))
       end
       @loaded_from_cache = true
+      assign_toc_entries(load_cached_toc_entries)
       true
     rescue StandardError
       false

@@ -33,7 +33,7 @@ module EbookReader
                                                         context.config)
 
           chapter = context.current_chapter
-          render_chapter_header_with_context(surface, bounds, context, chapter) if chapter
+          render_chapter_header_with_context(surface, bounds, context.state, chapter) if chapter
 
           idx = context.current_page_index
           if page_calculator && (left_pd = page_calculator.get_page(idx))
@@ -54,7 +54,7 @@ module EbookReader
           bw = bounds.width
           bh = bounds.height
           col_width, content_height = layout_metrics(bw, bh, :split)
-          spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(context.config)
+          spacing = resolve_line_spacing(context.config)
           display_height = adjust_for_line_spacing(content_height, spacing)
 
           st = context&.state

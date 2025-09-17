@@ -20,18 +20,13 @@ module EbookReader
           params = { key: key, triggered_by: :input }
           command.execute(context, params)
         when Symbol
-          # Try to convert to domain command first
-          if DomainCommandBridge.domain_command?(command)
-            domain_command = DomainCommandBridge.symbol_to_command(command, context)
-            return execute(domain_command, context, key)
-          end
+          # Route all symbols through domain command bridge
+          return :pass unless DomainCommandBridge.domain_command?(command)
 
-          # Fall back to direct method call (only for non-navigation commands)
-          return :pass unless context.respond_to?(command)
+          domain_command = DomainCommandBridge.symbol_to_command(command, context)
+          return :pass unless domain_command
 
-          return context.public_send(command, key) if method_accepts_arg?(context, command)
-
-          context.public_send(command)
+          execute(domain_command, context, key)
         when Proc
           ar = command.arity
           ar_abs = ar.abs
@@ -49,12 +44,6 @@ module EbookReader
         end
       end
 
-      def method_accepts_arg?(context, method)
-        arity = context.method(method).arity
-        arity.negative? || arity.positive?
-      rescue NameError
-        false
-      end
     end
   end
 end

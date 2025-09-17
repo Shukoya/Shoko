@@ -1,0 +1,74 @@
+# frozen_string_literal: true
+
+require_relative '../terminal'
+
+module EbookReader
+  module Constants
+    module Themes
+      DEFAULT_PALETTE = {
+        primary: Terminal::ANSI::WHITE,
+        accent: Terminal::ANSI::BRIGHT_CYAN,
+        dim: Terminal::ANSI::DIM,
+        quote: Terminal::ANSI::LIGHT_GREY,
+        code: Terminal::ANSI::YELLOW,
+        separator: Terminal::ANSI::GRAY,
+        prefix: Terminal::ANSI::GRAY,
+      }.freeze
+
+      THEMES = {
+        default: DEFAULT_PALETTE,
+        gray: DEFAULT_PALETTE.merge(
+          primary: Terminal::ANSI::LIGHT_GREY,
+          accent: Terminal::ANSI::BRIGHT_WHITE,
+          quote: Terminal::ANSI::GRAY,
+        ).freeze,
+        sepia: DEFAULT_PALETTE.merge(
+          primary: Terminal::ANSI::YELLOW,
+          accent: Terminal::ANSI::BRIGHT_YELLOW,
+          dim: Terminal::ANSI::DIM,
+          quote: Terminal::ANSI::BRIGHT_YELLOW,
+        ).freeze,
+        grass: DEFAULT_PALETTE.merge(
+          primary: Terminal::ANSI::GREEN,
+          accent: Terminal::ANSI::BRIGHT_GREEN,
+          quote: Terminal::ANSI::GREEN,
+        ).freeze,
+        cherry: DEFAULT_PALETTE.merge(
+          primary: Terminal::ANSI::RED,
+          accent: Terminal::ANSI::BRIGHT_RED,
+          quote: Terminal::ANSI::BRIGHT_RED,
+        ).freeze,
+        sky: DEFAULT_PALETTE.merge(
+          primary: Terminal::ANSI::BLUE,
+          accent: Terminal::ANSI::BRIGHT_BLUE,
+          quote: Terminal::ANSI::BRIGHT_BLUE,
+        ).freeze,
+        solarized: DEFAULT_PALETTE.merge(
+          primary: Terminal::ANSI::CYAN,
+          accent: Terminal::ANSI::BRIGHT_CYAN,
+          quote: Terminal::ANSI::BRIGHT_CYAN,
+        ).freeze,
+        gruvbox: DEFAULT_PALETTE.merge(
+          primary: Terminal::ANSI::YELLOW,
+          accent: Terminal::ANSI::BRIGHT_GREEN,
+          quote: Terminal::ANSI::BRIGHT_YELLOW,
+        ).freeze,
+        nord: DEFAULT_PALETTE.merge(
+          primary: Terminal::ANSI::BRIGHT_BLUE,
+          accent: Terminal::ANSI::BRIGHT_CYAN,
+          quote: Terminal::ANSI::BRIGHT_CYAN,
+        ).freeze,
+      }.freeze
+
+      module_function
+
+      def palette_for(theme)
+        theme_key = theme&.to_sym
+        base = DEFAULT_PALETTE
+        return base unless theme_key
+
+        (THEMES[theme_key] || base)
+      end
+    end
+  end
+end

@@ -16,9 +16,9 @@ module EbookReader
           bookmarks: { label: 'Bookmarks', icon: '◆', key: 'b' },
         }.freeze
 
-        def initialize(controller)
+        def initialize(state)
           super() # Call BaseComponent constructor with no services
-          @controller = controller
+          @state = state
         end
 
         def do_render(surface, bounds)
@@ -40,13 +40,11 @@ module EbookReader
         end
 
         def render_tab_navigation(surface, bounds)
-          state = @controller.state
-
           # Calculate tab positions
           tab_width = (bounds.width - 2) / TABS.length
           start_y = bounds.y + 1
 
-          active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
+          active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(@state)
           TABS.each_with_index do |tab, index|
             x_pos = bounds.x + 1 + (index * tab_width)
             ctx = TabButtonCtx.new(tab: tab, x: x_pos, y: start_y, width: tab_width, active: (active_tab == tab))

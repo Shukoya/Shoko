@@ -14,27 +14,26 @@ module EbookReader
         # @param text_snippet [String] Optional text snippet for the bookmark
         # @return [Bookmark] Created bookmark
         def add_bookmark(text_snippet = nil)
-          current_state = @state_store.current_state
-          bookmark = with_book_path(default: nil) do |book_path|
-            chapter_index = current_state.dig(:reader, :current_chapter) || 0
-            line_offset = get_current_line_offset(current_state)
-            @bookmark_repository.add_for_book(
-              book_path,
-              chapter_index: chapter_index,
-              line_offset: line_offset,
-              text_snippet: text_snippet || generate_text_snippet(current_state)
-            )
-          end
+          book_path = current_book_path
+          return nil unless book_path
 
-          refresh_bookmarks
+          current_state = safe_snapshot
+          chapter_index = current_state.dig(:reader, :current_chapter) || 0
+          line_offset = get_current_line_offset(current_state)
 
-          # Publish domain event
+          bookmark = @bookmark_repository.add_for_book(
+            book_path,
+            chapter_index: chapter_index,
+            line_offset: line_offset,
+            text_snippet: text_snippet || generate_text_snippet(current_state)
+          )
+
+          refresh_bookmarks(book_path)
+
           @domain_event_bus.publish(Events::BookmarkAdded.new(
                                       book_path: book_path,
                                       bookmark: bookmark
                                     ))
-
-          # Legacy event bus for backward compatibility
           @event_bus.emit_event(:bookmark_added, { bookmark: bookmark })
           bookmark
         end
@@ -43,16 +42,16 @@ module EbookReader
         #
         # @param bookmark [Bookmark] Bookmark to remove
         def remove_bookmark(bookmark)
-          with_book_path { |book_path| @bookmark_repository.delete_for_book(book_path, bookmark) }
-          refresh_bookmarks
+          book_path = current_book_path
+          return unless book_path
 
-          # Publish domain event
+          @bookmark_repository.delete_for_book(book_path, bookmark)
+          refresh_bookmarks(book_path)
+
           @domain_event_bus.publish(Events::BookmarkRemoved.new(
                                       book_path: book_path,
                                       bookmark: bookmark
                                     ))
-
-          # Legacy event bus for backward compatibility
           @event_bus.emit_event(:bookmark_removed, { bookmark: bookmark })
         end
 
@@ -60,17 +59,20 @@ module EbookReader
         #
         # @return [Array<Bookmark>] Array of bookmarks
         def get_bookmarks
-          with_book_path(default: []) { |book_path| @bookmark_repository.find_by_book_path(book_path) }
+          book_path = current_book_path
+          return [] unless book_path
+
+          @bookmark_repository.find_by_book_path(book_path)
         end
 
         # Navigate to bookmark
         #
         # @param bookmark [Bookmark] Bookmark to navigate to
         def jump_to_bookmark(bookmark)
-          @state_store.update({
-                                %i[reader current_chapter] => bookmark.chapter_index,
-                                %i[reader current_page] => bookmark.page_offset,
-                              })
+          apply_state_updates({
+                               %i[reader current_chapter] => bookmark.chapter_index,
+                               %i[reader current_page] => bookmark.page_offset,
+                             })
 
           # Publish domain event
           @domain_event_bus.publish(Events::BookmarkNavigated.new(
@@ -86,24 +88,26 @@ module EbookReader
         #
         # @return [Boolean]
         def current_position_bookmarked?
-          current_state = @state_store.current_state
-          with_book_path(default: false) do |book_path|
-            current_chapter = current_state.dig(:reader, :current_chapter) || 0
-            line_offset = get_current_line_offset(current_state)
-            @bookmark_repository.exists_at_position?(book_path, current_chapter, line_offset)
-          end
+          book_path = current_book_path
+          return false unless book_path
+
+          current_state = safe_snapshot
+          current_chapter = current_state.dig(:reader, :current_chapter) || 0
+          line_offset = get_current_line_offset(current_state)
+          @bookmark_repository.exists_at_position?(book_path, current_chapter, line_offset)
         end
 
         # Get bookmark at current position (if any)
         #
         # @return [Bookmark, nil]
         def bookmark_at_current_position
-          current_state = @state_store.current_state
-          with_book_path(default: nil) do |book_path|
-            current_chapter = current_state.dig(:reader, :current_chapter) || 0
-            line_offset = get_current_line_offset(current_state)
-            @bookmark_repository.find_at_position(book_path, current_chapter, line_offset)
-          end
+          book_path = current_book_path
+          return nil unless book_path
+
+          current_state = safe_snapshot
+          current_chapter = current_state.dig(:reader, :current_chapter) || 0
+          line_offset = get_current_line_offset(current_state)
+          @bookmark_repository.find_at_position(book_path, current_chapter, line_offset)
         end
 
         # Toggle bookmark at current position
@@ -137,12 +141,6 @@ module EbookReader
 
       private
 
-        def with_book_path(default: nil)
-          path = current_book_path
-          return default unless path
-          yield(path)
-        end
-
         def get_current_line_offset(state)
           # Get the current line position depending on view mode
           view_mode = state.dig(:config, :view_mode) || :split
@@ -162,12 +160,36 @@ module EbookReader
         end
 
         def current_book_path
-          @state_store.get(%i[reader book_path])
+          if @state_store.respond_to?(:get)
+            @state_store.get(%i[reader book_path])
+          elsif @state_store.respond_to?(:current_state)
+            (@state_store.current_state || {}).dig(:reader, :book_path)
+          end
         end
 
-        def refresh_bookmarks
-          bookmarks = get_bookmarks
-          @state_store.update({ %i[reader bookmarks] => bookmarks })
+        def refresh_bookmarks(book_path = current_book_path)
+          return unless book_path
+
+          bookmarks = @bookmark_repository.find_by_book_path(book_path)
+          apply_state_updates({ %i[reader bookmarks] => bookmarks })
+        end
+
+        def apply_state_updates(updates)
+          return if updates.nil? || updates.empty?
+
+          if @state_store.respond_to?(:update)
+            @state_store.update(updates)
+          elsif @state_store.respond_to?(:set)
+            updates.each { |path, value| @state_store.set(path, value) }
+          end
+        end
+
+        def safe_snapshot
+          return {} unless @state_store.respond_to?(:current_state)
+
+          @state_store.current_state || {}
+        rescue StandardError
+          {}
         end
       end
     end

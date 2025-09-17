@@ -4,6 +4,7 @@ require 'fileutils'
 require 'json'
 require 'time'
 require 'timeout'
+require 'set'
 
 require_relative 'models/scanner_context'
 require_relative 'epub_finder/directory_scanner'

@@ -26,6 +26,9 @@ module EbookReader
         def wrap_lines(lines, chapter_index, width)
           return [] if lines.nil? || width.to_i < 10
 
+          formatted = fetch_formatted_lines(chapter_index, width, 0, lines.length)
+          return formatted if formatted
+
           cache = begin
             registered?(:chapter_cache) ? resolve(:chapter_cache) : @chapter_cache
           rescue StandardError
@@ -48,6 +51,9 @@ module EbookReader
           length_i = length.to_i
           start_i = start.to_i
           return [] if lines.nil? || width_i <= 0 || length_i <= 0
+
+          formatted = fetch_formatted_lines(chapter_index, width_i, start_i, length_i)
+          return formatted if formatted
 
           target_end = [start_i, 0].max + length_i - 1
           key = "#{chapter_index}_#{width_i}"
@@ -178,6 +184,25 @@ module EbookReader
             end
           end
           store[subkey] = value
+        end
+
+        def fetch_formatted_lines(chapter_index, width, offset, length)
+          return unless registered?(:formatting_service)
+
+          document = begin
+            resolve(:document)
+          rescue StandardError
+            nil
+          end
+          return unless document
+
+          formatting = resolve(:formatting_service)
+          lines = formatting.wrap_window(document, chapter_index, width, offset, length)
+          return unless lines && !lines.empty?
+
+          lines.map { |line| line.respond_to?(:text) ? line.text : line }
+        rescue StandardError
+          nil
         end
       end
     end

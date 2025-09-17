@@ -11,6 +11,12 @@ module EbookReader
 
       def build(page_info)
         ch = @state.get(%i[reader current_chapter])
+        toc_entries = if @doc&.respond_to?(:toc_entries)
+                        @doc.toc_entries
+                      else
+                        []
+                      end
+
         UI::ViewModels::ReaderViewModel.new(
           current_chapter: ch,
           total_chapters: @doc&.chapters&.length || 0,
@@ -23,6 +29,7 @@ module EbookReader
           mode: @state.get(%i[reader mode]),
           message: @state.get(%i[reader message]),
           bookmarks: @state.get(%i[reader bookmarks]) || [],
+          toc_entries: toc_entries,
           show_page_numbers: @state.get(%i[config show_page_numbers]) || true,
           page_numbering_mode: @state.get(%i[config page_numbering_mode]) || :absolute,
           line_spacing: @state.get(%i[config line_spacing]) || :normal,

@@ -101,3 +101,20 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
   - Write manifest atomically (`manifest.msgpack` if `msgpack` is available; otherwise `manifest.json`) with `title`, `author` (string), `authors` (array), `opf_path`, and `spine`.
 - Subsequent opens (hit): `EPUBDocument` loads the manifest and reads XHTML directly from the cache directory; it does not reopen the ZIP or re-parse the OPF. Pagination loads compactly from cache; line content populates lazily on demand for instant open.
 - Dependencies: Standard library only; ZIP reads handled in‑house via a minimal reader using `Zlib` (no external gems). MessagePack used opportunistically if present.
+
+## Content Formatting Pipeline
+
+- XHTML Parsing: `Infrastructure::Parsers::XHTMLContentParser` walks chapter markup and emits
+  `Domain::Models::ContentBlock` + `TextSegment` objects capturing headings, paragraphs, lists,
+  block quotes, and code blocks without leaking raw HTML to the presentation layer.
+- Formatting Service: `Domain::Services::FormattingService` orchestrates parsing, caches
+  `DisplayLine` collections per document/width, and exposes `wrap_window`/`wrap_all` for
+  block-aware text retrieval. Plain-text fallbacks remain available for legacy consumers.
+- Wrapping Integration: `Domain::Services::WrappingService` now defers to the formatting
+  service when present so pagination and prefetching align with the styled output rendered to
+  the terminal.
+- Rendering: `Components::Reading::BaseViewRenderer` prefers formatted display lines,
+  applies ANSI styling per block type, and records visible bounds via
+  `Helpers::TextMetrics` to keep selection/highlighting accurate.
+- Backwards Compatibility: When formatting data is unavailable (e.g., tests or truncated
+  chapters) the system gracefully falls back to the legacy plain-text wrapping path.

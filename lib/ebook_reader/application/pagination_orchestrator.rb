@@ -91,8 +91,9 @@ module EbookReader
       end
 
       def update_progress(state, done, total)
+        progress = EbookReader::Application::ProgressHelper.ratio(done, total)
         state.dispatch(EbookReader::Domain::Actions::UpdateUILoadingAction.new(
-                         loading_progress: (done.to_f / [total, 1].max)
+                         loading_progress: progress
                        ))
         @frame_coordinator.render_loading_overlay
       end

@@ -3,6 +3,7 @@
 require_relative '../base_component'
 require_relative '../../constants/ui_constants'
 require_relative '../ui/text_utils'
+require_relative '../ui/list_helpers'
 
 module EbookReader
   module Components
@@ -157,7 +158,7 @@ module EbookReader
           list_height = height - list_start_row - 2
           return if list_height <= 0
 
-          start_index, visible_annotations = calculate_visible_range(list_height, annotations)
+          start_index, visible_annotations = UI::ListHelpers.slice_visible(annotations, list_height, @selected)
 
           visible_annotations.each_with_index do |annotation, index|
             row = list_start_row + index
@@ -167,20 +168,6 @@ module EbookReader
             render_annotation_item(surface, bounds, row, width, annotation, is_selected,
                                    abs_idx, in_all)
         end
-        end
-
-        def calculate_visible_range(list_height, annotations)
-          total_annotations = annotations.length
-          start_index = 0
-
-          start_index = @selected - list_height + 1 if @selected >= list_height
-
-          start_index = [start_index, total_annotations - list_height].min if total_annotations > list_height
-
-          end_index = [start_index + list_height - 1, total_annotations - 1].min
-          visible_annotations = annotations[start_index..end_index] || []
-
-          [start_index, visible_annotations]
         end
 
         def render_annotation_item(surface, bounds, row, width, annotation, is_selected,

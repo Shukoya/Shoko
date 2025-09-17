@@ -24,16 +24,16 @@ module EbookReader
       DEFAULT_WIDTH_PERCENT = 30
       MIN_WIDTH = 24
 
-      def initialize(controller)
+      def initialize(state, dependencies)
         super() # Call BaseComponent constructor
-        @controller = controller
-        @tab_header = Sidebar::TabHeaderComponent.new(controller)
-        @toc_renderer = Sidebar::TocTabRenderer.new(controller)
-        @annotations_renderer = Sidebar::AnnotationsTabRenderer.new(controller)
-        @bookmarks_renderer = Sidebar::BookmarksTabRenderer.new(controller)
+        @state = state
+        @dependencies = dependencies
+        @tab_header = Sidebar::TabHeaderComponent.new(state)
+        @toc_renderer = Sidebar::TocTabRenderer.new(state, dependencies)
+        @annotations_renderer = Sidebar::AnnotationsTabRenderer.new(state)
+        @bookmarks_renderer = Sidebar::BookmarksTabRenderer.new(state, dependencies)
 
         # Observe sidebar state changes
-        state = @controller.state
         state.add_observer(self,
                            %i[reader sidebar_visible],
                            %i[reader sidebar_active_tab],
@@ -52,7 +52,7 @@ module EbookReader
       end
 
       def preferred_width(total_width)
-        state = @controller.state
+        state = @state
         return :hidden unless state.get(%i[reader sidebar_visible])
 
         # Calculate width as percentage of total, with minimum
@@ -61,7 +61,7 @@ module EbookReader
       end
 
       def do_render(surface, bounds)
-        state = @controller.state
+        state = @state
         bw = bounds.width
         bh = bounds.height
         return unless state.get(%i[reader sidebar_visible]) && bw >= MIN_WIDTH
@@ -120,7 +120,7 @@ module EbookReader
       end
 
       def render_header(surface, bounds)
-        state = @controller.state
+        state = @state
 
         # Simple clean title
         active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
@@ -148,7 +148,7 @@ module EbookReader
       end
 
       def render_help(surface, bounds)
-        state = @controller.state
+        state = @state
 
         active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
         reset = Terminal::ANSI::RESET
@@ -166,9 +166,7 @@ module EbookReader
       end
 
       def render_active_tab(surface, bounds)
-        state = @controller.state
-
-        active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(state)
+        active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(@state)
         renderer = { toc: @toc_renderer, annotations: @annotations_renderer, bookmarks: @bookmarks_renderer }[active_tab]
         renderer&.render(surface, bounds)
       end

@@ -4,7 +4,8 @@ module EbookReader
   module Domain
     module Models
       # Represents a chapter within an EPUB document.
-      Chapter = Struct.new(:number, :title, :lines, :metadata, keyword_init: true) do
+      Chapter = Struct.new(:number, :title, :lines, :metadata, :blocks, :raw_content,
+                           keyword_init: true) do
         # Number of lines in the chapter
         # @return [Integer]
         def line_count

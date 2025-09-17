@@ -3,6 +3,7 @@
 require_relative '../base_component'
 require_relative '../../constants/ui_constants'
 require_relative '../ui/text_utils'
+require_relative '../ui/list_helpers'
 
 module EbookReader
   module Components
@@ -14,9 +15,9 @@ module EbookReader
 
         BookItemCtx = Struct.new(:row, :width, :book, :selected, keyword_init: true)
 
-        def initialize(scanner, state)
+        def initialize(catalog_service, state)
           super()
-          @scanner = scanner
+          @catalog = catalog_service
           @state = state
           @filtered_epubs = []
 
@@ -128,7 +129,7 @@ module EbookReader
 
         def filter_books
           query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
-          books = @scanner.epubs || []
+          books = @catalog.entries || []
           return @filtered_epubs = books if query.nil? || query.empty?
 
           q = query.downcase
@@ -140,10 +141,10 @@ module EbookReader
         end
 
         def render_status(surface, bounds, _width, _height)
-          status = @scanner.scan_status
+          status = @catalog.scan_status
           return unless status
 
-          msg = @scanner.scan_message || ''
+          msg = @catalog.scan_message || ''
           text = case status
                  when :scanning then "#{COLOR_TEXT_WARNING}⟳ #{msg}#{Terminal::ANSI::RESET}"
                  when :error    then "#{COLOR_TEXT_ERROR}✗ #{msg}#{Terminal::ANSI::RESET}"
@@ -154,7 +155,7 @@ module EbookReader
         end
 
         def render_empty_state(surface, bounds, width, height)
-          status = @scanner.scan_status
+          status = @catalog.scan_status
           empty_text = if status == :scanning
                          "#{COLOR_TEXT_WARNING}⟳ Scanning for books...#{Terminal::ANSI::RESET}"
                        else
@@ -169,7 +170,7 @@ module EbookReader
           return if list_height <= 0
 
           selected = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state)
-          start_index, visible_books = calculate_visible_range(list_height, selected)
+          start_index, visible_books = UI::ListHelpers.slice_visible(@filtered_epubs, list_height, selected)
 
           # Draw header row and divider
           draw_list_header(surface, bounds, width, list_start_row - 1)
@@ -196,39 +197,15 @@ module EbookReader
           end
         end
 
-        def calculate_visible_range(list_height, selected)
-          total_books = @filtered_epubs.length
-          start_index = 0
-
-          start_index = selected - list_height + 1 if selected >= list_height
-
-          start_index = [start_index, total_books - list_height].min if total_books > list_height
-
-          end_index = [start_index + list_height - 1, total_books - 1].min
-          visible_books = @filtered_epubs[start_index..end_index] || []
-
-          [start_index, visible_books]
-        end
-
         def render_book_item(surface, bounds, ctx)
-          @meta_cache ||= {}
           book = ctx.book
           path = book['path']
-          meta = @meta_cache[path]
-          unless meta
-            require_relative '../../helpers/metadata_extractor'
-            meta = Helpers::MetadataExtractor.from_epub(path)
-            @meta_cache[path] = meta
-          end
+          meta = @catalog.metadata_for(path)
 
           title = (meta[:title] || book['name'] || 'Unknown').to_s
           authors = (meta[:author_str] || '').to_s
           year = (meta[:year] || '').to_s
-          size_mb = format_size(book['size'] || begin
-            File.size(path)
-          rescue StandardError
-            0
-          end)
+          size_mb = format_size(book['size'] || @catalog.size_for(path))
 
           # Compute column widths
           pointer_w = 2

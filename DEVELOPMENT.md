@@ -148,6 +148,15 @@ overlay = Components::TooltipOverlayComponent.new(reader_controller,
                                                  coordinate_service: @dependencies.resolve(:coordinate_service))
 ```
 
+## Formatting Pipeline Guidelines
+
+- **Parser First**: Update `Infrastructure::Parsers::XHTMLContentParser` when adding block-level semantics so chapters emit structured `ContentBlock`/`TextSegment` objects.
+- **Formatting Service**: Prefer `Domain::Services::FormattingService.wrap_window`/`wrap_all` for retrieving display-ready lines. It caches parsed blocks per document and width.
+- **Rendering Hooks**: Reading components should call `BaseViewRenderer#fetch_wrapped_lines` (already formatting-aware) rather than rolling custom HTML scrubbing. When building new styled strings, use `Helpers::TextMetrics.visible_length` to keep selection/highlighting accurate.
+- **Fallbacks**: Tests or tooling that only provide `Chapter#lines` still work—the formatting service automatically falls back to the legacy plaintext wrappers.
+- **Extending**: New block types require parser updates, formatting-service handling, renderer assertions, and documentation updates to keep the pipeline coherent.
+
+
 ## Coding Standards
 
 ### Ruby Style Guide

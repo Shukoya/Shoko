@@ -39,7 +39,7 @@ module EbookReader
               maxp = context.max_page_in_chapter || 0
               new_page = [cur + lines, maxp].min
             else
-              return {}
+              raise ArgumentError, "Invalid scroll direction: #{direction}"
             end
 
             return {} if new_page == cur

@@ -48,7 +48,8 @@ module EbookReader
 
           # 3) Clear recent files list
           begin
-            EbookReader::RecentFiles.clear
+            recent_repository = resolve_recent_repository
+            recent_repository&.clear
           rescue StandardError
             # best effort
           end
@@ -61,13 +62,21 @@ module EbookReader
           end
 
           # 5) Reset scanner state and notify user
-          @scanner.epubs = []
+          @catalog.update_entries([])
           @filtered_epubs = []
-          @scanner.scan_status = :idle
-          @scanner.scan_message = "All caches wiped. Use 'Find Book' to rescan"
+          @catalog.scan_status = :idle
+          @catalog.scan_message = "All caches wiped. Use 'Find Book' to rescan"
         end
 
-        private
+      private
+
+        def resolve_recent_repository
+          return unless defined?(@dependencies) && @dependencies
+
+          @dependencies.resolve(:recent_library_repository)
+        rescue StandardError
+          nil
+        end
 
         def remove_epub_cache_on_disk
           reader_cache = EbookReader::Infrastructure::CachePaths.reader_root

@@ -2,6 +2,7 @@
 
 require_relative 'base_screen_component'
 require_relative '../../constants/ui_constants'
+require_relative '../ui/list_helpers'
 
 module EbookReader
   module Components
@@ -18,6 +19,7 @@ module EbookReader
         def initialize(state, dependencies)
           super(dependencies)
           @state = state
+          @catalog = dependencies.resolve(:catalog_service)
           @items = nil
           # Observe selection changes to support scrolling
           @state.add_observer(self, %i[menu browse_selected])
@@ -47,17 +49,16 @@ module EbookReader
         def load_items
           return @items if @items
 
-          svc = @dependencies.resolve(:library_service)
-          raw = svc ? (svc.list_cached_books || []) : []
-          @items = raw.map do |h|
+          entries = Array(@catalog.cached_library_entries)
+          @items = entries.map do |entry|
             Item.new(
-              title: h[:title] || h['title'],
-              authors: h[:authors] || h['authors'],
-              year: h[:year] || h['year'],
-              last_accessed: h[:last_accessed] || h['last_accessed'],
-              size_bytes: h[:size_bytes] || h['size_bytes'],
-              open_path: h[:open_path] || h['open_path'],
-              epub_path: h[:epub_path] || h['epub_path']
+              title:      entry[:title] || entry['title'],
+              authors:    entry[:authors] || entry['authors'],
+              year:       entry[:year] || entry['year'],
+              last_accessed: entry[:last_accessed] || entry['last_accessed'],
+              size_bytes: entry[:size_bytes] || entry['size_bytes'] || @catalog.size_for(entry[:open_path] || entry['open_path']),
+              open_path:  entry[:open_path] || entry['open_path'],
+              epub_path:  entry[:epub_path] || entry['epub_path']
             )
           end
         end
@@ -82,8 +83,7 @@ module EbookReader
           list_height -= 2
 
           items_per_page = list_height
-          start_index, visible_items = calculate_visible_range(items.length, items_per_page,
-                                                               selected)
+          start_index, visible_items = UI::ListHelpers.slice_visible(items, items_per_page, selected)
 
           current_row = list_start
           visible_items.each_with_index do |book, i|
@@ -94,14 +94,6 @@ module EbookReader
             render_library_item(surface, bounds, ctx)
             current_row += 1
           end
-        end
-
-        def calculate_visible_range(total_items, per_page, selected)
-          start_index = 0
-          start_index = selected - per_page + 1 if selected >= per_page
-          start_index = [start_index, total_items - per_page].min if total_items > per_page
-          end_index = [start_index + per_page - 1, total_items - 1].min
-          [start_index, load_items[start_index..end_index] || []]
         end
 
         def draw_list_header(surface, bounds, width, row)
@@ -208,6 +200,10 @@ module EbookReader
         # Public accessor for items to avoid reflective access from MainMenu
         def items
           load_items
+        end
+
+        def invalidate_cache!
+          @items = nil
         end
       end
     end

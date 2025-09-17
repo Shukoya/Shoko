@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require 'set'
+
+require_relative '../infrastructure/repositories/cached_library_repository'
+
 module EbookReader
   module Domain
     # Dependency injection container for managing service dependencies.
@@ -137,6 +141,9 @@ module EbookReader
         container.register_factory(:annotation_repository) { |c| Domain::Repositories::AnnotationRepository.new(c) }
         container.register_factory(:progress_repository) { |c| Domain::Repositories::ProgressRepository.new(c) }
         container.register_factory(:config_repository) { |c| Domain::Repositories::ConfigRepository.new(c) }
+        container.register_factory(:recent_library_repository) do |c|
+          Domain::Repositories::RecentLibraryRepository.new(c)
+        end
 
         # Domain services with dependency injection
         container.register_factory(:navigation_service) { |c| Domain::Services::NavigationService.new(c) }
@@ -150,8 +157,10 @@ module EbookReader
         container.register_singleton(:terminal_service) { |c| Domain::Services::TerminalService.new(c) }
         container.register_factory(:annotation_service) { |c| Domain::Services::AnnotationService.new(c) }
         container.register_factory(:library_service) { |c| Domain::Services::LibraryService.new(c) }
+        container.register_factory(:catalog_service) { |c| Domain::Services::CatalogService.new(c) }
         # WrappingService caches windows/chapters; make it a singleton to share cache
         container.register_singleton(:wrapping_service) { |c| Domain::Services::WrappingService.new(c) }
+        container.register_singleton(:formatting_service) { |c| Domain::Services::FormattingService.new(c) }
 
         # Notifications
         container.register_singleton(:notification_service) { |c| Domain::Services::NotificationService.new(c) }
@@ -159,17 +168,10 @@ module EbookReader
         # Document service factory (per-book instance)
         container.register_factory(:document_service_factory) do |c|
           lambda do |path|
+            wrapper = c.resolve(:wrapping_service)
+            formatting = c.resolve(:formatting_service)
             klass = Infrastructure::DocumentService
-            init_arity = begin
-              klass.instance_method(:initialize).arity
-            rescue StandardError
-              1
-            end
-            if init_arity.negative? || init_arity >= 2
-              klass.new(path, c.resolve(:wrapping_service))
-            else
-              klass.new(path)
-            end
+            instantiate_document_service(klass, path, wrapper, formatting)
           end
         end
 
@@ -182,6 +184,10 @@ module EbookReader
         container.register_factory(:state_store) { |c| c.resolve(:global_state) }
 
         # Library scanner service (infrastructure)
+        container.register_singleton(:cached_library_repository) do |_c|
+          EbookReader::Infrastructure::Repositories::CachedLibraryRepository.new
+        end
+
         container.register_factory(:library_scanner) do |_c|
           EbookReader::Infrastructure::LibraryScanner.new
         end
@@ -207,6 +213,16 @@ module EbookReader
         container.register(:domain_event_bus, Domain::Events::DomainEventBus.new(container.resolve(:event_bus)))
 
         container
+      end
+
+      def self.instantiate_document_service(klass, path, wrapper, formatting)
+        klass.new(path, wrapper, formatting_service: formatting)
+      rescue ArgumentError
+        begin
+          klass.new(path, wrapper)
+        rescue ArgumentError
+          klass.new(path)
+        end
       end
     end
   end

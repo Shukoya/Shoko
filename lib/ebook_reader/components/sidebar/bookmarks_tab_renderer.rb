@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../base_component'
+require_relative '../ui/list_helpers'
 
 module EbookReader
   module Components
@@ -11,30 +12,37 @@ module EbookReader
 
         ItemCtx = Struct.new(:bookmark, :doc, :index, :selected_index, :y, keyword_init: true)
 
-        def initialize(controller)
+        def initialize(state, dependencies)
           super()
-          @controller = controller
+          @state = state
+          @dependencies = dependencies
         end
 
+        BoundsMetrics = Struct.new(:x, :y, :width, :height, keyword_init: true)
+
         def do_render(surface, bounds)
-          state = @controller.state
-          bookmarks = state.get(%i[reader bookmarks]) || []
-          doc = @controller.doc
-          selected_index = state.get(%i[reader sidebar_bookmarks_selected]) || 0
+          metrics = metrics_for(bounds)
+          bookmarks = @state.get(%i[reader bookmarks]) || []
+          doc = resolve_document
+          selected_index = @state.get(%i[reader sidebar_bookmarks_selected]) || 0
 
-          return render_empty_message(surface, bounds) if bookmarks.empty?
+          return render_empty_message(surface, bounds, metrics) if bookmarks.empty?
 
-          render_bookmarks_list(surface, bounds, bookmarks, doc, selected_index)
+          render_bookmarks_list(surface, bounds, metrics, bookmarks, doc, selected_index)
         end
 
         private
 
-      def render_empty_message(surface, bounds)
+        def metrics_for(bounds)
+          BoundsMetrics.new(x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height)
+        end
+
+        def render_empty_message(surface, bounds, metrics)
           reset = Terminal::ANSI::RESET
-          bx = bounds.x
-          by = bounds.y
-          bw = bounds.width
-          bh = bounds.height
+          bx = metrics.x
+          by = metrics.y
+          bw = metrics.width
+          bh = metrics.height
           messages = [
             'No bookmarks yet',
             '',
@@ -50,34 +58,30 @@ module EbookReader
           end
       end
 
-        def render_bookmarks_list(surface, bounds, bookmarks, doc, selected_index)
+        def render_bookmarks_list(surface, bounds, metrics, bookmarks, doc, selected_index)
           # Each bookmark takes 2 lines: title/chapter + snippet
           item_height = 2
-          bh = bounds.height
-          by = bounds.y
-          visible_items = bh / item_height
-
-          # Calculate scrolling
-          visible_start = [selected_index - (visible_items / 2), 0].max
-          visible_end = [visible_start + visible_items, bookmarks.length].min
-
+          bh = metrics.height
+          by = metrics.y
+          visible_items = [bh / item_height, 1].max
+          visible_start, window_items = UI::ListHelpers.slice_visible(bookmarks, visible_items, selected_index)
           current_y = by
           end_y = by + bh
 
-          (visible_start...visible_end).each do |idx|
-            bookmark = bookmarks[idx]
+          window_items.each_with_index do |bookmark, offset|
+            idx = visible_start + offset
             break if current_y + item_height > end_y
 
             ctx = ItemCtx.new(bookmark: bookmark, doc: doc, index: idx, selected_index: selected_index, y: current_y)
-            render_bookmark_item(surface, bounds, ctx)
+            render_bookmark_item(surface, bounds, metrics, ctx)
             current_y += item_height
           end
         end
 
-        def render_bookmark_item(surface, bounds, ctx)
+        def render_bookmark_item(surface, bounds, metrics, ctx)
           reset = Terminal::ANSI::RESET
-          bx = bounds.x
-          bw = bounds.width
+          bx = metrics.x
+          bw = metrics.width
           row = ctx.y
           col = bx + 1
           bm = ctx.bookmark
@@ -86,7 +90,7 @@ module EbookReader
 
           # Get chapter info
           ch_index = bm.chapter_index
-          chapter = ctx.doc.get_chapter(ch_index)
+          chapter = ctx.doc&.get_chapter(ch_index)
           chapter_title = chapter&.title || "Chapter #{ch_index + 1}"
 
           # First line: Chapter title with bookmark indicator
@@ -113,10 +117,21 @@ module EbookReader
 
           # Add position indicator if available
           position_text = ''
-          position_text = " (#{bm.position_percentage}%)" if bm.respond_to?(:position_percentage)
+          if bm.respond_to?(:position_percentage)
+            pct = bm.position_percentage
+            position_text = " (#{pct}%)" if pct
+          end
 
           snippet_line = "    #{snippet_style}\"#{snippet}\"#{position_text}#{reset}"
           surface.write(bounds, row + 1, col, snippet_line)
+        end
+
+        def resolve_document
+          return @dependencies.resolve(:document) if @dependencies&.respond_to?(:resolve)
+
+          nil
+        rescue StandardError
+          nil
         end
       end
     end

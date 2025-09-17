@@ -29,6 +29,17 @@ module EbookReader
           when :browse_up then browse_nav(context, -1)
           when :browse_down then browse_nav(context, +1)
           when :browse_select then context.open_selected_book if context.respond_to?(:open_selected_book)
+          when :library_up then context.library_up if context.respond_to?(:library_up)
+          when :library_down then context.library_down if context.respond_to?(:library_down)
+          when :library_select then context.library_select if context.respond_to?(:library_select)
+          when :toggle_view_mode then context.toggle_view_mode if context.respond_to?(:toggle_view_mode)
+          when :cycle_line_spacing then context.cycle_line_spacing if context.respond_to?(:cycle_line_spacing)
+          when :toggle_page_numbers then context.toggle_page_numbers if context.respond_to?(:toggle_page_numbers)
+          when :toggle_page_numbering_mode then
+            context.toggle_page_numbering_mode if context.respond_to?(:toggle_page_numbering_mode)
+          when :toggle_highlight_quotes then
+            context.toggle_highlight_quotes if context.respond_to?(:toggle_highlight_quotes)
+          when :wipe_cache then context.wipe_cache if context.respond_to?(:wipe_cache)
           when :start_search
             if context.respond_to?(:switch_to_search)
               context.switch_to_search

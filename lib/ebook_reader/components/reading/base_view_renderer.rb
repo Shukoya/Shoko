@@ -3,6 +3,8 @@
 require_relative '../base_component'
 require_relative '../../models/rendering_context'
 require_relative '../../models/render_params'
+require_relative '../../helpers/text_metrics'
+require_relative '../render_style'
 
 module EbookReader
   module Components
@@ -61,7 +63,7 @@ module EbookReader
         # Returns [col_width, content_height, spacing, displayable]
         def compute_layout(bounds, view_mode, config)
           col_width, content_height = layout_metrics(bounds.width, bounds.height, view_mode)
-          spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config)
+          spacing = resolve_line_spacing(config)
           displayable = adjust_for_line_spacing(content_height, spacing)
           [col_width, content_height, spacing, displayable]
         end
@@ -85,19 +87,31 @@ module EbookReader
 
         def fetch_wrapped_lines(document, chapter_index, col_width, offset, length)
           chapter = document&.get_chapter(chapter_index)
-          if @dependencies&.registered?(:wrapping_service) && chapter
-            ws = @dependencies.resolve(:wrapping_service)
-            ws.wrap_window(chapter.lines || [], chapter_index, col_width, offset, length)
-          else
-            (chapter&.lines || [])[offset, length] || []
+          return [] unless chapter
+
+          if @dependencies&.registered?(:formatting_service)
+            begin
+              formatting = @dependencies.resolve(:formatting_service)
+              lines = formatting.wrap_window(document, chapter_index, col_width, offset, length)
+              return lines unless lines.nil? || lines.empty?
+            rescue StandardError
+              # fall through to wrapping service fallback
+            end
           end
+
+          if @dependencies&.registered?(:wrapping_service)
+            ws = @dependencies.resolve(:wrapping_service)
+            return ws.wrap_window(chapter.lines || [], chapter_index, col_width, offset, length)
+          end
+
+          (chapter.lines || [])[offset, length] || []
         end
 
         # Shared helper to draw a list of lines with spacing and clipping considerations.
         # Computes row progression based on current line spacing and stops at bounds.
         def draw_lines(surface, bounds, lines, params)
           ctx = params.context
-          spacing = ctx ? EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(ctx.config) : :normal
+          spacing = ctx ? resolve_line_spacing(ctx.config) : :normal
           lines.each_with_index do |line, idx|
             row = params.start_row + (spacing == :relaxed ? idx * 2 : idx)
             break if row > bounds.height - 1
@@ -121,23 +135,26 @@ module EbookReader
         end
 
         def draw_line(surface, bounds, line:, row:, col:, width:, context:)
-          text = styled_text_for(line, width, context)
+          plain_text, styled_text = renderable_line_content(line, width, context)
           abs_row, abs_col = absolute_cell(bounds, row, col)
-          record_rendered_line(abs_row, abs_col, width, text)
-          surface.write(
-            bounds,
-            row,
-            col,
-            EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + text + Terminal::ANSI::RESET
-          )
+          display_width = EbookReader::Helpers::TextMetrics.visible_length(plain_text)
+          record_rendered_line(abs_row, abs_col, display_width, plain_text)
+          surface.write(bounds, row, col, styled_text)
         end
 
-        def styled_text_for(line, width, context)
+        def renderable_line_content(line, width, context)
+          if line.respond_to?(:segments) && line.respond_to?(:text)
+            plain, styled = styled_text_for_display_line(line, width)
+            return [plain, styled]
+          end
+
           text = line.to_s[0, width]
-          config = context&.config
-          text = highlight_keywords(text) if config&.get(%i[config highlight_keywords])
-          text = highlight_quotes(text) if config&.get(%i[config highlight_quotes])
-          text
+          if (store = config_store(context&.config))
+            text = highlight_keywords(text) if store.get(%i[config highlight_keywords])
+            text = highlight_quotes(text) if store.get(%i[config highlight_quotes])
+          end
+          styled = Components::RenderStyle.primary(text)
+          [text, styled]
         end
 
         def absolute_cell(bounds, row, col)
@@ -146,6 +163,8 @@ module EbookReader
 
         def record_rendered_line(abs_row, abs_col, width, text)
           return unless @rendered_lines_buffer.is_a?(Hash)
+
+          return if width <= 0
 
           end_col = abs_col + width - 1
           line_key = "#{abs_row}_#{abs_col}_#{end_col}"
@@ -159,19 +178,78 @@ module EbookReader
         end
 
         def highlight_keywords(line)
+          accent = Components::RenderStyle.color(:accent)
+          base = Components::RenderStyle.color(:primary)
           line.gsub(Constants::HIGHLIGHT_PATTERNS) do |match|
-            EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + match + EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY
+            accent + match + Terminal::ANSI::RESET + base
           end
         end
 
         def highlight_quotes(line)
+          quote_color = Components::RenderStyle.color(:quote)
+          base = Components::RenderStyle.color(:primary)
           line.gsub(Constants::QUOTE_PATTERNS) do |match|
-            Terminal::ANSI::ITALIC + match + Terminal::ANSI::RESET + EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY
+            quote_color + Terminal::ANSI::ITALIC + match + Terminal::ANSI::RESET + base
           end
+        end
+
+        def styled_text_for_display_line(line, width)
+          metadata = line.metadata || {}
+          plain_builder = +''
+          styled_builder = +''
+          remaining = width.to_i
+
+          line.segments.each do |segment|
+            break if remaining <= 0
+
+            raw_text = segment.text.to_s
+            next if raw_text.empty?
+
+            visible_len = EbookReader::Helpers::TextMetrics.visible_length(raw_text)
+            text_for_display = if visible_len > remaining
+                                 EbookReader::Helpers::TextMetrics.truncate_to(raw_text, remaining)
+                               else
+                                 raw_text
+                               end
+
+            next if text_for_display.empty?
+
+            plain_builder << text_for_display
+            styled_builder << Components::RenderStyle.styled_segment(text_for_display,
+                                                                      segment.styles || {},
+                                                                      metadata: metadata)
+            remaining -= EbookReader::Helpers::TextMetrics.visible_length(text_for_display)
+          end
+
+          if styled_builder.empty?
+            plain_text = plain_builder.empty? ? line.text.to_s[0, width] : plain_builder
+            return [plain_text, Components::RenderStyle.primary(plain_text)]
+          end
+
+          plain = plain_builder.empty? ? line.text.to_s[0, width] : plain_builder
+          [plain, styled_builder]
         end
 
         def safe_resolve(name)
           return @dependencies.resolve(name) if @dependencies.registered?(name)
+
+          nil
+        end
+
+        def resolve_line_spacing(config)
+          store = config_store(config)
+          if store
+            EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(store)
+          else
+            :normal
+          end
+        rescue StandardError
+          :normal
+        end
+
+        def config_store(config)
+          return config if config.respond_to?(:get)
+          return config.state if config.respond_to?(:state) && config.state.respond_to?(:get)
 
           nil
         end

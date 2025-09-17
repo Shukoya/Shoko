@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../base_component'
+require_relative '../ui/list_helpers'
 
 module EbookReader
   module Components
@@ -11,29 +12,35 @@ module EbookReader
 
         ItemCtx = Struct.new(:annotation, :index, :selected_index, :y, keyword_init: true)
 
-        def initialize(controller)
+        def initialize(state)
           super()
-          @controller = controller
+          @state = state
         end
 
+        BoundsMetrics = Struct.new(:x, :y, :width, :height, keyword_init: true)
+
         def do_render(surface, bounds)
-          state = @controller.state
-          annotations = state.get(%i[reader annotations]) || []
-          selected_index = state.get(%i[reader sidebar_annotations_selected]) || 0
+          metrics = metrics_for(bounds)
+          annotations = @state.get(%i[reader annotations]) || []
+          selected_index = @state.get(%i[reader sidebar_annotations_selected]) || 0
 
-          return render_empty_message(surface, bounds) if annotations.empty?
+          return render_empty_message(surface, bounds, metrics) if annotations.empty?
 
-          render_annotations_list(surface, bounds, annotations, selected_index)
+          render_annotations_list(surface, bounds, metrics, annotations, selected_index)
         end
 
         private
 
-      def render_empty_message(surface, bounds)
+        def metrics_for(bounds)
+          BoundsMetrics.new(x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height)
+        end
+
+        def render_empty_message(surface, bounds, metrics)
           reset = Terminal::ANSI::RESET
-          bx = bounds.x
-          by = bounds.y
-          bw = bounds.width
-          bh = bounds.height
+          bx = metrics.x
+          by = metrics.y
+          bw = metrics.width
+          bh = metrics.height
           messages = [
             'No annotations yet',
             '',
@@ -47,36 +54,32 @@ module EbookReader
             y = start_y + i
             surface.write(bounds, y, x, "#{COLOR_TEXT_DIM}#{message}#{reset}")
           end
-      end
+        end
 
-        def render_annotations_list(surface, bounds, annotations, selected_index)
+        def render_annotations_list(surface, bounds, metrics, annotations, selected_index)
           # Each annotation takes 3 lines: text excerpt, note (if any), location
           item_height = 3
-          bh = bounds.height
-          by = bounds.y
-          visible_items = bh / item_height
-
-          # Calculate scrolling
-          visible_start = [selected_index - (visible_items / 2), 0].max
-          visible_end = [visible_start + visible_items, annotations.length].min
-
+          bh = metrics.height
+          by = metrics.y
+          visible_items = [bh / item_height, 1].max
+          window_start, window_items = UI::ListHelpers.slice_visible(annotations, visible_items, selected_index)
           current_y = by
 
-          (visible_start...visible_end).each do |idx|
-            annotation = annotations[idx]
+          window_items.each_with_index do |annotation, offset|
+            idx = window_start + offset
             break if current_y + item_height > by + bh
 
             ctx = ItemCtx.new(annotation: annotation, index: idx, selected_index: selected_index, y: current_y)
-            render_annotation_item(surface, bounds, ctx)
+            render_annotation_item(surface, bounds, metrics, ctx)
             current_y += item_height
           end
         end
 
-        def render_annotation_item(surface, bounds, ctx)
+        def render_annotation_item(surface, bounds, metrics, ctx)
           is_selected = (ctx.index == ctx.selected_index)
-          bx = bounds.x
-          by = bounds.y
-          bw = bounds.width
+          bx = metrics.x
+          by = metrics.y
+          bw = metrics.width
           max_width = bw - 4
 
           # Color indicator based on highlight color

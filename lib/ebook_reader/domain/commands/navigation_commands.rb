@@ -31,8 +31,8 @@ module EbookReader
         def perform(context, _params = {})
           deps = context.dependencies
           navigation_service = deps.resolve(:navigation_service)
-          current_state = deps.resolve(:state_store).current_state
-          current_chapter = current_state.dig(:reader, :current_chapter) || 0
+          state_store = deps.resolve(:state_store)
+          current_chapter = current_chapter_from(state_store)
 
           case @action
           when :next_page
@@ -54,10 +54,18 @@ module EbookReader
           @action
         end
 
-        private
+       private
 
-        def humanize_action(action)
+       def humanize_action(action)
           action.to_s.tr('_', ' ')
+       end
+
+        def current_chapter_from(state_store)
+          return 0 unless state_store && state_store.respond_to?(:current_state)
+
+          (state_store.current_state || {}).dig(:reader, :current_chapter) || 0
+        rescue StandardError
+          0
         end
       end
 

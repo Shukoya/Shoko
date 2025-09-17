@@ -5,18 +5,19 @@ module EbookReader
     # Document service for loading and accessing EPUB content.
     # Provides clean interface to document operations without coupling to controllers.
     class DocumentService
-      def initialize(epub_path, wrapping_service = nil)
+      def initialize(epub_path, wrapping_service = nil, formatting_service: nil)
         @epub_path = epub_path
         @document = nil
         @content_cache = {}
         @wrapping_service = wrapping_service
+        @formatting_service = formatting_service
       end
 
       # Load the EPUB document
       #
       # @return [EPUBDocument] Loaded document
       def load_document
-        @document ||= EPUBDocument.new(@epub_path)
+        @document ||= EPUBDocument.new(@epub_path, formatting_service: @formatting_service)
       rescue StandardError => e
         Infrastructure::Logger.error('Failed to load document', path: @epub_path, error: e.message)
         create_error_document(e.message)

@@ -19,7 +19,7 @@ module EbookReader
         @main_menu = main_menu
         @state = main_menu.state
         @dependencies = dependencies
-        @scanner = @main_menu.scanner
+        @catalog = @main_menu.catalog
 
         setup_screen_components
 
@@ -52,6 +52,10 @@ module EbookReader
         @screen_components[:browse]
       end
 
+      def library_screen
+        @screen_components[:library]
+      end
+
       # recent screen removed
 
       def settings_screen
@@ -75,9 +79,9 @@ module EbookReader
       def setup_screen_components
         @screen_components = {
           menu: Screens::MenuScreenComponent.new(@state),
-          browse: Screens::BrowseScreenComponent.new(@scanner, @state),
+          browse: Screens::BrowseScreenComponent.new(@catalog, @state),
           library: Screens::LibraryScreenComponent.new(@state, @dependencies),
-          settings: Screens::SettingsScreenComponent.new(@state, @scanner),
+          settings: Screens::SettingsScreenComponent.new(@state, @catalog),
           open_file: Screens::OpenFileScreenComponent.new(@state),
           annotations: Screens::AnnotationsScreenComponent.new(@state),
           annotation_editor: Screens::AnnotationEditScreenComponent.new(@state, @dependencies),

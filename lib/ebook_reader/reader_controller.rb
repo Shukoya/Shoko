@@ -62,6 +62,7 @@ module EbookReader
       @path = epub_path
       @dependencies = dependencies || Domain::ContainerFactory.create_default_container
       @state = @dependencies.resolve(:global_state)
+      apply_theme_palette
 
       # Initialize document and services first
       @page_calculator = @dependencies.resolve(:page_calculator)
@@ -120,14 +121,17 @@ module EbookReader
       end
 
       # Observe sidebar visibility changes to rebuild layout
-      @state.add_observer(self, %i[reader sidebar_visible])
+      @state.add_observer(self, %i[reader sidebar_visible], %i[config theme])
     end
 
     # Observer callback for state changes
     def state_changed(path, _old_value, _new_value)
-      return unless path == %i[reader sidebar_visible]
-
-      rebuild_root_layout
+      case path
+      when %i[reader sidebar_visible]
+        rebuild_root_layout
+      when %i[config theme]
+        apply_theme_palette
+      end
     end
 
     def run
@@ -218,12 +222,13 @@ module EbookReader
         return { current: 0, total: 0 } if actual_height <= 0
 
         # Avoid heavy page-map build on first frame when deferred
-        page_map = @state.get(%i[reader page_map])
+        page_map = Array(@state.get(%i[reader page_map]) || [])
         if !@defer_page_map && (size_changed?(width, height) || page_map.empty?)
           update_page_map(width, height)
+          page_map = Array(@state.get(%i[reader page_map]) || [])
         end
 
-        current_chapter = @state.get(%i[reader current_chapter])
+        current_chapter = (@state.get(%i[reader current_chapter]) || 0)
         pages_before = page_map[0...current_chapter].sum
         line_offset = if view_mode == :split
                         @state.get(%i[reader left_page])
@@ -259,14 +264,17 @@ module EbookReader
 
         return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } } if actual_height <= 0
 
-        pm = @state.get(%i[reader page_map])
-        update_page_map(width, height) if size_changed?(width, height) || pm.empty?
+        pm = Array(@state.get(%i[reader page_map]) || [])
+        if size_changed?(width, height) || pm.empty?
+          update_page_map(width, height)
+          pm = Array(@state.get(%i[reader page_map]) || [])
+        end
         total_pages = @state.get(%i[reader total_pages])
         unless total_pages.positive?
           return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } }
         end
 
-        current_chapter = @state.get(%i[reader current_chapter])
+        current_chapter = (@state.get(%i[reader current_chapter]) || 0)
         pages_before = pm[0...current_chapter].sum
 
         # Calculate left page
@@ -302,15 +310,25 @@ module EbookReader
     end
 
     def toc_down
-      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(toc_selected: @state.get(%i[
-                                                                                                          reader toc_selected
-                                                                                                        ]) + 1))
+      current = @state.get(%i[reader toc_selected]) || 0
+      next_index = next_navigable_toc_index(current)
+      return if next_index == current
+
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(
+                       toc_selected: next_index,
+                       sidebar_toc_selected: next_index
+                     ))
     end
 
     def toc_up
-      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(toc_selected: [
-        @state.get(%i[reader toc_selected]) - 1, 0
-      ].max))
+      current = @state.get(%i[reader toc_selected]) || 0
+      next_index = previous_navigable_toc_index(current)
+      return if next_index == current
+
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(
+                       toc_selected: next_index,
+                       sidebar_toc_selected: next_index
+                     ))
     end
 
     def toc_select
@@ -374,6 +392,7 @@ module EbookReader
       factory = @dependencies.resolve(:document_service_factory)
       document_service = factory.call(@path)
       @doc = document_service.load_document
+      reset_navigable_toc_cache!
 
       # Register document in dependency container for services to access
       @dependencies.register(:document, @doc)
@@ -441,7 +460,7 @@ module EbookReader
       @header_component = Components::HeaderComponent.new(vm_proc)
       @content_component = Components::ContentComponent.new(self)
       @footer_component = Components::FooterComponent.new(vm_proc)
-      @sidebar_component = Components::SidebarPanelComponent.new(self)
+      @sidebar_component = Components::SidebarPanelComponent.new(@state, @dependencies)
 
       # Create main content area (may be wrapped in horizontal layout)
       @main_content_layout = Components::Layouts::Vertical.new([
@@ -602,6 +621,37 @@ module EbookReader
       lines
     end
 
+    def navigable_toc_indices
+      return @navigable_toc_indices if @navigable_toc_indices
+
+      entries = if @doc.respond_to?(:toc_entries)
+                  Array(@doc.toc_entries)
+                else
+                  []
+                end
+      indices = entries.map(&:chapter_index).compact.uniq.sort
+      if indices.empty?
+        chapters_count = @doc&.chapters&.length.to_i
+        @navigable_toc_indices = (0...chapters_count).to_a
+      else
+        @navigable_toc_indices = indices
+      end
+    end
+
+    def next_navigable_toc_index(current)
+      indices = navigable_toc_indices
+      indices.find { |idx| idx > current } || indices.last || current
+    end
+
+    def previous_navigable_toc_index(current)
+      indices = navigable_toc_indices
+      indices.reverse.find { |idx| idx < current } || indices.first || current
+    end
+
+    def reset_navigable_toc_cache!
+      @navigable_toc_indices = nil
+    end
+
     # Hook for subclasses (MouseableReader) to clear any active selection/popup
     def clear_selection!
       # no-op in base controller
@@ -611,6 +661,14 @@ module EbookReader
     def cleanup_popup_state
       @ui_controller.cleanup_popup_state
       clear_selection!
+    end
+
+    def apply_theme_palette
+      theme = EbookReader::Domain::Selectors::ConfigSelectors.theme(@state) || :default
+      palette = EbookReader::Constants::Themes.palette_for(theme)
+      EbookReader::Components::RenderStyle.configure(palette)
+    rescue StandardError
+      EbookReader::Components::RenderStyle.configure(EbookReader::Constants::Themes::DEFAULT_PALETTE)
     end
 
     # Test helper moved to WrappingService#fetch_window_and_prefetch

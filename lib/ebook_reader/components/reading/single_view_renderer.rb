@@ -63,8 +63,8 @@ module EbookReader
           chapter = context.current_chapter
           return unless chapter
 
-          col_width, content_height, spacing, _displayable = compute_layout(bounds, :single,
-                                                                            context.config)
+          col_width, content_height, spacing, displayable = compute_layout(bounds, :single,
+                                                                           context.config)
           col_start = center_start_col(bounds.width, col_width)
 
           st = context&.state
@@ -73,7 +73,7 @@ module EbookReader
           offset = st.get(%i[reader single_page]) || 0
           chapter_index = st.get(%i[reader current_chapter]) || 0
           lines = fetch_wrapped_lines(context.document, chapter_index, col_width, offset,
-                                      _displayable)
+                                      displayable)
           start_row = calculate_center_start_row(content_height, lines.size, spacing)
 
           params = Models::RenderParams.new(start_row: start_row, col_start: col_start,

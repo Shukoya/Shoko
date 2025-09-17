@@ -4,26 +4,77 @@ module EbookReader
   module Components
     # Small helper for composing styled strings and common UI elements.
     module RenderStyle
-      module_function
+      DEFAULT_PALETTE = EbookReader::Constants::Themes::DEFAULT_PALETTE
 
-      def primary(text)
-        EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + text.to_s + Terminal::ANSI::RESET
-      end
+      @palette = DEFAULT_PALETTE.dup
 
-      def accent(text)
-        EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + text.to_s + Terminal::ANSI::RESET
-      end
+      class << self
+        def configure(palette)
+          @palette = DEFAULT_PALETTE.merge(palette || {})
+        end
 
-      def dim(text)
-        EbookReader::Constants::UIConstants::COLOR_TEXT_DIM + text.to_s + Terminal::ANSI::RESET
-      end
+        def palette
+          @palette || DEFAULT_PALETTE
+        end
 
-      def selection_pointer
-        EbookReader::Constants::UIConstants::SELECTION_POINTER
-      end
+        def color(key)
+          palette[key] || DEFAULT_PALETTE[key]
+        end
 
-      def selection_pointer_colored
-        EbookReader::Constants::UIConstants::SELECTION_POINTER_COLOR + selection_pointer + Terminal::ANSI::RESET
+        def primary(text)
+          color(:primary) + text.to_s + Terminal::ANSI::RESET
+        end
+
+        def accent(text)
+          color(:accent) + text.to_s + Terminal::ANSI::RESET
+        end
+
+        def dim(text)
+          color(:dim) + text.to_s + Terminal::ANSI::RESET
+        end
+
+        def selection_pointer
+          EbookReader::Constants::UIConstants::SELECTION_POINTER
+        end
+
+        def selection_pointer_colored
+          color(:accent) + selection_pointer + Terminal::ANSI::RESET
+        end
+
+        def styled_segment(text, styles = {}, metadata: {})
+          content = text.to_s
+          return content if content.empty?
+
+          codes = []
+          block_type = metadata && metadata[:block_type]
+
+          color_code = color_for(styles, block_type)
+          codes << color_code if color_code
+
+          codes << Terminal::ANSI::BOLD if styles[:bold] || block_type == :heading
+          codes << Terminal::ANSI::ITALIC if styles[:italic] || styles[:quote] || block_type == :quote
+          codes << Terminal::ANSI::DIM if styles[:prefix] || styles[:dim]
+
+          codes.join + content + Terminal::ANSI::RESET
+        end
+
+        private
+
+        def color_for(styles, block_type)
+          if styles[:code] || block_type == :code
+            color(:code)
+          elsif block_type == :heading
+            color(:accent)
+          elsif block_type == :quote || styles[:quote]
+            color(:quote)
+          elsif block_type == :separator
+            color(:separator)
+          elsif styles[:prefix]
+            color(:prefix)
+          else
+            color(:primary)
+          end
+        end
       end
     end
   end

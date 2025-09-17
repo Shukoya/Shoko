@@ -10,7 +10,13 @@ module EbookReader
         end
 
         def apply(state)
-          state.update({ %i[reader current_chapter] => payload[:chapter_index] })
+          idx = payload[:chapter_index]
+          updates = {
+            %i[reader current_chapter] => idx,
+            %i[reader toc_selected] => idx,
+            %i[reader sidebar_toc_selected] => idx,
+          }
+          state.update(updates)
         end
       end
     end

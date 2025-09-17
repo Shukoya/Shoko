@@ -3,11 +3,15 @@
 require 'rexml/document'
 require 'cgi'
 
+require_relative 'html_processor'
+
 module EbookReader
   module Helpers
     # Processes OPF files
     class OPFProcessor
       SpineContext = Struct.new(:manifest, :chapter_titles)
+
+      attr_reader :toc_entries
 
       def initialize(opf_path, zip: nil)
         @opf_path = opf_path
@@ -15,6 +19,9 @@ module EbookReader
         @zip = zip
         content = zip ? zip.read(opf_path) : File.read(opf_path)
         @opf = REXML::Document.new(content)
+        @toc_entries = []
+        @document_anchor_map = {}
+        @document_heading_queue = {}
       end
 
       def extract_metadata
@@ -94,21 +101,11 @@ module EbookReader
         chapter_titles = {}
         ncx_content = read_entry(ncx_path)
         ncx = REXML::Document.new(ncx_content)
+        nav_map = ncx.elements['//navMap']
+        return chapter_titles unless nav_map
 
-        ncx.elements.each('//navMap/navPoint/navLabel/text') do |label|
-          process_nav_point(label, chapter_titles)
-        end
-
+        traverse_nav_points(nav_map, chapter_titles, 0)
         chapter_titles
-      end
-
-      def process_nav_point(label, chapter_titles)
-        nav_point = label.parent.parent
-        content_src = nav_point.elements['content']&.attributes&.[]('src')
-        return unless content_src
-
-        key = content_src.split('#').first
-        chapter_titles[key] = HTMLProcessor.clean_html(label.text)
       end
 
       def process_itemref(itemref, chapter_num, spine_context)
@@ -122,7 +119,7 @@ module EbookReader
         return chapter_num unless exists
 
         title = spine_context.chapter_titles[href]
-        yield(file_path, chapter_num, title)
+        yield(file_path, chapter_num, title, href)
         chapter_num + 1
       end
 
@@ -144,6 +141,116 @@ module EbookReader
 
       def read_entry(path)
         use_zip? ? @zip.read(path) : File.read(path)
+      end
+
+      def traverse_nav_points(node, chapter_titles, level)
+        node.each_element('navPoint') do |nav_point|
+          label = nav_point.elements['navLabel/text']
+          # Some NCX files omit navLabel or replace it with generated ids; recover from target doc
+          href_attr = nav_point.elements['content']&.attributes&.[]('src')
+          title = label ? clean_label(label.text) : ''
+          title = fallback_nav_label(href_attr, title)
+
+          @toc_entries << {
+            title: title,
+            href: href_attr,
+            level: level,
+          }
+
+          resolved_href = href_attr&.split('#')&.first
+          if resolved_href && (level.positive? || !chapter_titles.key?(resolved_href))
+            chapter_titles[resolved_href] = title
+          end
+
+          traverse_nav_points(nav_point, chapter_titles, level + 1)
+        end
+      end
+
+      def clean_label(text)
+        HTMLProcessor.clean_html(text.to_s).strip
+      end
+
+      def fallback_nav_label(href, title)
+        stripped = title.to_s.strip
+        return stripped unless placeholder_label?(stripped)
+        return stripped unless href
+
+        base, anchor = href.split('#', 2)
+        document_path = join_path(base)
+        ensure_document_index(document_path)
+
+        candidate = nil
+        if anchor
+          candidate = @document_anchor_map[document_path][anchor]
+          remove_heading_from_queue(document_path, candidate)
+        end
+
+        candidate = next_heading_for(document_path) if candidate.nil? || candidate.strip.empty?
+        candidate = stripped if candidate.nil? || candidate.strip.empty?
+
+        clean_label(candidate)
+      rescue StandardError
+        stripped
+      end
+
+      def placeholder_label?(label)
+        stripped = label.to_s.strip
+        return true if stripped.empty?
+        stripped.match?(/\A[cC][0-9A-Za-z]{2,}\z/)
+      end
+
+      def extract_anchor_text(content, anchor)
+        regex = /<(?<tag>[^>\s]+)[^>]*\s(?:id|name|xml:id)\s*=\s*["']#{Regexp.escape(anchor)}["'][^>]*>(?<text>.*?)<\/\k<tag>>/im
+        match = content.match(regex)
+        match && match[:text]
+      end
+
+      def extract_following_link_text(content, anchor)
+        regex = /(?:id|name|xml:id)\s*=\s*["']#{Regexp.escape(anchor)}["'][^>]*>\s*<[^>]*>(?<text>[^<]+)<\/[^>]+>/im
+        match = content.match(regex)
+        match && match[:text]
+      end
+
+      def ensure_document_index(path)
+        return if @document_anchor_map.key?(path)
+
+        content = safe_read_entry(path)
+        @document_anchor_map[path] = {}
+        @document_heading_queue[path] = []
+        return unless content
+
+        content.scan(/<(h[1-6])[^>]*?(?:id|name|xml:id)\s*=\s*["']([^"']+)["'][^>]*>(.*?)<\/\1>/im) do |_tag, anchor, text|
+          label = clean_label(text)
+          @document_anchor_map[path][anchor] = label unless label.empty?
+        end
+
+        content.scan(/<(h[1-6])[^>]*>(.*?)<\/\1>/im) do |_tag, text|
+          label = clean_label(text)
+          @document_heading_queue[path] << label unless label.empty?
+        end
+      end
+
+      def next_heading_for(path)
+        queue = @document_heading_queue[path]
+        return '' unless queue
+
+        queue.shift.to_s
+      end
+
+      def remove_heading_from_queue(path, text)
+        return if text.nil? || text.strip.empty?
+
+        queue = @document_heading_queue[path]
+        return unless queue
+
+        idx = queue.index(text)
+        queue.delete_at(idx) if idx
+      end
+
+      def safe_read_entry(path)
+        read_entry(path)
+      rescue StandardError
+        nil
       end
     end
   end

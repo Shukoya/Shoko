@@ -12,10 +12,10 @@ module EbookReader
 
         OptionCtx = Struct.new(:row, :key, :name, :value, keyword_init: true)
 
-        def initialize(state, scanner)
+        def initialize(state, catalog_service = nil)
           super()
           @state = state
-          @scanner = scanner
+          @catalog = catalog_service
         end
 
         def do_render(surface, bounds)

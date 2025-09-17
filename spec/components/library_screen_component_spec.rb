@@ -6,12 +6,12 @@ RSpec.describe EbookReader::Components::Screens::LibraryScreenComponent do
   let(:bus) { EbookReader::Infrastructure::EventBus.new }
   let(:state) { EbookReader::Infrastructure::ObserverStateStore.new(bus) }
 
-  # Fake dependencies resolving library_service
-  class LibraryDeps
-    def initialize(ls) = (@ls = ls)
+  # Fake dependencies resolving catalog_service
+  class CatalogDeps
+    def initialize(catalog) = (@catalog = catalog)
 
     def resolve(name)
-      return @ls if name == :library_service
+      return @catalog if name == :catalog_service
 
       nil
     end
@@ -29,11 +29,19 @@ RSpec.describe EbookReader::Components::Screens::LibraryScreenComponent do
   end
 
   it 'renders header and items with fake library service' do
-    fake_ls = double('LibraryService', list_cached_books: [
-                       { title: 'Cached One', authors: 'A', year: '2023', last_accessed: nil, size_bytes: 123, open_path: '/cache/1', epub_path: '/src/1.epub' },
-                       { title: 'Cached Two', authors: 'B', year: '2024', last_accessed: nil, size_bytes: 456, open_path: '/cache/2', epub_path: '/src/2.epub' },
-                     ])
-    comp = described_class.new(state, LibraryDeps.new(fake_ls))
+    entries = [
+      { title: 'Cached One', authors: 'A', year: '2023', last_accessed: nil, size_bytes: 123_456, open_path: '/cache/1', epub_path: '/src/1.epub' },
+      { title: 'Cached Two', authors: 'B', year: '2024', last_accessed: nil, size_bytes: 0, open_path: '/cache/2', epub_path: '/src/2.epub' },
+    ]
+    fake_catalog = instance_double(EbookReader::Domain::Services::CatalogService,
+                                   cached_library_entries: entries,
+                                   size_for: 0)
+
+    comp = described_class.new(state, CatalogDeps.new(fake_catalog))
+
+    items = comp.send(:load_items)
+    expect(items.length).to eq(2)
+    expect(items.first.size_bytes).to eq(123_456)
 
     output = LibraryFakeOutput.new
     surface = EbookReader::Components::Surface.new(output)
@@ -44,8 +52,11 @@ RSpec.describe EbookReader::Components::Screens::LibraryScreenComponent do
     # Verify header line contains Library (Cached)
     header = output.writes.find { |(_, _, t)| t.include?('Library (Cached)') }
     expect(header).not_to be_nil
-    # Verify at least one item title is written
+    # Verify at least one item title and formatted size are written
     item = output.writes.find { |(_, _, t)| t.include?('Cached One') || t.include?('Cached Two') }
     expect(item).not_to be_nil
+    # Verify output includes rendered data for the first title
+    item_line = output.writes.find { |(_, _, t)| t.include?('Cached One') }
+    expect(item_line).not_to be_nil
   end
 end

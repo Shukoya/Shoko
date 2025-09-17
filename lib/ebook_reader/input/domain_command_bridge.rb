@@ -3,6 +3,8 @@
 require_relative '../domain/commands/sidebar_commands'
 require_relative '../domain/commands/conditional_navigation_commands'
 require_relative '../domain/commands/menu_commands'
+require_relative '../domain/commands/bookmark_commands'
+require_relative '../domain/commands/reader_commands'
 
 module EbookReader
   module Input
@@ -114,6 +116,9 @@ module EbookReader
           when :browse_up then Domain::Commands::MenuCommand.new(:browse_up)
           when :browse_down then Domain::Commands::MenuCommand.new(:browse_down)
           when :browse_select then Domain::Commands::MenuCommand.new(:browse_select)
+          when :library_up then Domain::Commands::MenuCommand.new(:library_up)
+          when :library_down then Domain::Commands::MenuCommand.new(:library_down)
+          when :library_select then Domain::Commands::MenuCommand.new(:library_select)
           # recent_* commands removed
           when :start_search then Domain::Commands::MenuCommand.new(:start_search)
           when :exit_search then Domain::Commands::MenuCommand.new(:exit_search)
@@ -127,6 +132,27 @@ module EbookReader
           when :annotation_detail_edit then Domain::Commands::MenuCommand.new(:annotation_detail_edit)
           when :annotation_detail_delete then Domain::Commands::MenuCommand.new(:annotation_detail_delete)
           when :annotation_detail_back then Domain::Commands::MenuCommand.new(:annotation_detail_back)
+          # Settings actions
+          when :toggle_view_mode then Domain::Commands::MenuCommand.new(:toggle_view_mode)
+          when :cycle_line_spacing then Domain::Commands::MenuCommand.new(:cycle_line_spacing)
+          when :toggle_page_numbers then Domain::Commands::MenuCommand.new(:toggle_page_numbers)
+          when :toggle_page_numbering_mode then Domain::Commands::MenuCommand.new(:toggle_page_numbering_mode)
+          when :toggle_highlight_quotes then Domain::Commands::MenuCommand.new(:toggle_highlight_quotes)
+          when :wipe_cache then Domain::Commands::MenuCommand.new(:wipe_cache)
+          # Reader mode transitions
+          when :exit_help then Domain::Commands::ReaderModeCommand.new(:exit_help)
+          when :exit_toc then Domain::Commands::ReaderModeCommand.new(:exit_toc)
+          when :exit_bookmarks then Domain::Commands::ReaderModeCommand.new(:exit_bookmarks)
+          # Reader TOC navigation
+          when :toc_up then Domain::Commands::ReaderTocCommand.new(:up)
+          when :toc_down then Domain::Commands::ReaderTocCommand.new(:down)
+          when :toc_select then Domain::Commands::ReaderTocCommand.new(:select)
+          # Reader bookmarks navigation
+          when :bookmark_up then Domain::Commands::BookmarkListCommand.new(:navigate_up)
+          when :bookmark_down then Domain::Commands::BookmarkListCommand.new(:navigate_down)
+          when :bookmark_select then Domain::Commands::BookmarkListCommand.new(:select_current)
+          when :delete_selected_bookmark
+            Domain::Commands::BookmarkListCommand.new(:delete_current)
           end
         end
 

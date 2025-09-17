@@ -3,7 +3,7 @@
 **Current Status: Phase 4.6 - Documentation + Input Alignment**  
 **Overall Progress: ~88% Complete (audited 2025-09-11, updated)**  
 **Estimated Completion: Phase 4.6**  
-**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation has been aligned (Project Structure + DI examples). Minor menu state API consistency remains. Reader loading flicker has been fixed by keeping the app in the alternate screen. Progress is shown inline during menu-driven open; direct CLI open performs a silent, frame-safe pre-build without flicker. Canonical book identity (`EPUBDocument#source_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and first frame now lands on the saved page in dynamic mode.
+**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation alignment is still pending—the project structure section in `DEVELOPMENT.md` needs to match the current layout. Minor menu state API consistency remains. Reader loading flicker has been fixed by keeping the app in the alternate screen. Progress is shown inline during menu-driven open; direct CLI open performs a silent, frame-safe pre-build without flicker. Canonical book identity (`EPUBDocument#source_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and first frame now lands on the saved page in dynamic mode.
 
 ## Phase 1: Infrastructure Foundation ✅ COMPLETE
 
@@ -60,7 +60,7 @@
 - [x] Extract UIController (mode switching, overlays)  
 - [x] Extract InputController (key handling consolidation)
 - [x] Extract StateController (state updates and persistence)
- - [x] Keep ReaderController primarily as a coordinator (currently ~617 LOC in class body as of audit); further slimming is required by moving startup/pagination orchestration fully into Application/Domain services.
+- [x] Keep ReaderController primarily as a coordinator (currently 676 LOC in the class body as of this audit); further slimming is required by moving startup/pagination orchestration fully into Application/Domain services.
 
 ### 3.2 Input System Unification ✅ COMPLETE
 **Issue Resolved**: All core navigation uses Domain Commands, specialized modes retain existing patterns
@@ -168,7 +168,7 @@ Tracking for code duplication has moved to `RUBOCOP_OFFENSES_REFACTOR_ROADMAP.md
 **Solution**: Legacy service wrappers deleted, all references use domain services
 
 ### 3. ReaderController Complexity ✅ RESOLVED
-**Location**: `reader_controller.rb` (1314→617 lines, ~53% reduction from peak; additional slimming tracked below)
+**Location**: `reader_controller.rb` (1314→664 lines, ~53% reduction from peak; additional slimming tracked below)
 **Solution**: God class decomposed into UIController, StateController, InputController; navigation now goes through `Domain::NavigationService`
 
 ## Phase 5: Component System Standardization ✅ COMPLETE
@@ -211,7 +211,7 @@ Tracking for code duplication has moved to `RUBOCOP_OFFENSES_REFACTOR_ROADMAP.md
 18. ✅ **Repositories Backed by Domain Stores** - Bookmark/Progress/Annotation repositories persist via domain file stores (no direct managers/stores in components/controllers).
 
 **Remaining:**
-- ✅ Renderer/controller decoupling complete: renderers build context from DI + state + document, no controller calls.
+- 🔶 Renderer/controller decoupling incomplete: sidebar renderers still depend on ReaderController accessors for state/doc; needs DI-driven context.
 1. ✅ HIGH: DI consistency in renderers (single source of services)
    - Implemented: `ViewRendererFactory` passes `controller.dependencies`; `BaseViewRenderer` now requires dependencies (no ad-hoc containers). Also switched rendered_lines to one-shot dispatch per frame from `BaseViewRenderer`.
 2. ✅ HIGH: Remove unused legacy UI scaffolding
@@ -241,12 +241,13 @@ Tracking for code duplication has moved to `RUBOCOP_OFFENSES_REFACTOR_ROADMAP.md
 - Annotation UX Fixes: ESC cancel clears selection (`UIController#cleanup_popup_state` in editor bindings). Selected text extraction uses `SelectionService` in both `UIController` and `MouseableReader` — VERIFIED.
 - Annotations layering: `Components::Screens::AnnotationsScreenComponent` reads from state only (OK). `Components::Sidebar::AnnotationsTabRenderer` does not require `annotation_store` — VERIFIED. No `ReaderModes::AnnotationsMode` found — claim outdated.
 - Component contract: `TooltipOverlayComponent` and `EnhancedPopupMenu` implement `do_render` (OK).
- - Popup input: `EnhancedPopupMenu` now exposes `handle_input` for consistency with component interface (delegates to existing logic).
+- Controllers use DI repositories exclusively — VERIFIED (2025-09 recent audit). `MainMenu` file flows resolve `:recent_library_repository`, and `LibraryService#index_recent_by_path` now reads via that repository facade; no direct `RecentFiles` references remain in controllers/services.
+- Popup input: `EnhancedPopupMenu` now exposes `handle_input` for consistency with component interface (delegates to existing logic).
 - Singleton `PageCalculatorService`: Registered as singleton in container; used by nav/render paths.
 - Terminal dimension sync: `StateStore#update_terminal_size` updates both `[:reader, :last_width/height]` and `[:ui, :terminal_width/height]`.
 - Dispatcher duplication: Not present — only `Input::Dispatcher` exists (no `Infrastructure::InputDispatcher`).
 - DI hygiene: `Components::TooltipOverlayComponent` injects `coordinate_service` via constructor — VERIFIED.
-- UI boundary: No component requires domain/services directly — services are accessed via DI — VERIFIED.
+- UI boundary: ✅ `BrowseScreenComponent` now consumes `Domain::Services::CatalogService`; infrastructure scanner/metadata helpers are hidden behind the domain facade.
 - MouseableReader: No lingering direct requires of `AnnotationStore` — VERIFIED.
  - Selection/overlay duplication: Eliminated — column-bounds logic now lives in `CoordinateService`; overlay and selection extraction use it — VERIFIED.
 - Annotation editor input: Reader-context editor is routed via `Domain::Commands::AnnotationEditorCommandFactory` (InputController) — VERIFIED.  
@@ -324,7 +325,7 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
 - **State Consistency**: One source of truth (StateStore only)
 - **Testability**: All dependencies injectable  
 - **Component Isolation**: No direct terminal access outside infrastructure
-- **Input Consistency**: All user input through Domain commands
+- **Input Consistency**: Navigation/selection keys route through Domain command objects; text input remains on dispatcher lambdas that dispatch domain actions directly
 
 **Target Architecture**: Clean Architecture with strict layer boundaries and dependency injection throughout.
 ### 2.4 Legacy Controller/Module Removal ✅ COMPLETE
@@ -394,6 +395,15 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
   - Added `PageCalculatorService#build_dynamic_map!`, `#build_absolute_map!`, and `#apply_pending_precise_restore!`.
   - `ReaderController` uses these consistently for initial build, rebuild, background build, and updates.
 
+19) Legacy search actions — ✅ COMPLETE (2025-02-18)
+  - Removed `MainMenu::Actions::SearchActions`, which still referenced the deprecated `@input_handler` and caused `NoMethodError` when `delete_selected_item` delegations fired.
+
+20) Recent-files persistence boundary — ✅ COMPLETE (2025-02-18)
+  - Added `Domain::Repositories::RecentLibraryRepository` and wired MainMenu + LibraryService through DI, removing direct `RecentFiles` references from presentation/services.
+
+21) List rendering helpers — ✅ COMPLETE (2025-02-18)
+  - Introduced `Components::UI::ListHelpers` and adopted it in browse/library/sidebar/annotations screens to share pagination logic and reduce duplication.
+
 ---
 
 ## Refactor Addendum (2025-09-11)
@@ -402,6 +412,7 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
 - ✅ Frame lifecycle unified for menu and reader. `MainMenu#draw_screen` now renders via `Application::FrameCoordinator#with_frame`. Terminal size updates are centralized in `FrameCoordinator` during rendering.
 - ✅ Component dependency naming unified. `BaseComponent` now exposes `@dependencies` (not `@services`); updated `LibraryScreenComponent` accordingly.
 - ✅ Duplicate rendered-lines clearing removed from `MouseableReader#draw_screen`. Clearing now occurs centrally in the render pipeline.
+- ✅ Extracted `Internal::LayoutMetricsCalculator` from `PageCalculatorService` to encapsulate column/line calculations and reduce method complexity.
 
 ### Code Duplication Elimination — Status and Plan (audited 2025-09-11)
 
@@ -461,3 +472,29 @@ Milestones
 - M3: Selection/Overlay locals; drop ≈ 10–15 warnings. (In progress; initial reductions applied)
 - M4: Sidebar/reading components locals; drop ≈ 20–30 warnings. (In progress; initial reductions applied)
 - Target: reduce DuplicateMethodCall warnings to ≤ 200 without sacrificing readability or introducing risk.
+
+---
+
+## Phase 5: EPUB Formatting Modernization 🚧 PLANNED
+
+### 5.1 Structured XHTML parsing ✅ COMPLETE
+- [x] Add `Domain::Models::ContentBlock` and `TextSegment` (or similar) to capture semantic structure (headings, paragraphs, lists, quotes, pre/code) without exposing raw HTML to renderers.
+- [x] Implement `Infrastructure::Parsers::XHTMLContentParser` (REXML-backed) to walk XHTML spine entries and emit normalized content blocks, preserving ordering, list hierarchy, and inline emphasis metadata.
+
+### 5.2 Formatting service integration ✅ COMPLETE
+- [x] Introduce `Domain::Services::FormattingService` that coordinates XHTML parsing, block normalization, and caching. Service becomes the single entry point for text shaping and is registered in the container.
+- [x] Update `EPUBDocument`/`DocumentService` to prefer the formatting service over legacy `Helpers::HTMLProcessor.html_to_text`, while retaining the HTML scrubber as a fallback to populate plain `lines` when formatting fails.
+
+### 5.3 Renderer alignment ✅ COMPLETE
+- [x] Extend `Components::Reading::BaseViewRenderer` with helpers to render content blocks (headings, paragraphs, lists, block quotes, code) using terminal-friendly styling while respecting Clean Architecture boundaries.
+- [x] Create lightweight segment renderer that applies ANSI styling at render time so wrapping logic operates on plain text metrics.
+- [x] Update single/split view renderers and sidebar preview components to consume formatted blocks consistently.
+
+### 5.4 Wrapping + measurement upgrades ✅ COMPLETE
+- [x] Enhance wrapping pipeline to operate on formatted content blocks using display-length calculations that ignore ANSI escape sequences and respect indentation/bullet prefixes.
+- [x] Provide shared utility (`Helpers::TextMetrics.visible_length`/`truncate_to`) to keep string-width calculations consistent across services and renderers.
+
+### 5.5 Quality gates ✅ COMPLETE
+- [x] Add unit tests covering XHTML samples (headings, nested lists, block quotes, code blocks, inline emphasis) to lock in parser output.
+- [x] Add integration specs for reader rendering to verify spacing, bullet alignment, and code-block monospace styling across terminal widths.
+- [x] Document the new formatting pipeline in `ARCHITECTURE.md` and `DEVELOPMENT.md`, including extension guidance for new block types.
