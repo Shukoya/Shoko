@@ -3,7 +3,7 @@
 **Current Status: Phase 4.6 - Documentation + Input Alignment**  
 **Overall Progress: ~88% Complete (audited 2025-09-11, updated)**  
 **Estimated Completion: Phase 4.6**  
-**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation alignment is still pending—the project structure section in `DEVELOPMENT.md` needs to match the current layout. Minor menu state API consistency remains. Reader loading flicker has been fixed by keeping the app in the alternate screen. Progress is shown inline during menu-driven open; direct CLI open performs a silent, frame-safe pre-build without flicker. Canonical book identity (`EPUBDocument#source_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and first frame now lands on the saved page in dynamic mode.
+**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation alignment is still pending—the project structure section in `DEVELOPMENT.md` needs to match the current layout. Terminal exit regression remains: `Menu::StateController#run_reader` previously re-entered the terminal session on return (`lib/ebook_reader/controllers/menu/state_controller.rb:41`) which left the alternate screen active during shutdown; the fix ensures session depth unwinds so the shell is restored. Progress is shown inline during menu-driven open; direct CLI open still performs a silent, frame-safe pre-build. Canonical book identity (`EPUBDocument#canonical_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and the first frame lands on the saved page in dynamic mode once pagination completes.
 
 ## Phase 1: Infrastructure Foundation ✅ COMPLETE
 
@@ -70,15 +70,38 @@
 - [x] Remove direct method call fallbacks for navigation commands in Input::Commands
 - [x] Navigation commands (:next_page, :prev_page, :next_chapter, :prev_chapter, :scroll_up, :scroll_down) now use NavigationService through Domain layer
 
-### 3.3 Terminal Access Elimination ✅ COMPLETE (re‑verified)
-**Verified Status**: All rendering constructs surfaces via `TerminalService`. No direct `Terminal` construction remains in UI paths. `TerminalService` is now a singleton. Loading overlay is a component; legacy `UI::LoadingOverlay` removed.
-- [x] Remove direct Terminal writes from MouseableReader
-- [x] Most component rendering goes through Surface/Component system
-- [x] `TerminalService` abstraction exists and is used in Reader loop
-- [x] ReaderController now uses `terminal_service.create_surface` (verified)
-- [x] Legacy `DynamicPageCalculator` removed (replaced by `Domain::Services::PageCalculatorService`)
+### 3.3 Terminal Access Elimination 🔶 PARTIAL
+**Reality Check (2025-04-XX)**: Terminal session depth now unwinds correctly after returning from the reader (covered by `spec/integration/menu_terminal_spec.rb`), but menu exit flows still surface messages only via logs—migrate those into state-driven notifications so the renderer controls user-visible output.
+- [x] Balance menu ⇄ reader terminal lifecycle and add regression coverage.
+- [x] Replace direct STDOUT writes in menu controllers with logger/notification based handling.
+- [x] Remove direct Terminal writes from MouseableReader.
+- [x] Most component rendering goes through Surface/Component system.
+- [x] `TerminalService` abstraction exists and is used in Reader loop.
+- [x] ReaderController now uses `terminal_service.create_surface` (verified).
+- [x] Legacy `DynamicPageCalculator` removed (replaced by `Domain::Services::PageCalculatorService`).
 - [x] Remove fallbacks to `Components::Surface.new(Terminal)` in UI and modes; require injected `terminal_service`.
   - Keep `Terminal::ANSI` usage for color constants; all I/O is via `Surface`/`TerminalService`.
+
+### 3.4 Menu & Domain Consistency 🔶 OPEN
+- [ ] Replace the `MainMenu` shim with an explicit façade (no `method_missing` / `instance_variable_get`); expose only the controller surface that presentation needs.
+- [ ] Move menu settings + cache wiping behaviors into dedicated services so presentation components stop invoking infrastructure (`FileUtils`, repositories) directly.
+- [ ] Ensure all menu interactions dispatch domain actions—eliminate remaining `state.update` calls inside menu commands/controllers in favour of explicit actions/selectors.
+
+### 3.5 Domain Command Hygiene 🔶 OPEN
+- [ ] Fix `Domain::Actions::ActionCreators#toggle_page_numbers` to read from state via selectors and add regression coverage.
+- [ ] Refactor `Domain::Commands::ApplicationCommand` so helper methods live inside the class and shutdown flows are coordinated by the application layer (no direct `exit(0)` in domain code).
+- [ ] Split `Input::DomainCommandBridge` mappings by context to avoid duplicate keys (`:toggle_view_mode`, etc.) and make reader vs menu bindings explicit.
+- [ ] Require declared dependencies in services (e.g., `CoordinateService` → `:terminal_service`) so DI validation catches missing wiring.
+
+### 3.6 Document Formatting Alignment 🔶 OPEN
+- [ ] Trim `Infrastructure::DocumentService` back to pure document loading; delegate wrapping/formatting to `Domain::Services::FormattingService` / `WrappingService` instead of maintaining parallel caches.
+- [ ] Add integration coverage for the styled formatting pipeline (LineAssembler + `wrap_window`) to lock in EPUB-driven formatting guarantees.
+- [ ] Reformat and harden `FormattingService` (indentation, targeted error handling) to keep the line assembly pipeline maintainable.
+
+### 3.7 Reader Loop Simplification 🔶 OPEN
+- [ ] Replace the remaining `toc_*` / `bookmark_*` controller helpers with domain commands so navigation logic lives in one place.
+- [ ] Centralise pagination/background work onto a monitored job helper (no ad-hoc `Thread.new` without lifecycle tracking).
+- [ ] Audit popup/selection cleanup so UI surface relies on state + services instead of bespoke controller callbacks.
 
 ## Phase 4: Clean Architecture Enforcement 🚧 IN PROGRESS
 
@@ -297,12 +320,12 @@ Goal: One coherent annotations flow with strict layering (Domain Service + Actio
 - [x] `TooltipOverlayComponent` uses `do_render`; keep redraw-based invalidation and remove legacy popup fallbacks.
 - [x] Lightweight tests exist for selection normalization (`SelectionService`) and popup placement (`CoordinateService`).
 
-### 4.5 Documentation Alignment 📖 COMPLETE (updated)
+### 4.5 Documentation Alignment 📖 IN PROGRESS
 - [x] Update `ARCHITECTURE.md` and README Architecture section to reflect Clean Architecture layering (Infrastructure → Domain (services, actions, selectors, commands) → Application (controllers, UnifiedApplication) → Presentation (components)).
 - [x] Remove or reframe references to `ReaderModes` in docs; the editor is now a screen component and overlays are components.  
   - Verified: `DEVELOPMENT.md` already uses “Dispatcher + Screen Components”.
 - [x] Ensure configuration path casing in README is `~/.config/reader` (matches `Infrastructure::StateStore::CONFIG_DIR`).
-- [x] Update `DEVELOPMENT.md` Project Structure to match actual layout (`domain`, `application`, `controllers`, `components`, `infrastructure`, `input`, etc.). Current tree references `core/concerns/renderers/services` which no longer exists.
+- [ ] Update `DEVELOPMENT.md` Project Structure to match actual layout (`domain`, `application`, `controllers`, `components`, `infrastructure`, `input`, etc.). Current tree references removed directories.
 - [x] Fix DI examples in docs: avoid creating an unused container in the sample (UnifiedApplication builds its own); add concrete examples for resolving services inside components via provided dependencies.
 
 Outcome: A single, predictable flow — UI reads from state; controllers invoke Domain services; services persist and dispatch actions; the overlay is a proper component; there is no mode/screen duplication for annotations.

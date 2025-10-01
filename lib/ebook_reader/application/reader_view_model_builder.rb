@@ -32,7 +32,7 @@ module EbookReader
           toc_entries: toc_entries,
           show_page_numbers: @state.get(%i[config show_page_numbers]) || true,
           page_numbering_mode: @state.get(%i[config page_numbering_mode]) || :absolute,
-          line_spacing: @state.get(%i[config line_spacing]) || :normal,
+          line_spacing: @state.get(%i[config line_spacing]) || EbookReader::Constants::DEFAULT_LINE_SPACING,
           language: @doc&.language || 'en',
           page_info: page_info
         )

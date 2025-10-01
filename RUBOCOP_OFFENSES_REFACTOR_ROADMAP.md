@@ -1,33 +1,36 @@
 # RuboCop Offenses Refactor Roadmap
 
-Status audited: 2025-09-11 (refreshed)
+Status audited: 2025-04-XX (updated)
 
 Scope and counts
 - Scope: `lib/` only (matches how we enforce style in code, excludes `bin/` and `spec/`).
-- Offenses: 457 total across 87 files (`bundle exec rubocop lib --format offenses`).
+- Offenses: 848 total across 121 files (`bundle exec rubocop lib --format offenses`; cache directory creation was skipped under sandbox permissions, but counts are accurate).
 - Top offense categories (count):
-  - Metrics/MethodLength (100)
-  - Metrics/AbcSize (81)
+  - Metrics/MethodLength (107)
+  - Metrics/AbcSize (82)
+  - Layout/IndentationConsistency (71) [Safe Correctable]
+  - Layout/IndentationWidth (55) [Safe Correctable]
   - Metrics/CyclomaticComplexity (55)
   - Metrics/PerceivedComplexity (50)
-  - Naming/MethodParameterName (36)
-  - Metrics/ParameterLists (28)
-  - Layout/LineLength (21, safe-correctable)
-  - Style/Documentation (19)
+  - Naming/MethodParameterName (47)
+  - Metrics/ParameterLists (40)
+  - Style/Documentation (40)
+  - Layout/EmptyLineAfterGuardClause (28) [Safe Correctable]
+  - Layout/LineLength (22) [Safe Correctable]
   - Naming/AccessorMethodName (12)
+  - Lint/RedundantSafeNavigation (11) [Unsafe Correctable]
   - Lint/SuppressedException (10)
-  - Lint/UselessConstantScoping (10)
-  - Metrics/ClassLength (9)
+  - Metrics/ClassLength (10)
+  - Naming/PredicatePrefix (9)
+  - Layout/FirstHashElementIndentation (8) [Safe Correctable]
+  - Layout/HashAlignment (8) [Safe Correctable]
+  - Naming/BlockForwarding (8) [Safe Correctable]
   - Naming/PredicateMethod (8)
-  - Naming/PredicatePrefix (7)
-  - Lint/UnderscorePrefixedVariableName (3)
-  - Style/OptionalBooleanParameter (2)
-  - Lint/EmptyBlock (1)
-  - Lint/MissingSuper (1)
-  - Lint/ShadowedException (1)
-  - Performance/CollectionLiteralInLoop (1)
-  - Style/ItAssignment (1)
-  - Style/MultilineBlockChain (1)
+  - Style/ArgumentsForwarding (8) [Safe Correctable]
+  - Style/IfUnlessModifier (8) [Safe Correctable]
+  - Style/TrailingCommaInArguments (8) [Safe Correctable]
+  - Layout/TrailingEmptyLines (7) [Safe Correctable]
+  - Lint/UselessConstantScoping (7)
 
 Hotspots (highest impact)
 - `lib/ebook_reader/reader_controller.rb` (class length + several long methods)
@@ -85,7 +88,7 @@ Milestones and acceptance criteria
 - M7: State/Repo trims + docs. Offense delta: −20 to −30.
 
 Tracking (current)
-- Current snapshot (2025-09-11): 457 offenses in lib (87 files). Slight increase due to new application scaffolding files (FrameCoordinator, RenderPipeline, PaginationOrchestrator) added for the ReaderController split.
+- Current snapshot (2025-04-XX): 848 offenses in lib (121 files). Spike comes from layout cops (indentation/argument alignment) introduced during the controller split; clearing those safe-correctable issues alone will remove ~160 violations.
 - Target (phase end): ≤ 100 offenses in lib (mainly long, inherently complex algorithms where extraction would add risk without benefit).
 
 Notes

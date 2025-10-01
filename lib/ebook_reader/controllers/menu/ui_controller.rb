@@ -62,8 +62,8 @@ module EbookReader
 
         def cleanup_and_exit(code, message, error = nil)
           menu.terminal_service.cleanup
-          puts message
-          puts error.backtrace if error && EPUBFinder::DEBUG_MODE
+
+          log_exit(message, error)
           exit code
         end
 
@@ -173,8 +173,22 @@ module EbookReader
 
         attr_reader :menu, :state_controller, :state, :dependencies
 
+        def log_exit(message, error)
+          logger = resolve_logger
+          logger&.info('Exiting menu', message: message, status: error ? 'error' : 'ok')
+          return unless error
+
+          logger&.error('Menu exit error', error: error.message, backtrace: Array(error.backtrace))
+        end
+
         def selectors
           EbookReader::Domain::Selectors::MenuSelectors
+        end
+
+        def resolve_logger
+          dependencies.resolve(:logger)
+        rescue StandardError
+          nil
         end
 
         def menu_action(payload)

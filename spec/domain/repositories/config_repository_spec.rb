@@ -35,9 +35,11 @@ RSpec.describe EbookReader::Domain::Repositories::ConfigRepository do
     expect(repo.update_show_page_numbers(false)).to be true
     expect(repo.get_show_page_numbers).to be false
 
-    expect(repo.get_line_spacing).to eq(:normal)
+    expect(repo.get_line_spacing).to eq(:compact)
     expect(repo.update_line_spacing(:wide)).to be true
-    expect(repo.get_line_spacing).to eq(:wide)
+    expect(repo.get_line_spacing).to eq(:relaxed)
+    expect(repo.update_line_spacing(:tight)).to be true
+    expect(repo.get_line_spacing).to eq(:compact)
   end
 
   it 'updates multiple and resets to defaults' do

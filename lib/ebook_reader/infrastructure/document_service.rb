@@ -1,23 +1,30 @@
 # frozen_string_literal: true
 
+require_relative 'performance_monitor'
+
 module EbookReader
   module Infrastructure
     # Document service for loading and accessing EPUB content.
     # Provides clean interface to document operations without coupling to controllers.
     class DocumentService
-      def initialize(epub_path, wrapping_service = nil, formatting_service: nil)
+      def initialize(epub_path, wrapping_service = nil, formatting_service: nil, background_worker: nil)
         @epub_path = epub_path
         @document = nil
         @content_cache = {}
         @wrapping_service = wrapping_service
         @formatting_service = formatting_service
+        @background_worker = background_worker
       end
 
       # Load the EPUB document
       #
       # @return [EPUBDocument] Loaded document
       def load_document
-        @document ||= EPUBDocument.new(@epub_path, formatting_service: @formatting_service)
+        @document ||= Infrastructure::PerformanceMonitor.time('import.document.load') do
+          EPUBDocument.new(@epub_path,
+                           formatting_service: @formatting_service,
+                           background_worker: @background_worker)
+        end
       rescue StandardError => e
         Infrastructure::Logger.error('Failed to load document', path: @epub_path, error: e.message)
         create_error_document(e.message)
@@ -78,7 +85,7 @@ module EbookReader
         cached_fetch(cache_key, default: []) do
           with_chapter(chapter_index, default: []) do |chapter|
             lines = chapter.lines || []
-            wrapped_lines = wrap_lines(lines, column_width)
+            wrapped_lines = wrap_lines(chapter_index, lines, column_width)
             start_line = page_offset * lines_per_page
             end_line = start_line + lines_per_page - 1
             wrapped_lines[start_line..end_line] || []
@@ -96,7 +103,7 @@ module EbookReader
         cached_fetch(cache_key, default: 0) do
           with_chapter(chapter_index, default: 0) do |chapter|
             lines = chapter.lines || []
-            wrapped_lines = wrap_lines(lines, column_width)
+            wrapped_lines = wrap_lines(chapter_index, lines, column_width)
             wrapped_lines.size
           end
         end
@@ -121,9 +128,9 @@ module EbookReader
         ErrorDocument.new(error_message)
       end
 
-      def wrap_lines(lines, column_width)
+      def wrap_lines(chapter_index, lines, column_width)
         return lines if column_width <= 0
-        return @wrapping_service.wrap_lines(lines, 0, column_width) if @wrapping_service
+        return @wrapping_service.wrap_lines(lines, chapter_index, column_width) if @wrapping_service
 
         # Minimal fallback for tests/dev without DI
         lines

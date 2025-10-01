@@ -47,7 +47,6 @@ module EbookReader
 
           MouseableReader.new(path, nil, dependencies).run
         ensure
-          terminal_service.setup
           menu.switch_to_mode(prior_mode || :browse)
         end
 
@@ -78,7 +77,12 @@ module EbookReader
           Infrastructure::Logger.error('Failed to open book', error: error.message, path: path)
           catalog.scan_message = "Failed: #{error.class}: #{error.message[0, 60]}"
           catalog.scan_status = :error
-          puts error.backtrace.join("\n") if EPUBFinder::DEBUG_MODE
+
+          return unless EPUBFinder::DEBUG_MODE
+
+          Infrastructure::Logger.debug('Reader error backtrace',
+                                       path: path,
+                                       backtrace: Array(error.backtrace).join("\n"))
         end
 
         def valid_cache_directory?(dir)
@@ -183,7 +187,7 @@ module EbookReader
             state.dispatch(action(:update_menu, annotations_all: service.list_all))
           rescue StandardError => e
             dependencies.resolve(:logger).error('Failed to update annotation', error: e.message,
-                                                                              path: path)
+                                                                               path: path)
           end
 
           menu.switch_to_mode(:annotations)

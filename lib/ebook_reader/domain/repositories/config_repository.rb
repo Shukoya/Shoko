@@ -17,14 +17,21 @@ module EbookReader
       #
       # @example Updating configuration
       #   repo.update_view_mode(:split)
-      #   repo.update_line_spacing(:wide)
+      #   repo.update_line_spacing(:relaxed)
       class ConfigRepository < BaseRepository
+        LINE_SPACING_ALIASES = {
+          tight: :compact,
+          wide: :relaxed,
+        }.freeze
+
+        LINE_SPACING_ALLOWED = %i[compact normal relaxed].freeze
+
         # Default configuration values
         DEFAULT_CONFIG = {
           view_mode: :split,
           page_numbering_mode: :absolute,
           show_page_numbers: true,
-          line_spacing: :normal,
+          line_spacing: :compact,
           input_debounce_ms: 100,
           search_highlight_timeout: 2000,
           auto_save_interval: 30,
@@ -86,18 +93,22 @@ module EbookReader
 
         # Get the current line spacing
         #
-        # @return [Symbol] Current line spacing (:tight, :normal, or :wide)
+        # @return [Symbol] Current line spacing (:compact, :normal, or :relaxed)
         def get_line_spacing
-          get_config_value(:line_spacing, DEFAULT_CONFIG[:line_spacing])
+          raw = get_config_value(:line_spacing, DEFAULT_CONFIG[:line_spacing])
+          normalized = normalize_line_spacing(raw)
+          update_config_value(:line_spacing, normalized) if raw != normalized
+          normalized
         end
 
         # Update the line spacing
         #
-        # @param spacing [Symbol] New line spacing (:tight, :normal, or :wide)
+        # @param spacing [Symbol] New line spacing (:compact, :normal, or :relaxed)
         # @return [Boolean] True if updated successfully
         def update_line_spacing(spacing)
-          validate_enum_value(:line_spacing, spacing, %i[tight normal wide])
-          update_config_value(:line_spacing, spacing)
+          normalized = normalize_line_spacing(spacing)
+          validate_enum_value(:line_spacing, normalized, LINE_SPACING_ALLOWED)
+          update_config_value(:line_spacing, normalized)
         end
 
         # Get the input debounce time in milliseconds
@@ -133,12 +144,15 @@ module EbookReader
 
           begin
             # Validate each value before applying any updates
+            normalized = {}
             config_hash.each do |key, value|
-              validate_config_key_value(key, value)
+              coerced = key == :line_spacing ? normalize_line_spacing(value) : value
+              validate_config_key_value(key, coerced)
+              normalized[key] = coerced
             end
 
             # Apply updates as a single state transaction
-            @state_store.update(config_hash.transform_keys { |k| [:config, k] })
+            @state_store.update(normalized.transform_keys { |k| [:config, k] })
             true
           rescue StandardError => e
             # Bubble up validation errors directly; wrap others
@@ -180,7 +194,8 @@ module EbookReader
 
         # Update a single configuration value
         def update_config_value(key, value)
-          @state_store.update({ [:config, key] => value })
+          stored_value = key == :line_spacing ? normalize_line_spacing(value) : value
+          @state_store.update({ [:config, key] => stored_value })
           true
         rescue StandardError => e
           handle_storage_error(e, "updating config value #{key}")
@@ -216,7 +231,8 @@ module EbookReader
           when :page_numbering_mode
             validate_enum_value(key, value, %i[absolute dynamic])
           when :line_spacing
-            validate_enum_value(key, value, %i[tight normal wide])
+            normalized = normalize_line_spacing(value)
+            validate_enum_value(key, normalized, LINE_SPACING_ALLOWED)
           when :show_page_numbers
             validate_boolean_value(key, value)
           when :input_debounce_ms, :search_highlight_timeout, :auto_save_interval
@@ -231,6 +247,15 @@ module EbookReader
             # Unknown keys are allowed for forward compatibility
             logger.debug("Unknown config key: #{key}")
           end
+        end
+
+        def normalize_line_spacing(value)
+          sym = begin
+                  value.is_a?(String) ? value.downcase.to_sym : value&.to_sym
+                rescue StandardError
+                  nil
+                end
+          LINE_SPACING_ALIASES.fetch(sym, sym || DEFAULT_CONFIG[:line_spacing])
         end
       end
     end

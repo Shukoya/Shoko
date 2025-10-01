@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'time'
 require_relative '../../../constants'
+require_relative '../../../infrastructure/atomic_file_writer'
 
 module EbookReader
   module Domain
@@ -87,8 +88,8 @@ module EbookReader
           end
 
           def save_all(data)
-            FileUtils.mkdir_p(File.dirname(file_path))
-            File.write(file_path, JSON.pretty_generate(data))
+            payload = JSON.pretty_generate(data)
+            EbookReader::Infrastructure::AtomicFileWriter.write(file_path, payload)
           end
 
           def file_path

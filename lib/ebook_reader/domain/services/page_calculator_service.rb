@@ -277,7 +277,7 @@ module EbookReader
           width = state.dig(:ui, :terminal_width) || 80
           height = state.dig(:ui, :terminal_height) || 24
           view_mode = state.dig(:reader, :view_mode) || :split
-          line_spacing = state.dig(:config, :line_spacing) || :normal
+          line_spacing = state.dig(:config, :line_spacing) || EbookReader::Constants::DEFAULT_LINE_SPACING
 
           "#{chapter_index}_#{width}x#{height}_#{view_mode}_#{line_spacing}"
         end
@@ -447,7 +447,7 @@ module EbookReader
             nil
           end
           view_mode ||= (config.respond_to?(:get) ? config.get(%i[reader view_mode]) : :single)
-          line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config)
+          line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config) || EbookReader::Constants::DEFAULT_LINE_SPACING
           EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode,
                                                                   line_spacing)
         end

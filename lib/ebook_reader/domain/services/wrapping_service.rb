@@ -127,22 +127,22 @@ module EbookReader
             if pages.nil?
               st = resolve(:state_store) if registered?(:state_store)
               pages = begin
-                (st&.dig(:config,
-                         :prefetch_pages) || st&.get(%i[config prefetch_pages]) || 20).to_i
+                if st&.respond_to?(:get)
+                  st.get(%i[config prefetch_pages])
+                else
+                  nil
+                end
               rescue StandardError
-                20
+                nil
               end
             end
+            pages = pages.nil? ? 20 : pages.to_i
             pages = pages.clamp(0, 200)
             window = pages * length_i
             prefetch_start = [start_i - window, 0].max
             prefetch_end   = start_i + window + (length_i - 1)
             prefetch_len   = prefetch_end - prefetch_start + 1
-            Thread.new do
-              prefetch_windows(lines, chapter_index, col_width, prefetch_start, prefetch_len)
-            rescue StandardError
-              # ignore background failures
-            end
+            enqueue_prefetch(chapter_index, col_width, prefetch_start, prefetch_len, lines)
           rescue StandardError
             # best-effort prefetch
           end
@@ -201,6 +201,34 @@ module EbookReader
           return unless lines && !lines.empty?
 
           lines.map { |line| line.respond_to?(:text) ? line.text : line }
+        rescue StandardError
+          nil
+        end
+
+        def enqueue_prefetch(chapter_index, col_width, prefetch_start, prefetch_len, lines)
+          worker = background_worker
+          job = lambda do
+            prefetch_windows(lines, chapter_index, col_width, prefetch_start, prefetch_len)
+          end
+          if worker
+            worker.submit(&job)
+          else
+            Thread.new do
+              begin
+                job.call
+              rescue StandardError
+                # ignore background failures
+              end
+            end
+          end
+        rescue StandardError
+          # ignore background failures
+        end
+
+        def background_worker
+          return nil unless registered?(:background_worker)
+
+          resolve(:background_worker)
         rescue StandardError
           nil
         end

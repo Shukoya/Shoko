@@ -84,7 +84,7 @@ RSpec.describe 'Repository Service Integration' do
   let(:default_config) do
     {
       view_mode: :split,
-      line_spacing: :normal,
+      line_spacing: :compact,
       show_page_numbers: true,
       page_numbering_mode: :absolute,
     }

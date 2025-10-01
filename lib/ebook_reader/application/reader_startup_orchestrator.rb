@@ -13,56 +13,54 @@ module EbookReader
       # Execute startup sequence using the controller as context
       # @param controller [EbookReader::ReaderController]
       def start(controller)
-        state = controller.state
-        page_calculator = controller.page_calculator
-        doc = controller.doc
-        sc = nil
+        Infrastructure::PerformanceMonitor.time('startup.reader') do
+          state = controller.state
+          page_calculator = controller.page_calculator
+          doc = controller.doc
+          sc = nil
 
-        # Query terminal size (FrameCoordinator will update state during rendering)
-        height, width = begin
-          @terminal_service.size
-        rescue StandardError
-          [nil, nil]
-        end
-
-        # Load progress after terminal is ready
-        sc = safe_resolve_state_controller
-        sc&.load_progress
-
-        # For cached books in dynamic mode, try to load pagination cache synchronously
-        begin
-          if doc.respond_to?(:cached?) && doc.cached? &&
-             EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(state) == :dynamic
-            view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
-            line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
-            key = EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode,
-                                                                          line_spacing)
-            if EbookReader::Infrastructure::PaginationCache.exists_for_document?(doc, key)
-              page_calculator.build_dynamic_map!(width, height, doc, state)
-              page_calculator.apply_pending_precise_restore!(state)
-              controller.clear_defer_page_map!
-            end
+          # Query terminal size (FrameCoordinator will update state during rendering)
+          height, width = begin
+            @terminal_service.size
+          rescue StandardError
+            [nil, nil]
           end
-        rescue StandardError
-          # ignore; fall back to deferred build
-        end
 
-        # Perform initial calculations if needed
-        controller.perform_initial_calculations_if_needed if controller.pending_initial_calculation?
+          # Load progress after terminal is ready
+          sc = safe_resolve_state_controller
+          sc&.load_progress
 
-        # Schedule background page-map build for instant-open path
-        controller.schedule_background_page_map_build if controller.defer_page_map?
-
-        # Background load bookmarks and annotations
-        Thread.new(sc) do |svc_initial|
+          # For cached books in dynamic mode, try to load pagination cache synchronously
           begin
-            svc = svc_initial || safe_resolve_state_controller
+            if doc.respond_to?(:cached?) && doc.cached? &&
+               EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(state) == :dynamic
+              view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
+              line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
+              key = EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode,
+                                                                            line_spacing)
+              if EbookReader::Infrastructure::PaginationCache.exists_for_document?(doc, key)
+                page_calculator.build_dynamic_map!(width, height, doc, state)
+                page_calculator.apply_pending_precise_restore!(state)
+                controller.clear_defer_page_map!
+              end
+            end
+          rescue StandardError
+            # ignore; fall back to deferred build
+          end
+
+          # Perform initial calculations if needed
+          controller.perform_initial_calculations_if_needed if controller.pending_initial_calculation?
+
+          # Schedule background page-map build for instant-open path
+          controller.schedule_background_page_map_build if controller.defer_page_map?
+
+          # Background load bookmarks and annotations
+          submit_background_job(sc) do
+            svc = sc || safe_resolve_state_controller
             if svc
               svc.load_bookmarks
               svc.refresh_annotations
             end
-          rescue StandardError
-            # ignore background failures
           end
         end
       end
@@ -71,6 +69,32 @@ module EbookReader
 
       def safe_resolve_state_controller
         @dependencies.resolve(:state_controller)
+      rescue StandardError
+        nil
+      end
+
+      def submit_background_job(initial_state_controller, &block)
+        worker = resolve_background_worker
+        if worker
+          worker.submit(&block)
+        else
+          Thread.new do
+            begin
+              block.call
+            rescue StandardError
+              # ignore background failures
+            end
+          end
+        end
+      rescue StandardError
+        # ignore background failures
+        nil
+      end
+
+      def resolve_background_worker
+        return nil unless @dependencies.respond_to?(:resolve)
+
+        @dependencies.resolve(:background_worker)
       rescue StandardError
         nil
       end

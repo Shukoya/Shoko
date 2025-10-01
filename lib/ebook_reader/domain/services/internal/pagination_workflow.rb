@@ -124,7 +124,7 @@ module EbookReader
               config.get(%i[config line_spacing])
             else
               nil
-            end || :normal
+            end || EbookReader::Constants::DEFAULT_LINE_SPACING
           end
         end
       end

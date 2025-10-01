@@ -161,6 +161,7 @@ module EbookReader
         # WrappingService caches windows/chapters; make it a singleton to share cache
         container.register_singleton(:wrapping_service) { |c| Domain::Services::WrappingService.new(c) }
         container.register_singleton(:formatting_service) { |c| Domain::Services::FormattingService.new(c) }
+        container.register_factory(:settings_service) { |c| Domain::Services::SettingsService.new(c) }
 
         # Notifications
         container.register_singleton(:notification_service) { |c| Domain::Services::NotificationService.new(c) }
@@ -170,8 +171,9 @@ module EbookReader
           lambda do |path|
             wrapper = c.resolve(:wrapping_service)
             formatting = c.resolve(:formatting_service)
+            worker = c.registered?(:background_worker) ? c.resolve(:background_worker) : nil
             klass = Infrastructure::DocumentService
-            instantiate_document_service(klass, path, wrapper, formatting)
+            instantiate_document_service(klass, path, wrapper, formatting, worker)
           end
         end
 
@@ -215,13 +217,17 @@ module EbookReader
         container
       end
 
-      def self.instantiate_document_service(klass, path, wrapper, formatting)
-        klass.new(path, wrapper, formatting_service: formatting)
+      def self.instantiate_document_service(klass, path, wrapper, formatting, worker)
+        klass.new(path, wrapper, formatting_service: formatting, background_worker: worker)
       rescue ArgumentError
         begin
-          klass.new(path, wrapper)
+          klass.new(path, wrapper, formatting_service: formatting)
         rescue ArgumentError
-          klass.new(path)
+          begin
+            klass.new(path, wrapper)
+          rescue ArgumentError
+            klass.new(path)
+          end
         end
       end
     end

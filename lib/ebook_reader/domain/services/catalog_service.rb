@@ -36,6 +36,10 @@ module EbookReader
           @scanner.start_scan(force: force)
         end
 
+        def library_scanner
+          @scanner
+        end
+
         def process_results
           @scanner.process_results
         end

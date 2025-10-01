@@ -127,7 +127,7 @@ Configuration is stored in `~/.config/reader/config.json`:
   "view_mode": "split",
   "theme": "dark",
   "show_page_numbers": true,
-  "line_spacing": "normal",
+  "line_spacing": "compact",
   "highlight_quotes": true,
   "page_numbering_mode": "absolute"
 }
@@ -138,7 +138,7 @@ Configuration is stored in `~/.config/reader/config.json`:
 - **view_mode**: `"split"` or `"single"` - Default reading view
 - **theme**: `"dark"` or `"light"` - Color theme (currently dark only)
 - **show_page_numbers**: `true` or `false` - Display page numbers
-- **line_spacing**: `"compact"`, `"normal"`, or `"relaxed"` - Line spacing
+- **line_spacing**: `"compact"` (tight), `"normal"` (moderate spacing), or `"relaxed"` (double spacing); default `compact`
 - **highlight_quotes**: `true` or `false` - Highlight quoted text
 - **page_numbering_mode**: `"absolute"` or `"dynamic"` - Page numbering strategy
 
@@ -149,7 +149,7 @@ Reader uses Clean Architecture with DI and component-driven rendering.
 ### Layers
 
 - **Presentation**: UI components/screens implement `do_render(surface, bounds)` and render via `Components::Surface`. An overlay component unifies highlights and popup menus. The annotation editor is implemented as a screen component (no legacy modes).
-- **Application**: Controllers coordinate state and rendering (`ReaderController`, `UIController`, `NavigationController`, `StateController`, `InputController`). `Application::UnifiedApplication` selects menu vs reader mode.
+- **Application**: Controllers coordinate state and rendering (`ReaderController`, `UIController`, `StateController`, `InputController`, `Controllers::MenuController`). `Application::UnifiedApplication` selects menu vs reader mode and threads the shared dependency container through both flows.
 - **Domain**: Services (Navigation, PageCalculator, Layout, Selection, Coordinate, Clipboard, Annotation), Actions, Commands, Selectors. All mutations go through services which dispatch actions to the state store.
 - **Infrastructure**: `ObserverStateStore`, `EventBus`, `Terminal` (buffered I/O + mouse), `DocumentService`, Logger, and JSON-backed managers (bookmarks, progress, recent files).
 

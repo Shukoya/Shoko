@@ -19,7 +19,7 @@ module EbookReader
             state = current_state
             terminal_height = state.dig(:ui, :terminal_height) || 24
             content = content_height(terminal_height)
-            adjust_for_spacing(content, state.dig(:config, :line_spacing) || :normal)
+            adjust_for_spacing(content, state.dig(:config, :line_spacing) || EbookReader::Constants::DEFAULT_LINE_SPACING)
           end
 
           def lines_per_page_for(content_height, config)
@@ -28,7 +28,8 @@ module EbookReader
                       else
                         EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config)
                       end
-            adjust_for_spacing(content_height, spacing || :normal)
+            adjust_for_spacing(content_height,
+                               spacing || EbookReader::Constants::DEFAULT_LINE_SPACING)
           end
 
           def column_width_from_state
@@ -56,10 +57,10 @@ module EbookReader
           end
 
           def adjust_for_spacing(height, line_spacing)
-            case line_spacing
-            when :relaxed then [height / 2, 1].max
-            else height
-            end
+            multiplier = resolve_multiplier(line_spacing)
+            adjusted = (height * multiplier).floor
+            adjusted = height if multiplier >= 1.0 && adjusted < height
+            [adjusted, 1].max
           end
 
           def resolve_view_mode(config)
@@ -68,6 +69,15 @@ module EbookReader
             else
               EbookReader::Domain::Selectors::ConfigSelectors.view_mode(config)
             end || :split
+          end
+
+          def resolve_multiplier(line_spacing)
+            key = begin
+                    line_spacing&.to_sym
+                  rescue StandardError
+                    nil
+                  end
+            EbookReader::Constants::LINE_SPACING_MULTIPLIERS.fetch(key, 1.0)
           end
         end
       end

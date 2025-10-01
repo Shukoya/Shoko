@@ -11,6 +11,7 @@ require_relative 'domain/models/chapter'
 require_relative 'domain/models/toc_entry'
 require 'json'
 require 'fileutils'
+require 'pathname'
 require_relative 'infrastructure/epub_cache'
 
 module EbookReader
@@ -20,7 +21,7 @@ module EbookReader
 
     ChapterRef = Struct.new(:file_path, :number, :title, :href, keyword_init: true)
 
-    def initialize(path, formatting_service: nil)
+    def initialize(path, formatting_service: nil, background_worker: nil)
       @path = path
       @title = File.basename(path, '.epub').tr('_', ' ')
       @language = 'en_US'
@@ -34,6 +35,7 @@ module EbookReader
       @source_path = @path
       @formatting_service = formatting_service
       @toc_entries = []
+      @background_worker = background_worker
 
       # Try to use cache first; fall back to parsing the EPUB
       # Allow opening directly from a cache directory (Library open)
@@ -45,11 +47,7 @@ module EbookReader
         @zip = Zip::File.open(@path)
         parse_epub
         # Populate cache in the background to keep first open responsive
-        begin
-          Thread.new { safely_build_cache }
-        rescue StandardError => e
-          Infrastructure::Logger.debug('Background cache thread failed', error: e.message)
-        end
+        schedule_cache_population
       end
       rebuild_toc_entries! if @toc_entries.empty?
     rescue StandardError => e
@@ -95,11 +93,13 @@ module EbookReader
     # chapter so the application can continue running.
     def parse_epub
       Infrastructure::Logger.info('Parsing EPUB', path: @path)
-      Infrastructure::PerformanceMonitor.time('epub_parsing') do
-        opf_path = find_opf_path
-        @opf_path = opf_path if opf_path
-        process_opf(opf_path) if opf_path
-        ensure_chapters_exist
+      Infrastructure::PerformanceMonitor.time('import.parse_epub') do
+        Infrastructure::PerformanceMonitor.time('epub_parsing') do
+          opf_path = find_opf_path
+          @opf_path = opf_path if opf_path
+          process_opf(opf_path) if opf_path
+          ensure_chapters_exist
+        end
       end
     rescue StandardError => e
       create_error_chapter(e)
@@ -342,62 +342,71 @@ module EbookReader
     # Cache support (delegates to Infrastructure::EpubCache)
     # ---------------------------
     def load_from_cache
-      cache = Infrastructure::EpubCache.new(@path)
-      manifest = cache.load_manifest
-      return false unless manifest&.spine&.any?
+      Infrastructure::PerformanceMonitor.time('import.cache.load') do
+        cache = Infrastructure::EpubCache.new(@path)
+        manifest = cache.load_manifest
+        return false unless manifest&.spine&.any?
 
-      m = manifest
-      title_str = m.title.to_s
-      @title = title_str unless title_str.empty?
-      @opf_path = m.opf_path
-      @spine_relative_paths = m.spine
-      @cache_dir = cache.cache_dir
-      epub_path_str = m.epub_path.to_s
-      @source_path = epub_path_str unless epub_path_str.empty?
+        m = manifest
+        title_str = m.title.to_s
+        @title = title_str unless title_str.empty?
+        @opf_path = m.opf_path
+        @spine_relative_paths = m.spine
+        @cache_dir = cache.cache_dir
+        epub_path_str = m.epub_path.to_s
+        @source_path = epub_path_str unless epub_path_str.empty?
 
-      # Validate cached files exist
-      return false unless File.exist?(cache_abs(cache, 'META-INF/container.xml'))
-      return false unless File.exist?(cache_abs(cache, @opf_path))
-      abs_paths = @spine_relative_paths.map { |rel| cache_abs(cache, rel) }
-      return false unless abs_paths.all? { |p| File.exist?(p) }
+        # Validate cached files exist and remain within cache root
+        container_path = cache_abs(cache, 'META-INF/container.xml')
+        return false unless container_path && File.exist?(container_path)
 
-      # Build chapter refs pointing to cached files
-      @chapters = []
-      abs_paths.each_with_index do |abs, idx|
-        rel = @spine_relative_paths[idx]
-        @chapters << ChapterRef.new(file_path: abs, number: idx + 1, title: nil,
-                                    href: resolve_href_reference(rel))
+        opf_path = cache_abs(cache, @opf_path)
+        return false unless opf_path && File.exist?(opf_path)
+
+        abs_paths = @spine_relative_paths.map { |rel| cache_abs(cache, rel) }
+        return false unless abs_paths.all? { |p| p && File.exist?(p) }
+
+        # Build chapter refs pointing to cached files
+        @chapters = []
+        abs_paths.each_with_index do |abs, idx|
+          rel = @spine_relative_paths[idx]
+          next unless abs
+
+          @chapters << ChapterRef.new(file_path: abs, number: idx + 1, title: nil,
+                                      href: resolve_href_reference(rel))
+        end
+        @loaded_from_cache = true
+        assign_toc_entries(load_cached_toc_entries)
+        true
       end
-      @loaded_from_cache = true
-      assign_toc_entries(load_cached_toc_entries)
-      true
     end
 
     def load_from_cache_dir(dir)
-      return false unless File.directory?(dir)
+      Infrastructure::PerformanceMonitor.time('import.cache_dir.load') do
+        return false unless File.directory?(dir)
 
-      mp = File.join(dir, 'manifest.msgpack')
-      js = File.join(dir, 'manifest.json')
-      serializer = nil
-      manifest_path = nil
-      if File.exist?(mp)
-        begin
-          require 'msgpack'
-          serializer = EbookReader::Infrastructure::MessagePackSerializer.new
-          manifest_path = mp
-        rescue LoadError
-          # fallback to json if present
+        mp = File.join(dir, 'manifest.msgpack')
+        js = File.join(dir, 'manifest.json')
+        serializer = nil
+        manifest_path = nil
+        if File.exist?(mp)
+          begin
+            require 'msgpack'
+            serializer = EbookReader::Infrastructure::MessagePackSerializer.new
+            manifest_path = mp
+          rescue LoadError
+            # fallback to json if present
+          end
         end
-      end
-      if manifest_path.nil? && File.exist?(js)
-        serializer = EbookReader::Infrastructure::JSONSerializer.new
-        manifest_path = js
-      end
-      return false unless serializer && manifest_path
+        if manifest_path.nil? && File.exist?(js)
+          serializer = EbookReader::Infrastructure::JSONSerializer.new
+          manifest_path = js
+        end
+        return false unless serializer && manifest_path
 
-      data = serializer.load_file(manifest_path)
-      spine_val = hget(data, :spine)
-      return false unless data.is_a?(Hash) && spine_val.is_a?(Array)
+        data = serializer.load_file(manifest_path)
+        spine_val = hget(data, :spine)
+        return false unless data.is_a?(Hash) && spine_val.is_a?(Array)
 
       @cache_dir = dir
       title_v = hget(data, :title)
@@ -407,18 +416,35 @@ module EbookReader
       epub_path_v = s(hget(data, :epub_path))
       @source_path = epub_path_v unless epub_path_v.empty?
 
-      return false unless File.exist?(File.join(@cache_dir, 'META-INF', 'container.xml'))
-      return false unless File.exist?(File.join(@cache_dir, @opf_path))
+      sanitize = lambda do |rel|
+        cleaned = Pathname.new(rel.to_s).cleanpath.to_s
+        next nil if cleaned.empty?
+
+        dest = File.expand_path(cleaned, @cache_dir)
+        prefix = @cache_dir.end_with?(File::SEPARATOR) ? @cache_dir : (@cache_dir + File::SEPARATOR)
+        next dest if dest.start_with?(prefix) || dest == @cache_dir
+
+        nil
+      end
+
+      container_path = sanitize.call(File.join('META-INF', 'container.xml'))
+      return false unless container_path && File.exist?(container_path)
+
+      opf_path = sanitize.call(@opf_path)
+      return false unless opf_path && File.exist?(opf_path)
 
       @chapters = []
       @spine_relative_paths.each_with_index do |rel, idx|
-        abs = File.join(@cache_dir, rel)
+        abs = sanitize.call(rel)
+        return false unless abs && File.exist?(abs)
+
         @chapters << ChapterRef.new(file_path: abs, number: idx + 1, title: nil,
                                     href: resolve_href_reference(rel))
       end
       @loaded_from_cache = true
       assign_toc_entries(load_cached_toc_entries)
       true
+      end
     rescue StandardError
       false
     end
@@ -432,21 +458,34 @@ module EbookReader
     def build_cache
       return unless @opf_path && !@spine_relative_paths.empty?
 
-      cache = Infrastructure::EpubCache.new(@path)
-      Zip::File.open(@path) do |zip|
-        cache.populate!(zip, @opf_path, @spine_relative_paths)
+      Infrastructure::PerformanceMonitor.time('import.cache.populate') do
+        cache = Infrastructure::EpubCache.new(@path)
+        Zip::File.open(@path) do |zip|
+          cache.populate!(zip, @opf_path, @spine_relative_paths)
+        end
+        authors = Array(@authors).compact.map(&:to_s)
+        manifest = Infrastructure::EpubCache::Manifest.new(
+          title: @title,
+          author_str: authors.join(', '),
+          authors: authors,
+          opf_path: @opf_path,
+          spine: @spine_relative_paths,
+          epub_path: @path
+        )
+        cache.write_manifest!(manifest)
+        @cache_dir = cache.cache_dir
       end
-      authors = Array(@authors).compact.map(&:to_s)
-      manifest = Infrastructure::EpubCache::Manifest.new(
-        title: @title,
-        author_str: authors.join(', '),
-        authors: authors,
-        opf_path: @opf_path,
-        spine: @spine_relative_paths,
-        epub_path: @path
-      )
-      cache.write_manifest!(manifest)
-      @cache_dir = cache.cache_dir
+    end
+
+    def schedule_cache_population
+      if @background_worker
+        @background_worker.submit { safely_build_cache }
+      else
+        Thread.new { safely_build_cache }
+      end
+    rescue StandardError => e
+      Infrastructure::Logger.debug('Background cache thread failed', error: e.message)
+      Thread.new { safely_build_cache }
     end
   end
 end

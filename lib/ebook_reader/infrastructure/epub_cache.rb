@@ -3,7 +3,9 @@
 require 'digest'
 require 'fileutils'
 require 'json'
+require 'pathname'
 require_relative 'cache_paths'
+require_relative 'atomic_file_writer'
 require_relative '../serializers'
 
 module EbookReader
@@ -42,21 +44,14 @@ module EbookReader
 
       # Write manifest atomically (msgpack preferred when available)
       def write_manifest!(meta)
-        FileUtils.mkdir_p(@cache_dir)
         serializer = select_serializer
         final = File.join(@cache_dir, serializer.manifest_filename)
-        tmp = "#{final}.tmp"
-        serializer.dump_file(tmp, manifest_to_h(meta))
-        File.rename(tmp, final)
+        AtomicFileWriter.write_using(final, binary: serializer.binary?) do |io|
+          serializer.dump_to_io(io, manifest_to_h(meta))
+        end
       rescue StandardError => e
         EbookReader::Infrastructure::Logger.debug('EpubCache: failed to write manifest',
                                                   error: e.message)
-      ensure
-        begin
-          FileUtils.rm_f(tmp) if defined?(tmp) && File.exist?(tmp)
-        rescue StandardError
-          # ignore
-        end
       end
 
       # Populate cache from the original EPUB using a provided Zip::File instance
@@ -70,7 +65,7 @@ module EbookReader
 
       # Convert relative path within the EPUB to the cache absolute path
       def cache_abs_path(rel)
-        File.join(@cache_dir, rel)
+        safe_cache_path(rel)
       end
 
       private
@@ -88,16 +83,28 @@ module EbookReader
         opf = h['opf_path'].to_s
         spine = Array(h['spine']).map(&:to_s)
         return false if opf.empty? || spine.empty?
-        return false unless File.exist?(cache_abs_path('META-INF/container.xml'))
-        return false unless File.exist?(cache_abs_path(opf))
+        container_path = safe_cache_path('META-INF/container.xml')
+        return false unless container_path && File.exist?(container_path)
 
-        spine.all? { |rel| File.exist?(cache_abs_path(rel)) }
+        opf_path = safe_cache_path(opf)
+        return false unless opf_path && File.exist?(opf_path)
+
+        spine.all? do |rel|
+          path = safe_cache_path(rel)
+          path && File.exist?(path)
+        end
       rescue StandardError
         false
       end
 
       def copy_zip_entry(zip, rel_path)
-        dest = cache_abs_path(rel_path)
+        dest = safe_cache_path(rel_path)
+        unless dest
+          EbookReader::Infrastructure::Logger.debug('EpubCache: rejected entry outside cache',
+                                                    entry: rel_path)
+          return
+        end
+
         FileUtils.mkdir_p(File.dirname(dest))
         File.binwrite(dest, zip.read(rel_path))
       rescue StandardError => e
@@ -144,6 +151,22 @@ module EbookReader
           'spine' => Array(m.spine).map(&:to_s),
           'epub_path' => m.epub_path.to_s,
         }
+      end
+
+      def safe_cache_path(rel)
+        return nil if rel.nil?
+
+        cleaned = Pathname.new(rel.to_s).cleanpath.to_s
+        return nil if cleaned.empty?
+
+        dest = File.expand_path(cleaned, @cache_dir)
+        prefix = @cache_dir.end_with?(File::SEPARATOR) ? @cache_dir : (@cache_dir + File::SEPARATOR)
+        return dest if dest == @cache_dir
+        return nil unless dest.start_with?(prefix)
+
+        dest
+      rescue StandardError
+        nil
       end
     end
 

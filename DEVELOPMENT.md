@@ -53,22 +53,20 @@ reader/
 ├── bin/                         # Executables (rspec, rubocop, ebook_reader, etc.)
 ├── lib/
 │   └── ebook_reader/
-│       ├── application/         # App entry points (UnifiedApplication)
-│       ├── components/          # Presentation components (screens, reading, sidebar)
-│       ├── controllers/         # Application controllers (ui, input, state)
-│       ├── domain/
-│       │   ├── actions/         # Explicit state mutations
-│       │   ├── commands/        # Input-triggered command objects
-│       │   ├── selectors/       # Read-only projections from state
-│       │   └── services/        # Business logic (navigation, layout, annotations, etc.)
-│       ├── infrastructure/      # Event bus, logger, state store, document service (factory)
-│       ├── input/               # Dispatcher, key definitions, factories, bindings
-│       ├── presenters/          # (removed)
-│       ├── rendering/           # (not used)
-│       ├── ui/                  # Settings/view-model definitions
+│       ├── annotations/         # Mouse helpers, popup components, annotation utilities
+│       ├── application/         # Orchestrators (UnifiedApplication, frame/pagination coordination)
+│       ├── builders/            # Page/setup builders shared across layers
+│       ├── components/          # Presentation components (screens, reading, sidebar, overlays)
+│       ├── controllers/         # Application controllers (UI/input/state for reader + menu)
+│       ├── domain/              # Actions, commands, selectors, services, repositories, domain models
+│       ├── helpers/             # EPUB/HTML/text helpers and processors
+│       ├── infrastructure/      # Event bus, logger, state stores, document service, caches
+│       ├── input/               # Dispatcher, key definitions, command builders, bindings
+│       ├── main_menu/           # Menu-specific actions, screens, presenters
+│       ├── models/              # Shared data/value objects (contexts, view models)
+│       ├── ui/                  # View models and UI metadata
 │       ├── validators/          # File and terminal validation
-│       ├── services/            # Legacy helpers (e.g., chapter cache) used by WrappingService
-│       └── terminal*            # Terminal facade and buffer/output/input
+│       └── terminal*            # Terminal facade plus buffer/output/input primitives
 ├── spec/                        # Tests
 ├── ARCHITECTURE.md              # Architecture notes
 ├── DEVELOPMENT.md               # This guide
@@ -77,7 +75,7 @@ reader/
 
 ### Layer Responsibilities (updated)
 
-- Presentation (components): Rendering only via `Surface#do_render(surface, bounds)`. No direct terminal writes; no direct service resolution.
+- Presentation (components): Rendering flows through `Surface#do_render(surface, bounds)`; components read state via selectors and may resolve presentation-scoped services supplied via dependency injection (layout, formatting, coordinate). Direct terminal I/O remains encapsulated inside the Surface/Terminal abstractions.
 - Application (controllers): Orchestrates flows, resolves services via DI, dispatches actions.
 - Domain (services/actions/selectors/commands): Business logic, explicit state mutations, input commands.
 - Infrastructure: State store, event bus, logger, terminal IO, persistence helpers.

@@ -23,7 +23,10 @@ module EbookReader
         def adjust_for_line_spacing(height, line_spacing)
           return 1 if height <= 0
 
-          line_spacing == :relaxed ? [height / 2, 1].max : height
+          multiplier = resolve_multiplier(line_spacing)
+          adjusted = (height * multiplier).floor
+          adjusted = height if multiplier >= 1.0 && adjusted < height
+          [adjusted, 1].max
         end
 
         # Calculate center start row for content
@@ -49,6 +52,17 @@ module EbookReader
 
         def required_dependencies
           [] # No dependencies required for layout calculations
+        end
+
+        private
+
+        def resolve_multiplier(line_spacing)
+          key = begin
+                  line_spacing&.to_sym
+                rescue StandardError
+                  nil
+                end
+          EbookReader::Constants::LINE_SPACING_MULTIPLIERS.fetch(key, 1.0)
         end
       end
     end

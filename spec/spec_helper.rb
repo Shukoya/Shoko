@@ -1,5 +1,26 @@
 # frozen_string_literal: true
 
+# SimpleCov depends on the json gem, whose newer versions expect JSON::Fragment
+# to exist. Ruby 3.4 ships an older default gem without that struct, so we
+# provide the minimal implementation to keep the suite bootable.
+unless defined?(JSON::Fragment)
+  module JSON
+    Fragment = Struct.new(:json) do
+      def initialize(json)
+        string = String.try_convert(json)
+        raise TypeError, " no implicit conversion of #{json.class} into String" unless string
+
+        super(string)
+      end
+
+      def to_json(*)
+        json
+      end
+    end
+  end
+end
+
+require 'json'
 require 'simplecov'
 SimpleCov.start do
   track_files 'lib/ebook_reader/infrastructure/**/*.rb'

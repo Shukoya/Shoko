@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require 'json'
+require_relative 'atomic_file_writer'
 
 module EbookReader
   module Infrastructure
@@ -202,12 +203,13 @@ module EbookReader
 
           config: {
             view_mode: :split,
-            line_spacing: :normal,
+            line_spacing: :compact,
             page_numbering_mode: :absolute,
             theme: :dark,
             show_page_numbers: true,
             highlight_quotes: false,
             highlight_keywords: false,
+            prefetch_pages: 20,
           },
 
           ui: {
@@ -299,6 +301,10 @@ module EbookReader
       CONFIG_DIR = File.expand_path('~/.config/reader')
       CONFIG_FILE = File.join(CONFIG_DIR, 'config.json')
       SYMBOL_KEYS = %i[view_mode line_spacing page_numbering_mode theme].freeze
+      LINE_SPACING_ALIASES = {
+        tight: :compact,
+        wide: :relaxed,
+      }.freeze
 
       def ensure_config_dir
         FileUtils.mkdir_p(CONFIG_DIR)
@@ -307,7 +313,8 @@ module EbookReader
       end
 
       def write_config_file
-        File.write(CONFIG_FILE, JSON.pretty_generate(config_to_h))
+        payload = JSON.pretty_generate(config_to_h)
+        EbookReader::Infrastructure::AtomicFileWriter.write(CONFIG_FILE, payload)
       rescue StandardError
         nil
       end
@@ -334,6 +341,7 @@ module EbookReader
           next unless get([:config]).key?(key)
 
           value = value.to_sym if SYMBOL_KEYS.include?(key)
+          value = LINE_SPACING_ALIASES.fetch(value, value) if key == :line_spacing
           config_updates[[:config, key]] = value
         end
         update(config_updates) unless config_updates.empty?

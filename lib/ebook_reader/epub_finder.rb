@@ -8,6 +8,7 @@ require 'set'
 
 require_relative 'models/scanner_context'
 require_relative 'epub_finder/directory_scanner'
+require_relative 'infrastructure/atomic_file_writer'
 
 module EbookReader
   # EPUB file finder with robust error handling
@@ -135,11 +136,12 @@ module EbookReader
 
       def save_cache(files)
         FileUtils.mkdir_p(CONFIG_DIR)
-        File.write(CACHE_FILE, JSON.pretty_generate({
-                                                      'timestamp' => Time.now.iso8601,
-                                                      'files' => files || [],
-                                                      'version' => VERSION,
-                                                    }))
+        payload = JSON.pretty_generate({
+                                          'timestamp' => Time.now.iso8601,
+                                          'files' => files || [],
+                                          'version' => VERSION,
+                                        })
+        Infrastructure::AtomicFileWriter.write(CACHE_FILE, payload)
       rescue StandardError => e
         warn_debug "Cache save error: #{e.message}"
       end

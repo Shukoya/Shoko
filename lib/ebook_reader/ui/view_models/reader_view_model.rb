@@ -28,7 +28,7 @@ module EbookReader
           page_info: {},
           show_page_numbers: true,
           page_numbering_mode: :absolute,
-          line_spacing: :normal,
+          line_spacing: :compact,
           language: 'en'
         )
           @current_chapter = current_chapter

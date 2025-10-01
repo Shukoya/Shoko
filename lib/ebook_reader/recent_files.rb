@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'json'
 require 'time'
+require_relative 'infrastructure/atomic_file_writer'
 
 module EbookReader
   # Manages a list of recently opened files.
@@ -52,7 +53,8 @@ module EbookReader
       # @param recent [Array<Hash>] The list of recent files to save.
       def save(recent)
         FileUtils.mkdir_p(CONFIG_DIR)
-        File.write(RECENT_FILE, JSON.pretty_generate(recent))
+        payload = JSON.pretty_generate(recent)
+        EbookReader::Infrastructure::AtomicFileWriter.write(RECENT_FILE, payload)
       rescue Errno::EACCES, Errno::ENOENT
         # Silently ignore file system errors, as this is not a critical feature.
       end

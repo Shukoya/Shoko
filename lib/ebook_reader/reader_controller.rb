@@ -19,6 +19,8 @@ require_relative 'components/sidebar_panel_component'
 require_relative 'input/dispatcher'
 require_relative 'application/frame_coordinator'
 require_relative 'application/render_pipeline'
+require_relative 'infrastructure/performance_monitor'
+require_relative 'infrastructure/background_worker'
 
 module EbookReader
   # Coordinator class for the reading experience.
@@ -70,6 +72,8 @@ module EbookReader
       @clipboard_service = @dependencies.resolve(:clipboard_service)
       @terminal_service = @dependencies.resolve(:terminal_service)
       @wrapping_service = @dependencies.resolve(:wrapping_service) if @dependencies.registered?(:wrapping_service)
+      @background_worker = Infrastructure::BackgroundWorker.new(name: 'reader-background')
+      @dependencies.register(:background_worker, @background_worker)
 
       # Load document before creating controllers that depend on it
       load_document
@@ -136,10 +140,14 @@ module EbookReader
 
     def run
       @terminal_service.setup
+      @metrics_start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       # Delegate reader startup orchestration
       EbookReader::Application::ReaderStartupOrchestrator.new(@dependencies).start(self)
       main_loop
     ensure
+      @background_worker&.shutdown
+      @background_worker = nil
+      @dependencies.register(:background_worker, nil)
       @terminal_service.cleanup
     end
 
@@ -184,9 +192,27 @@ module EbookReader
 
     # Main application loop
     def main_loop
-      draw_screen
+      Infrastructure::PerformanceMonitor.time('render.first_paint') { draw_screen }
+      if @metrics_start_time
+        first_paint_completed_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        Infrastructure::PerformanceMonitor.record_metric(
+          'render.first_paint.ttfp',
+          first_paint_completed_at - @metrics_start_time,
+          0
+        )
+      end
+      tti_recorded = false
+      startup_reference = @metrics_start_time
       while EbookReader::Domain::Selectors::ReaderSelectors.running?(@state)
         keys = read_input_keys
+        if !tti_recorded && startup_reference && keys.any?
+          Infrastructure::PerformanceMonitor.record_metric(
+            'render.tti',
+            Process.clock_gettime(Process::CLOCK_MONOTONIC) - startup_reference,
+            0
+          )
+          tti_recorded = true
+        end
         next if keys.empty?
 
         # Intercept keys for popup menu if visible
@@ -374,7 +400,11 @@ module EbookReader
     def schedule_background_page_map_build
       return unless defer_page_map?
 
-      Thread.new { build_page_map_in_background }
+      if background_worker
+        background_worker.submit { build_page_map_in_background }
+      else
+        Thread.new { build_page_map_in_background }
+      end
     rescue StandardError
       @defer_page_map = false
     end
@@ -672,5 +702,9 @@ module EbookReader
     end
 
     # Test helper moved to WrappingService#fetch_window_and_prefetch
+
+    def background_worker
+      @background_worker
+    end
   end
 end

@@ -2,6 +2,7 @@
 
 require 'json'
 require_relative '../serializers'
+require_relative 'atomic_file_writer'
 
 module EbookReader
   module Infrastructure
@@ -10,6 +11,8 @@ module EbookReader
     # total_pages_in_chapter, start_line, end_line.
     module PaginationCache
       module_function
+
+      SCHEMA_VERSION = 1
 
       def layout_key(width, height, view_mode, line_spacing)
         "#{width}x#{height}_#{view_mode}_#{line_spacing}"
@@ -23,9 +26,10 @@ module EbookReader
         return nil unless path
 
         data = serializer.load_file(path)
-        return nil unless data.is_a?(Array)
+        pages = extract_pages(data)
+        return nil unless pages
 
-        data.map do |h|
+        pages.map do |h|
           {
             chapter_index: h['chapter_index'] || h[:chapter_index],
             page_in_chapter: h['page_in_chapter'] || h[:page_in_chapter],
@@ -42,21 +46,18 @@ module EbookReader
         dir = resolve_cache_dir(doc)
         return false unless dir
 
-        FileUtils.mkdir_p(File.join(dir, 'pagination'))
         serializer = select_serializer
         final = File.join(dir, 'pagination', "#{key}.#{serializer.ext}")
-        tmp = "#{final}.tmp"
-        serializer.dump_file(tmp, pages_compact)
-        File.rename(tmp, final)
+        payload = {
+          'version' => SCHEMA_VERSION,
+          'pages' => pages_compact,
+        }
+        AtomicFileWriter.write_using(final, binary: serializer.binary?) do |io|
+          serializer.dump_to_io(io, payload)
+        end
         true
       rescue StandardError
         false
-      ensure
-        begin
-          FileUtils.rm_f(tmp) if defined?(tmp) && File.exist?(tmp)
-        rescue StandardError
-          # ignore
-        end
       end
 
       def resolve_cache_dir(doc)
@@ -120,6 +121,21 @@ module EbookReader
         removed
       rescue StandardError
         false
+      end
+
+      def extract_pages(data)
+        case data
+        when Hash
+          version = data['version'] || data[:version]
+          pages = data['pages'] || data[:pages]
+          return nil unless version.nil? || version.to_i <= SCHEMA_VERSION
+          return nil unless pages.is_a?(Array)
+          pages
+        when Array
+          data
+        else
+          nil
+        end
       end
     end
   end
