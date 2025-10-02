@@ -128,14 +128,15 @@ module EbookReader
           annotation, book_path = selected_annotation_and_path
           return unless annotation && book_path
 
-          state.update({
-                         %i[reader book_path] => book_path,
-                         %i[reader pending_jump] => {
-                           chapter_index: annotation[:chapter_index] || annotation['chapter_index'],
-                           selection_range: annotation[:range] || annotation['range'],
-                           annotation: annotation,
-                         },
-                       })
+          normalized = normalize_annotation(annotation)
+          @state.dispatch(EbookReader::Domain::Actions::UpdateReaderMetaAction.new(book_path: book_path))
+          pending_payload = {
+            chapter_index: normalized[:chapter_index],
+            selection_range: normalized[:range],
+            annotation: annotation,
+            edit: false,
+          }
+          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_jump: pending_payload))
 
           run_reader(book_path)
         end
@@ -313,6 +314,14 @@ module EbookReader
         def selected_annotation_and_path
           screen = menu.annotations_screen
           [screen.current_annotation, screen.current_book_path]
+        end
+
+        def normalize_annotation(annotation)
+          return {} unless annotation.is_a?(Hash)
+
+          annotation.each_with_object({}) do |(key, value), acc|
+            acc[key.is_a?(String) ? key.to_sym : key] = value
+          end
         end
       end
     end

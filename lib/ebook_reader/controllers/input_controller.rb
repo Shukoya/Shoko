@@ -8,6 +8,7 @@ module EbookReader
         @state = state
         @dependencies = dependencies
         @dispatcher = nil
+        @modal_mode_stack = []
       end
 
       def setup_input_dispatcher(reader_controller)
@@ -51,6 +52,34 @@ module EbookReader
         keys.each do |key|
           res = popup_menu.handle_key(key) || { type: :noop }
           process_popup_result(res, ui_controller)
+        end
+      end
+
+      def handle_annotations_overlay_input(keys)
+        overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotations_overlay(@state)
+        return unless overlay
+
+        ui_controller = @dependencies.resolve(:ui_controller)
+        keys.each do |key|
+          result = overlay.handle_key(key)
+          next unless result
+
+          case result[:type]
+          when :selection_change
+            index = result[:index]
+            @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(
+                              annotations_selected: index,
+                              sidebar_annotations_selected: index
+                            ))
+          when :open
+            ui_controller.open_annotation_from_overlay(result[:annotation]) if ui_controller.respond_to?(:open_annotation_from_overlay)
+          when :edit
+            ui_controller.edit_annotation_from_overlay(result[:annotation]) if ui_controller.respond_to?(:edit_annotation_from_overlay)
+          when :delete
+            ui_controller.delete_annotation_from_overlay(result[:annotation]) if ui_controller.respond_to?(:delete_annotation_from_overlay)
+          when :close
+            ui_controller.close_annotations_overlay if ui_controller.respond_to?(:close_annotations_overlay)
+          end
         end
       end
 
@@ -217,6 +246,7 @@ module EbookReader
       def activate_for_mode(mode)
         return unless @dispatcher
 
+        @modal_mode_stack.clear
         case mode
         when :annotation_editor
           @dispatcher.activate(:annotation_editor)
@@ -228,6 +258,28 @@ module EbookReader
           @dispatcher.activate(:bookmarks)
         else
           @dispatcher.activate_stack([:read])
+        end
+      end
+
+      def enter_modal_mode(mode)
+        return unless @dispatcher
+
+        current_stack = @dispatcher.mode_stack
+        return if current_stack.last == mode
+
+        @modal_mode_stack << current_stack
+        new_stack = current_stack.empty? ? [mode] : current_stack + [mode]
+        @dispatcher.activate_stack(new_stack)
+      end
+
+      def exit_modal_mode(_mode)
+        return unless @dispatcher
+
+        previous_stack = @modal_mode_stack.pop
+        if previous_stack&.any?
+          @dispatcher.activate_stack(previous_stack)
+        else
+          activate_for_mode(@state.get(%i[reader mode]) || :read)
         end
       end
 

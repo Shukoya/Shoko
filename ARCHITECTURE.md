@@ -40,10 +40,10 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 ## Key Components
 
 - Presentation
-  - UI Components: Header, Content, Footer, Sidebar, Overlay (tooltip/popup), Screens (Browse, Library, Settings, Annotations, Annotation Editor).
+  - UI Components: Header, Content, Footer, Sidebar, Overlay (tooltip, popup, annotations overlay), Screens (Browse, Library, Settings, Annotations, Annotation Editor). Annotation overlays reuse the same viewport math as full-screen editors—snippet preview + note viewport anchored top-left—so cursoring and rendering stay consistent across contexts.
   - Rendering Surface: `Components::Surface` abstracts writing to Terminal.
 - Application
-  - Controllers: `ReaderController` orchestrates rendering and loop; `UIController` manages modes/overlays; `StateController` handles persistence; `InputController` configures the dispatcher. Navigation is handled exclusively by the domain `NavigationService` via input commands.
+  - Controllers: `ReaderController` orchestrates rendering and loop; `UIController` manages modes, sidebar, and overlays; `StateController` handles persistence; `InputController` configures the dispatcher. Navigation flows through the `NavigationService` plus targeted state actions for persisted jumps so rendering stays decoupled from storage. Modal input (annotation popup) is coordinated via `Application::AnnotationEditorOverlaySession`, which bridges the overlay component to domain commands while `InputController` pushes a temporary dispatcher stack. `UIController` now validates that both `:reader_controller` and `:input_controller` are present before promoting the dispatcher to `:annotation_editor`, logging via the shared logger if DI resolution fails.
   - Input: Popup handling is centralized via `with_popup_menu` and `process_popup_result` helpers to avoid repeated conditional branches for navigation/action/cancel.
   - UnifiedApplication: decides between menu and reader modes.
 - Domain

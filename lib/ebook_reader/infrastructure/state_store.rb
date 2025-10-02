@@ -1,7 +1,18 @@
 # frozen_string_literal: true
 
 require 'fileutils'
-require 'json'
+begin
+  require 'json'
+rescue NameError => e
+  if e.name == :Fragment
+    module JSON
+      Fragment = Object unless const_defined?(:Fragment)
+    end
+    require 'json'
+  else
+    raise
+  end
+end
 require_relative 'atomic_file_writer'
 
 module EbookReader
@@ -177,6 +188,8 @@ module EbookReader
             # UI state
             rendered_lines: {},
             popup_menu: nil,
+            annotations_overlay: nil,
+            annotation_editor_overlay: nil,
 
             # Sidebar state
             sidebar_visible: false,

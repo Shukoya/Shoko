@@ -13,8 +13,32 @@ module EbookReader
       # Pure business logic for book navigation.
       # Replaces the coupled NavigationService with clean domain logic.
       class NavigationService < BaseService
-        def initialize(dependencies)
-          super(dependencies)
+        class LegacyDependencyWrapper
+          def initialize(state_store, page_calculator)
+            @state_store = state_store
+            @page_calculator = page_calculator
+          end
+
+          def resolve(name)
+            case name
+            when :state_store then @state_store
+            when :page_calculator then @page_calculator
+            else
+              raise ArgumentError, "Legacy dependency :#{name} not available"
+            end
+          end
+
+          def registered?(name)
+            %i[state_store page_calculator].include?(name)
+          end
+        end
+
+        def initialize(*args)
+          if args.length == 1
+            super(args.first)
+          else
+            super(LegacyDependencyWrapper.new(*args))
+          end
         end
 
         # Navigate to next page
@@ -23,7 +47,7 @@ module EbookReader
           dynamic_route_exec(ctx,
                              -> { apply_dynamic_changes(Navigation::DynamicStrategy.next_page(ctx)) },
                              -> do
-                               ctx.max_page_in_chapter = calculate_last_page(ctx.current_chapter)
+                               populate_absolute_context(ctx)
                                apply_absolute_changes(Navigation::AbsoluteStrategy.next_page(ctx))
                              end)
         end
@@ -78,9 +102,25 @@ module EbookReader
                              -> do
                                total = ctx.total_chapters
                                return if total.to_i <= 0
+
+                               metrics = absolute_metrics
+                               view_mode = ctx.view_mode
+                               stride = stride_for_view(view_mode, metrics)
                                last_chapter = total - 1
-                               last_page = calculate_last_page(last_chapter)
-                               apply_absolute_changes({ current_chapter: last_chapter, single_page: last_page, left_page: last_page, right_page: last_page + 1, current_page: last_page })
+                               offset = max_offset_for_chapter(last_chapter, stride)
+
+                               changes = {
+                                 current_chapter: last_chapter,
+                                 current_page: offset,
+                               }
+                               if view_mode == :split
+                                 changes[:left_page] = offset
+                                 changes[:right_page] = offset + stride
+                               else
+                                 changes[:single_page] = offset
+                               end
+
+                               apply_absolute_changes(changes)
                              end)
         end
 
@@ -94,7 +134,7 @@ module EbookReader
             # No-op for dynamic; scrolling is page-based via next/prev
             return
           end
-          ctx.max_page_in_chapter = calculate_last_page(ctx.current_chapter)
+          populate_absolute_context(ctx)
           changes = Navigation::AbsoluteStrategy.scroll(ctx, direction, lines)
           apply_absolute_changes(changes)
         end
@@ -108,13 +148,14 @@ module EbookReader
         def setup_service_dependencies
           @state_store = resolve(:state_store)
           @page_calculator = resolve(:page_calculator) if registered?(:page_calculator)
+          @layout_service = resolve(:layout_service) if registered?(:layout_service)
         end
 
         private
 
         def build_nav_context
           ctx = context_builder.build
-          ctx.max_page_in_chapter = page_count_from_state(ctx.current_chapter)
+          populate_absolute_context(ctx)
           ctx
         end
 
@@ -128,57 +169,59 @@ module EbookReader
 
         def apply_absolute_changes(changes)
           return if changes.nil? || changes.empty?
-          cs = @state_store.current_state
-          supports_get = has_reader_get?
-          if supports_get
-            split_updater = method(:apply_split_alignment_with_get)
-            last_page_updater = method(:apply_last_page_with_get)
-            align_last_updater = method(:apply_align_to_last_with_get)
-            non_adv_updater = method(:apply_non_advancing_with_get)
-          else
-            split_updater = method(:apply_split_alignment_without_get)
-            last_page_updater = method(:apply_last_page_without_get)
-            align_last_updater = method(:apply_align_to_last_without_get)
-            non_adv_updater = method(:apply_non_advancing_without_get)
-          end
 
-          adv = changes[:advance_chapter]
-          if adv
-            cur_ch = cs.dig(:reader, :current_chapter) || 0
-            if adv == :next
-              jump_to_chapter(cur_ch + 1)
+          snapshot = safe_snapshot
+          metrics = absolute_metrics(snapshot)
+          view_mode = snapshot.dig(:config, :view_mode) || :split
+          single_stride = metrics[:single]
+          split_stride = metrics[:split]
+
+          if (adv = changes[:advance_chapter])
+            current_chapter = snapshot.dig(:reader, :current_chapter) || 0
+            case adv
+            when :next
+              jump_to_chapter(current_chapter + 1)
               return
-            elsif adv == :prev
-              prev = cur_ch - 1
-              last_page = calculate_last_page(prev)
-              # Align for split if needed
-              if changes[:align] == :split
-                aligned = (last_page / 2) * 2
-                split_updater.call(prev, aligned)
+            when :prev
+              previous = current_chapter - 1
+              return if previous.negative?
+
+              stride = view_mode == :split ? split_stride : single_stride
+              offset = max_offset_for_chapter(previous, stride)
+              updates = {
+                %i[reader current_chapter] => previous,
+                %i[reader current_page] => offset,
+              }
+              if view_mode == :split
+                updates[%i[reader left_page]] = offset
+                updates[%i[reader right_page]] = offset + stride
               else
-                last_page_updater.call(prev, last_page)
+                updates[%i[reader single_page]] = offset
               end
+              apply_updates(updates)
               return
             end
           end
 
-          # Non-advancing updates
           updates = {}
-          ch = changes[:current_chapter]
-          updates[%i[reader current_chapter]] = ch if ch
-          cp = changes[:current_page]
-          updates[%i[reader current_page]] = cp if cp
+          updates[%i[reader current_chapter]] = changes[:current_chapter] if changes.key?(:current_chapter)
+          updates[%i[reader current_page]] = changes[:current_page] if changes.key?(:current_page)
+          updates[%i[reader single_page]] = changes[:single_page] if changes.key?(:single_page)
+          updates[%i[reader left_page]] = changes[:left_page] if changes.key?(:left_page)
+          updates[%i[reader right_page]] = changes[:right_page] if changes.key?(:right_page)
 
-          non_adv_updater.call(updates, changes, cp)
-
-          # Align to last chapter intent
           if changes[:align_to_last]
-            last_chapter = (cs.dig(:reader, :total_chapters) || 1) - 1
-            last_page = calculate_last_page(last_chapter)
+            last_chapter = (snapshot.dig(:reader, :total_chapters) || 1) - 1
+            stride = view_mode == :split ? split_stride : single_stride
+            offset = max_offset_for_chapter(last_chapter, stride)
             updates[%i[reader current_chapter]] = last_chapter
-            updates[%i[reader current_page]] = last_page
-            supports_get = has_reader_get?
-            align_last_updater.call(updates, last_page)
+            updates[%i[reader current_page]] = offset
+            if view_mode == :split
+              updates[%i[reader left_page]] = offset
+              updates[%i[reader right_page]] = offset + stride
+            else
+              updates[%i[reader single_page]] = offset
+            end
           end
 
           apply_updates(updates)
@@ -213,6 +256,18 @@ module EbookReader
           end
         end
 
+        def populate_absolute_context(ctx, snapshot = safe_snapshot)
+          return ctx unless ctx.mode == :absolute
+
+          metrics = absolute_metrics(snapshot)
+          ctx.lines_per_page = metrics[:single]
+          ctx.column_lines_per_page = metrics[:split]
+          ctx.max_page_in_chapter = page_count_from_state(ctx.current_chapter)
+          ctx.max_offset_in_chapter = max_offset_for_chapter(ctx.current_chapter,
+                                                             stride_for_view(ctx.view_mode, metrics))
+          ctx
+        end
+
         def apply_updates(updates)
           return if updates.nil? || updates.empty?
 
@@ -223,54 +278,6 @@ module EbookReader
           elsif @state_store.respond_to?(:update)
             @state_store.update(updates)
           end
-        end
-
-        def apply_split_alignment_with_get(prev_chapter, aligned)
-          apply_updates({ %i[reader current_chapter] => prev_chapter,
-                          %i[reader left_page] => aligned,
-                          %i[reader right_page] => aligned + 1,
-                          %i[reader current_page] => aligned })
-        end
-
-        def apply_split_alignment_without_get(prev_chapter, aligned)
-          apply_updates({ %i[reader current_chapter] => prev_chapter,
-                          %i[reader current_page] => aligned })
-        end
-
-        def apply_last_page_with_get(prev_chapter, last_page)
-          apply_updates({ %i[reader current_chapter] => prev_chapter,
-                          %i[reader single_page] => last_page,
-                          %i[reader current_page] => last_page })
-        end
-
-        def apply_last_page_without_get(prev_chapter, last_page)
-          apply_updates({ %i[reader current_chapter] => prev_chapter,
-                          %i[reader current_page] => last_page })
-        end
-
-        def apply_align_to_last_with_get(updates, last_page)
-          updates[%i[reader single_page]] = last_page
-          updates[%i[reader left_page]] = last_page
-          updates[%i[reader right_page]] = last_page + 1
-        end
-
-        def apply_align_to_last_without_get(_updates, _last_page)
-          # no-op
-        end
-
-        def apply_non_advancing_with_get(updates, changes, cp)
-          sp = changes[:single_page]
-          updates[%i[reader single_page]] = sp if sp
-          lp = changes[:left_page]
-          if lp
-            updates[%i[reader left_page]] = lp
-            updates[%i[reader right_page]] = (changes[:right_page] || (lp.to_i + 1))
-            updates[%i[reader current_page]] = (cp || lp)
-          end
-        end
-
-        def apply_non_advancing_without_get(_updates, _changes, _cp)
-          # no-op
         end
 
         def clamp_index(index, total)
@@ -297,6 +304,45 @@ module EbookReader
 
         # Navigation via internal strategies; legacy per-mode methods removed
 
+        def absolute_metrics(state = safe_snapshot)
+          {
+            single: lines_for_view(state, :single),
+            split: lines_for_view(state, :split),
+          }
+        end
+
+        def stride_for_view(view_mode, metrics)
+          stride = view_mode == :split ? metrics[:split] : metrics[:single]
+          stride = metrics[:single] if stride.to_i <= 0
+          stride = 1 if stride.to_i <= 0
+          stride
+        end
+
+        def lines_for_view(state, view_mode)
+          unless @layout_service
+            return view_mode == :split ? 2 : 1
+          end
+
+          width = state.dig(:ui, :terminal_width) || 80
+          height = state.dig(:ui, :terminal_height) || 24
+          _, content_height = @layout_service.calculate_metrics(width, height, view_mode)
+          line_spacing = state.dig(:config, :line_spacing) || EbookReader::Constants::DEFAULT_LINE_SPACING
+          lines = @layout_service.adjust_for_line_spacing(content_height, line_spacing)
+          lines = 1 if lines.to_i <= 0
+          lines
+        rescue StandardError
+          1
+        end
+
+        def max_offset_for_chapter(chapter_index, stride)
+          return 0 if chapter_index.nil? || stride.to_i <= 0
+
+          pages = page_count_from_state(chapter_index).to_i
+          return 0 if pages <= 1
+
+          (pages - 1) * stride
+        end
+
         def validate_chapter_index(index)
           raise ArgumentError, 'Chapter index must be non-negative' if index.negative?
 
@@ -312,16 +358,6 @@ module EbookReader
           current_chapter = state.dig(:reader, :current_chapter) || 0
           total_chapters = state.dig(:reader, :total_chapters) || 0
           current_chapter < total_chapters - 1
-        end
-
-        def calculate_last_page(chapter_index)
-          if @page_calculator
-            pages = @page_calculator.calculate_pages_for_chapter(chapter_index)
-            return pages if pages.positive?
-          end
-          # Fallback to state page_map for absolute mode
-          state = safe_snapshot
-          state.dig(:reader, :page_map)&.[](chapter_index) || 0
         end
 
         def context_builder

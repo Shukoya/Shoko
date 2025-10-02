@@ -78,10 +78,32 @@ module EbookReader
         bookmark = bookmarks[selected_idx]
         return unless bookmark
 
-        @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(bookmark.chapter_index))
-        offset = bookmark.line_offset
-        @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(single_page: offset,
-                                                                           left_page: offset))
+        navigation = if @dependencies.respond_to?(:resolve) && @dependencies.registered?(:navigation_service)
+                       @dependencies.resolve(:navigation_service)
+                     end
+
+        if navigation
+          navigation.jump_to_chapter(bookmark.chapter_index)
+        else
+          @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(bookmark.chapter_index))
+        end
+
+        offset = bookmark.line_offset.to_i
+        payload = {
+          single_page: offset,
+          left_page: offset,
+          right_page: offset + 1,
+          current_page: offset,
+        }
+
+        if EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic &&
+           @dependencies.respond_to?(:resolve) && @dependencies.registered?(:page_calculator)
+          page_index = @dependencies.resolve(:page_calculator)&.find_page_index(bookmark.chapter_index,
+                                                                                offset)
+          payload[:current_page_index] = page_index if page_index
+        end
+
+        @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(payload))
         save_progress
         @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
       end
@@ -121,6 +143,48 @@ module EbookReader
         end
       end
 
+      def jump_to_annotation(annotation)
+        normalized = normalize_annotation(annotation)
+        return unless normalized
+
+        navigation = if @dependencies.respond_to?(:resolve) && @dependencies.registered?(:navigation_service)
+                       @dependencies.resolve(:navigation_service)
+                     end
+        navigation&.jump_to_chapter(normalized[:chapter_index]) if normalized[:chapter_index]
+
+        if normalized[:range]
+          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(normalized[:range]))
+        end
+
+        @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
+      end
+
+      def delete_annotation_by_id(annotation)
+        normalized = normalize_annotation(annotation)
+        return @state.get(%i[reader sidebar_annotations_selected]) || 0 unless normalized
+
+        svc = if @dependencies.respond_to?(:resolve) && @dependencies.registered?(:annotation_service)
+                @dependencies.resolve(:annotation_service)
+              end
+        unless svc && normalized[:id]
+          return @state.get(%i[reader sidebar_annotations_selected]) || 0
+        end
+
+        svc.delete(@path, normalized[:id])
+        annotations = svc.list_for_book(@path)
+        @state.dispatch(EbookReader::Domain::Actions::UpdateAnnotationsAction.new(annotations))
+
+        new_index = [(@state.get(%i[reader sidebar_annotations_selected]) || 0), annotations.length - 1].min
+        new_index = 0 if new_index.negative?
+        @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(
+                          annotations_selected: new_index,
+                          sidebar_annotations_selected: new_index
+                        ))
+        new_index
+      rescue StandardError
+        @state.get(%i[reader sidebar_annotations_selected]) || 0
+      end
+
       def quit_to_menu
         save_progress
         @state.dispatch(EbookReader::Domain::Actions::QuitToMenuAction.new)
@@ -148,6 +212,14 @@ module EbookReader
           collect_dynamic_progress(page_calculator)
         else
           collect_absolute_progress
+        end
+      end
+
+      def normalize_annotation(annotation)
+        return {} unless annotation.is_a?(Hash)
+
+        annotation.each_with_object({}) do |(key, value), acc|
+          acc[key.is_a?(String) ? key.to_sym : key] = value
         end
       end
 

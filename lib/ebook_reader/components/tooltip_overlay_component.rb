@@ -24,6 +24,8 @@ module EbookReader
         render_saved_annotations(surface, bounds)
         render_active_selection(surface, bounds)
         render_popup_menu(surface, bounds)
+        render_annotations_overlay(surface, bounds)
+        render_annotation_editor_overlay(surface, bounds)
       end
 
       private
@@ -64,6 +66,20 @@ module EbookReader
 
         # Unified component rendering path
         popup_menu.render(surface, bounds)
+      end
+
+      def render_annotations_overlay(surface, bounds)
+        overlay = @controller.state.get(%i[reader annotations_overlay])
+        return unless overlay&.respond_to?(:visible?) && overlay.visible?
+
+        overlay.render(surface, bounds)
+      end
+
+      def render_annotation_editor_overlay(surface, bounds)
+        overlay = @controller.state.get(%i[reader annotation_editor_overlay])
+        return unless overlay&.respond_to?(:visible?) && overlay.visible?
+
+        overlay.render(surface, bounds)
       end
 
       def render_text_highlight(surface, bounds, range, color)
@@ -120,12 +136,17 @@ module EbookReader
           # Skip if selection doesn't overlap with this line segment
           next if row_end_x < line_start_col || row_start_x > line_end_col
 
-          # Render highlight for this line segment
-          render_line_segment_highlight(surface, bounds, line_info, y, start_pos, end_pos, color)
+          clamp_start = [row_start_x, line_start_col].max
+          clamp_end = [row_end_x, line_end_col].min
+  next if clamp_end < clamp_start
+
+  render_line_segment_highlight(surface, bounds, line_info, y, start_pos, end_pos, color,
+                                        clamp_start, clamp_end)
         end
       end
 
-      def render_line_segment_highlight(surface, bounds, line_info, y, start_pos, end_pos, color)
+      def render_line_segment_highlight(surface, bounds, line_info, y, start_pos, end_pos, color,
+                                        clamp_start = nil, clamp_end = nil)
         line_text = line_info[:text]
         return if line_text.empty?
 
@@ -137,6 +158,16 @@ module EbookReader
           line_text, line_start_col, y, start_pos, end_pos
         )
         return unless highlight_bounds
+
+        if clamp_start || clamp_end
+          clamp_start ||= line_start_col
+          clamp_end ||= line_start_col + line_text.length - 1
+          clamp_rel_start = clamp_start - line_start_col
+          clamp_rel_end = clamp_end - line_start_col
+          highlight_bounds[:start] = [highlight_bounds[:start], clamp_rel_start].max
+          highlight_bounds[:end] = [highlight_bounds[:end], clamp_rel_end].min
+          return if highlight_bounds[:end] < highlight_bounds[:start]
+        end
 
         # Build highlighted line text (overlay approach - don't modify original)
         highlighted_text = build_highlighted_text(

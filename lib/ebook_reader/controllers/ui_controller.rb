@@ -1,9 +1,14 @@
 # frozen_string_literal: true
 
+require_relative '../components/annotations_overlay_component'
+require_relative '../components/annotation_editor_overlay_component'
+
 module EbookReader
   module Controllers
     # Handles all UI-related functionality: modes, overlays, popups, sidebar
     class UIController
+      class MissingDependencyError < StandardError; end
+
       def initialize(state, dependencies)
         @state = state
         @dependencies = dependencies
@@ -11,6 +16,8 @@ module EbookReader
       end
 
       def switch_mode(mode, **)
+        close_annotations_overlay unless mode == :annotation_editor
+        close_annotation_editor_overlay unless mode == :annotation_editor
         @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(mode))
 
         if mode == :annotation_editor
@@ -42,13 +49,26 @@ module EbookReader
       end
 
       def open_annotations
-        toggle_sidebar(:annotations)
+        overlay = Domain::Selectors::ReaderSelectors.annotations_overlay(@state)
+        if overlay&.visible?
+          close_annotations_overlay
+        else
+          show_annotations_overlay
+        end
+      end
+
+      def open_annotation_editor_overlay(text:, range:, chapter_index:, annotation: nil)
+        show_annotation_editor_overlay(text: text,
+                                       range: range,
+                                       chapter_index: chapter_index,
+                                       annotation: annotation)
       end
 
       private
 
       # Unified sidebar toggling for :toc, :annotations, :bookmarks
       def toggle_sidebar(tab)
+        close_annotations_overlay
         if sidebar_open_for?(tab)
           close_sidebar_with_restore(tab)
         else
@@ -180,12 +200,15 @@ module EbookReader
           handle_copy_to_clipboard_action(action_data)
         end
 
-        cleanup_popup_state
+        skip_editor = %i[create_annotation].include?(action_type) || action_type == 'Create Annotation'
+        cleanup_popup_state(skip_editor: skip_editor)
       end
 
-      def cleanup_popup_state
+      def cleanup_popup_state(skip_editor: false)
         @state.dispatch(EbookReader::Domain::Actions::ClearPopupMenuAction.new)
         @state.dispatch(EbookReader::Domain::Actions::ClearSelectionAction.new)
+        close_annotations_overlay
+        close_annotation_editor_overlay unless skip_editor
         # Also reset any mouse-driven selection held outside state (MouseableReader)
         begin
           reader_controller = @dependencies.resolve(:reader_controller)
@@ -222,6 +245,55 @@ module EbookReader
 
       def sidebar_visible?
         @state.get(%i[reader sidebar_visible])
+      end
+
+      def show_annotations_overlay
+        overlay = Components::AnnotationsOverlayComponent.new(@state)
+        @state.dispatch(EbookReader::Domain::Actions::UpdateAnnotationsOverlayAction.new(overlay))
+        set_message('Annotations overlay open (↑/↓ navigate, Enter open, e edit, d delete)', 3)
+      rescue StandardError
+        cleanup_annotations_overlay_fallback
+      end
+
+      def close_annotations_overlay
+        overlay = Domain::Selectors::ReaderSelectors.annotations_overlay(@state)
+        return unless overlay
+
+        overlay.hide if overlay.respond_to?(:hide)
+        @state.dispatch(EbookReader::Domain::Actions::ClearAnnotationsOverlayAction.new)
+      rescue StandardError
+        cleanup_annotations_overlay_fallback
+      end
+
+      def show_annotation_editor_overlay(text:, range:, chapter_index:, annotation: nil)
+        overlay = Components::AnnotationEditorOverlayComponent.new(
+          selected_text: text,
+          range: range,
+          chapter_index: chapter_index,
+          annotation: annotation
+        )
+        @state.dispatch(EbookReader::Domain::Actions::UpdateAnnotationEditorOverlayAction.new(overlay))
+        if activate_annotation_editor_overlay_session
+          set_message('Annotation editor active (Ctrl+S save, Esc cancel)', 3)
+        else
+          cleanup_annotation_editor_overlay_fallback
+          set_message('Annotation editor unavailable', 3)
+        end
+      rescue StandardError => e
+        cleanup_annotation_editor_overlay_fallback
+        log_dependency_error(:show_annotation_editor_overlay, e)
+        set_message('Annotation editor unavailable', 3)
+      end
+
+      def close_annotation_editor_overlay
+        overlay = Domain::Selectors::ReaderSelectors.annotation_editor_overlay(@state)
+        return unless overlay
+
+        overlay.hide if overlay.respond_to?(:hide)
+        @state.dispatch(EbookReader::Domain::Actions::ClearAnnotationEditorOverlayAction.new)
+        deactivate_annotation_editor_overlay_session
+      rescue StandardError
+        cleanup_annotation_editor_overlay_fallback
       end
 
       def update_sidebar_selection(delta)
@@ -287,11 +359,10 @@ module EbookReader
                           end
         # Extract selected text from the controller that manages it
         selected_text = extract_selected_text_from_selection(selection_range)
-        switch_mode(:read)
-        switch_mode(:annotation_editor,
-                    text: selected_text,
-                    range: selection_range,
-                    chapter_index: @state.get(%i[reader current_chapter]))
+        close_annotations_overlay
+        show_annotation_editor_overlay(text: selected_text,
+                                       range: selection_range,
+                                       chapter_index: @state.get(%i[reader current_chapter]))
       end
 
       def handle_copy_to_clipboard_action(_action_data)
@@ -320,6 +391,163 @@ module EbookReader
           rendered_lines = @state.get(%i[reader rendered_lines]) || {}
           selection_service.extract_text(selection_range, rendered_lines)
         end
+      end
+
+      def open_annotation_from_overlay(annotation)
+        normalized = normalize_annotation(annotation)
+        return unless normalized
+
+        state_controller = @dependencies.resolve(:state_controller)
+        if state_controller.respond_to?(:jump_to_annotation)
+          state_controller.jump_to_annotation(normalized)
+        end
+        close_annotations_overlay
+      rescue StandardError
+        close_annotations_overlay
+      end
+
+      def edit_annotation_from_overlay(annotation)
+        normalized = normalize_annotation(annotation)
+        return unless normalized
+
+        close_annotations_overlay
+        show_annotation_editor_overlay(text: normalized[:text],
+                                       range: normalized[:range],
+                                       chapter_index: normalized[:chapter_index],
+                                       annotation: normalized)
+      end
+
+      def delete_annotation_from_overlay(annotation)
+        normalized = normalize_annotation(annotation)
+        return unless normalized
+
+        state_controller = @dependencies.resolve(:state_controller)
+        new_index = if state_controller.respond_to?(:delete_annotation_by_id)
+                      state_controller.delete_annotation_by_id(normalized)
+                    end
+
+        overlay = Domain::Selectors::ReaderSelectors.annotations_overlay(@state)
+        overlay.selected_index = new_index if overlay&.respond_to?(:selected_index=) && !new_index.nil?
+
+        annotations = (@state.get(%i[reader annotations]) || [])
+        close_annotations_overlay if annotations.empty?
+        set_message('Annotation deleted', 2)
+      rescue StandardError
+        close_annotations_overlay
+      end
+
+      def cleanup_annotations_overlay_fallback
+        @state.dispatch(EbookReader::Domain::Actions::ClearAnnotationsOverlayAction.new)
+      rescue StandardError
+        nil
+      end
+
+      def normalize_annotation(annotation)
+        return nil unless annotation.is_a?(Hash)
+
+        annotation.each_with_object({}) do |(key, value), acc|
+          acc[key.is_a?(String) ? key.to_sym : key] = value
+        end
+      end
+
+      def cleanup_annotation_editor_overlay_fallback
+        @state.dispatch(EbookReader::Domain::Actions::ClearAnnotationEditorOverlayAction.new)
+        deactivate_annotation_editor_overlay_session
+      rescue StandardError
+        nil
+      end
+
+      def handle_annotation_editor_overlay_event(result)
+        overlay = Domain::Selectors::ReaderSelectors.annotation_editor_overlay(@state)
+        return unless overlay
+
+        case result[:type]
+        when :save
+          save_annotation_from_overlay(result[:note], overlay)
+        when :cancel
+          cancel_annotation_editor_overlay
+        end
+      end
+
+      def save_annotation_from_overlay(note, overlay)
+        svc = @dependencies.resolve(:annotation_service)
+        path = current_book_path
+        unless svc && path
+          cancel_annotation_editor_overlay
+          return
+        end
+
+        begin
+          if overlay.annotation_id
+            svc.update(path, overlay.annotation_id, note)
+            set_message('Annotation updated', 2)
+          else
+            svc.add(path, overlay.selected_text, note, overlay.selection_range, overlay.chapter_index, nil)
+            set_message('Annotation saved!', 2)
+          end
+          refresh_annotations
+        rescue StandardError => e
+          set_message("Save failed: #{e.message}", 3)
+        ensure
+          close_annotation_editor_overlay
+          @state.dispatch(EbookReader::Domain::Actions::ClearSelectionAction.new)
+        end
+      end
+
+      def cancel_annotation_editor_overlay
+        close_annotation_editor_overlay
+        set_message('Annotation cancelled', 2)
+        @state.dispatch(EbookReader::Domain::Actions::ClearSelectionAction.new)
+      end
+
+      def activate_annotation_editor_overlay_session
+        reader_controller = resolve_required(:reader_controller)
+        input_controller = resolve_required(:input_controller)
+        reader_controller.activate_annotation_editor_overlay_session
+        input_controller.enter_modal_mode(:annotation_editor)
+        true
+      rescue MissingDependencyError => e
+        log_dependency_error(:activate_annotation_editor_overlay_session, e)
+        false
+      end
+
+      def deactivate_annotation_editor_overlay_session
+        input_controller = resolve_optional(:input_controller)
+        input_controller&.exit_modal_mode(:annotation_editor)
+        reader_controller = resolve_optional(:reader_controller)
+        reader_controller&.deactivate_annotation_editor_overlay_session
+      end
+
+      def safe_resolve(key)
+        @dependencies.resolve(key)
+      rescue StandardError
+        nil
+      end
+
+      def resolve_required(key)
+        service = @dependencies.resolve(key)
+        raise MissingDependencyError, "Dependency :#{key} not registered" unless service
+
+        service
+      rescue MissingDependencyError
+        raise
+      rescue StandardError => e
+        raise MissingDependencyError, "Dependency :#{key} failed to resolve: #{e.message}"
+      end
+
+      def resolve_optional(key)
+        @dependencies.resolve(key)
+      rescue StandardError
+        nil
+      end
+
+      def log_dependency_error(context, error)
+        logger = resolve_optional(:logger)
+        return unless logger.respond_to?(:error)
+
+        logger.error('Annotation editor activation failed', context: context, error: error.message)
+      rescue StandardError
+        nil
       end
     end
   end

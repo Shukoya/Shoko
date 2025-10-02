@@ -84,9 +84,9 @@ module EbookReader
           UpdateConfigAction.new(theme: theme)
         end
 
-        def self.toggle_page_numbers
-          # This will need to read current state first
-          UpdateConfigAction.new(show_page_numbers: !state.show_page_numbers)
+        def self.toggle_page_numbers(state)
+          current = EbookReader::Domain::Selectors::ConfigSelectors.show_page_numbers(state)
+          UpdateConfigAction.new(show_page_numbers: !current)
         end
 
         # Bookmark actions

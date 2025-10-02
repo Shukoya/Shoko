@@ -3,7 +3,7 @@
 **Current Status: Phase 4.6 - Documentation + Input Alignment**  
 **Overall Progress: ~88% Complete (audited 2025-09-11, updated)**  
 **Estimated Completion: Phase 4.6**  
-**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation alignment is still pending—the project structure section in `DEVELOPMENT.md` needs to match the current layout. Terminal exit regression remains: `Menu::StateController#run_reader` previously re-entered the terminal session on return (`lib/ebook_reader/controllers/menu/state_controller.rb:41`) which left the alternate screen active during shutdown; the fix ensures session depth unwinds so the shell is restored. Progress is shown inline during menu-driven open; direct CLI open still performs a silent, frame-safe pre-build. Canonical book identity (`EPUBDocument#canonical_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and the first frame lands on the saved page in dynamic mode once pagination completes.
+**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation alignment is complete—`DEVELOPMENT.md` now mirrors the current layout. Terminal exit regression was fixed: `Menu::StateController#run_reader` relies on `TerminalService` session depth unwinding so the shell is restored. Progress is shown inline during menu-driven open, and direct CLI open renders the same loading overlay via `Application::PaginationOrchestrator.initial_build`. Canonical book identity (`EPUBDocument#canonical_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and the first frame lands on the saved page in dynamic mode once pagination completes. Annotation popup input now validates DI wiring (`UIController#activate_annotation_editor_overlay_session`) and an integration spec asserts that `:annotation_editor` remains at the top of the dispatcher stack so reader bindings cannot leak back in.
 
 ## Phase 1: Infrastructure Foundation ✅ COMPLETE
 
@@ -60,7 +60,7 @@
 - [x] Extract UIController (mode switching, overlays)  
 - [x] Extract InputController (key handling consolidation)
 - [x] Extract StateController (state updates and persistence)
-- [x] Keep ReaderController primarily as a coordinator (currently 676 LOC in the class body as of this audit); further slimming is required by moving startup/pagination orchestration fully into Application/Domain services.
+- [x] Keep ReaderController primarily as a coordinator (currently ~762 LOC in the class body as of this audit); further slimming is required by moving startup/pagination orchestration fully into Application/Domain services.
 
 ### 3.2 Input System Unification ✅ COMPLETE
 **Issue Resolved**: All core navigation uses Domain Commands, specialized modes retain existing patterns
@@ -172,9 +172,9 @@ Goal: Instant subsequent opens by avoiding ZIP inflation and OPF parsing; cache-
 - [x] `TerminalService` and `WrappingService` are singletons to stabilize lifecycle and share caches
 - [x] Removed synchronous pagination prepopulation on cached pagination load; cached books open instantly with lazy page-line population.
 
-### 5.7 Remaining Latency Risk (to address) 🔶 OPEN
-- [ ] Prefetch size configurability: expose `config.prefetch_pages` (default 20) and honor it in `ReaderController#wrapped_window_for`.
-- [ ] Window cache memory: add a small LRU or cap per chapter/width to bound growth during long sessions.
+### 5.7 Latency Risk Follow-ups ✅ VERIFIED
+- [x] Prefetch size configurability: `WrappingService#fetch_window_and_prefetch` uses `config.prefetch_pages` (default 20) from `StateStore` (`lib/ebook_reader/infrastructure/state_store.rb:205-214`).
+- [x] Window cache memory: `WrappingService::WINDOW_CACHE_LIMIT` (200) bounds cached windows per chapter/width (`lib/ebook_reader/domain/services/wrapping_service.rb:18-21,162-191`).
 
 ## Code Duplication Elimination (moved)
 
@@ -234,7 +234,10 @@ Tracking for code duplication has moved to `RUBOCOP_OFFENSES_REFACTOR_ROADMAP.md
 18. ✅ **Repositories Backed by Domain Stores** - Bookmark/Progress/Annotation repositories persist via domain file stores (no direct managers/stores in components/controllers).
 
 **Remaining:**
-- 🔶 Renderer/controller decoupling incomplete: sidebar renderers still depend on ReaderController accessors for state/doc; needs DI-driven context.
+- ✅ Renderer/controller decoupling complete: sidebar renderers resolve state/doc via injected dependencies (e.g., `Sidebar::TocTabRenderer`, `Sidebar::BookmarksTabRenderer`).
+- ✅ **Annotations Overlay Integration** - Popup editor now runs in-modal: dispatcher pushes `:annotation_editor`, `Application::AnnotationEditorOverlaySession` adapts the overlay to domain commands, and reader mode remains active without leaking quit bindings.
+  - 2024-10: Hardened `UIController#activate_annotation_editor_overlay_session` to fail fast when DI wiring is missing and added an integration spec asserting that the dispatcher stack keeps `:annotation_editor` on top while the modal is active.
+  - 2024-11: Overlay viewport mirrors the full-screen editor (cursor-relative scrolling, top-left anchoring, snippet preview) so rendering stays consistent and the popup no longer bottom-aligns content or floods the frame background.
 1. ✅ HIGH: DI consistency in renderers (single source of services)
    - Implemented: `ViewRendererFactory` passes `controller.dependencies`; `BaseViewRenderer` now requires dependencies (no ad-hoc containers). Also switched rendered_lines to one-shot dispatch per frame from `BaseViewRenderer`.
 2. ✅ HIGH: Remove unused legacy UI scaffolding
@@ -257,6 +260,7 @@ Tracking for code duplication has moved to `RUBOCOP_OFFENSES_REFACTOR_ROADMAP.md
 ## Verification Notes (Claims Re‑checked)
 
 - Phase 2.1 Service Layer Consolidation: Verified no legacy wrappers under `lib/ebook_reader/services/` for coordinate/clipboard/layout; `chapter_cache.rb` remains as an internal helper for `WrappingService`; `LibraryScanner` moved to `infrastructure/` and registered via DI.
+- Test harness: `spec/domain/services/terminal_service_session_spec.rb` now stubs `Terminal.setup/cleanup` via `mock_terminal` so running the suite no longer leaves the shell in the alternate screen.
 - Phase 2.2 State System Unification: No `GlobalState` class in codebase; `:global_state` DI key resolves to `ObserverStateStore`. Some comments still mention “GlobalState”; update docs/comments only.
 - Phase 3.1 ReaderController Decomposition: Done; controllers exist (`ui/state/input`). No dedicated `NavigationController` — input routes to `Domain::NavigationService`.
 - Phase 3.2 Input System Unification: Reader navigation keys route through `DomainCommandBridge` and domain commands (verified in `Input::CommandFactory`, `Input::Commands`).

@@ -21,12 +21,14 @@ module EbookReader
           command.execute(context, params)
         when Symbol
           # Route all symbols through domain command bridge
-          return :pass unless DomainCommandBridge.domain_command?(command)
+          if DomainCommandBridge.domain_command?(command)
+            domain_command = DomainCommandBridge.symbol_to_command(command, context)
+            return :pass unless domain_command
 
-          domain_command = DomainCommandBridge.symbol_to_command(command, context)
-          return :pass unless domain_command
-
-          execute(domain_command, context, key)
+            execute(domain_command, context, key)
+          else
+            execute_symbol(command, context, key)
+          end
         when Proc
           ar = command.arity
           ar_abs = ar.abs
@@ -42,6 +44,15 @@ module EbookReader
         else
           :pass
         end
+      end
+
+      def execute_symbol(command, context, key)
+        return :pass unless context.respond_to?(command)
+
+        method = context.method(command)
+        return context.public_send(command) if method.arity.zero?
+
+        context.public_send(command, key)
       end
 
     end

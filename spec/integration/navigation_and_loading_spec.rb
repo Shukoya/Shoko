@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
 require 'rspec'
+require 'ebook_reader'
+require 'ebook_reader/constants'
 
 RSpec.describe 'Navigation and loading integration' do
   let(:container) { EbookReader::Domain::ContainerFactory.create_default_container }
   let(:state)     { container.resolve(:global_state) }
+  let(:layout_service) { container.resolve(:layout_service) }
 
   def set_absolute_mode!
     state.update({ %i[config page_numbering_mode] => :absolute,
@@ -15,28 +18,41 @@ RSpec.describe 'Navigation and loading integration' do
     state.update({ %i[reader current_chapter] => 0,
                    %i[reader single_page] => 0,
                    %i[reader left_page] => 0,
-                   %i[reader right_page] => 1,
+                   %i[reader right_page] => lines_for(:split),
                    %i[reader page_map] => page_map,
                    %i[reader total_pages] => page_map.sum,
                    %i[reader total_chapters] => chapters })
   end
 
+  def lines_for(view_mode)
+    width  = state.get(%i[ui terminal_width]) || 80
+    height = state.get(%i[ui terminal_height]) || 24
+    _, content_height = layout_service.calculate_metrics(width, height, view_mode)
+    spacing = state.get(%i[config line_spacing]) || EbookReader::Constants::DEFAULT_LINE_SPACING
+    layout_service.adjust_for_line_spacing(content_height, spacing)
+  end
+
   context 'NavigationService in absolute mode' do
     before do
       set_absolute_mode!
+      state.update({ %i[ui terminal_width] => 100,
+                     %i[ui terminal_height] => 30,
+                     %i[config line_spacing] => :compact })
       prime_book_state(chapters: 3, page_map: [2, 1, 3])
     end
+
+    let(:single_stride) { lines_for(:single) }
 
     it 'advances next_page within a chapter' do
       nav = EbookReader::Domain::Services::NavigationService.new(container)
       nav.next_page
-      expect(state.get(%i[reader single_page])).to eq(1)
+      expect(state.get(%i[reader single_page])).to eq(single_stride)
       expect(state.get(%i[reader current_chapter])).to eq(0)
     end
 
     it 'rolls over to next chapter at end of chapter' do
       # At terminal page value (page count)
-      state.update({ %i[reader single_page] => 2 })
+      state.update({ %i[reader single_page] => single_stride })
       nav = EbookReader::Domain::Services::NavigationService.new(container)
       nav.next_page
       expect(state.get(%i[reader current_chapter])).to eq(1)
@@ -48,16 +64,27 @@ RSpec.describe 'Navigation and loading integration' do
       nav = EbookReader::Domain::Services::NavigationService.new(container)
       nav.prev_page
       expect(state.get(%i[reader current_chapter])).to eq(0)
-      # Service uses page counts as terminal page value (not zero-based index)
-      expect(state.get(%i[reader single_page])).to eq(2)
+      expect(state.get(%i[reader single_page])).to eq(single_stride)
     end
 
     it 'go_to_end lands on last chapter and last page' do
       nav = EbookReader::Domain::Services::NavigationService.new(container)
       nav.go_to_end
       expect(state.get(%i[reader current_chapter])).to eq(2)
-      # Last page equals page count for the chapter (3)
-      expect(state.get(%i[reader single_page])).to eq(3)
+      expected_offset = (3 - 1) * single_stride
+      expect(state.get(%i[reader single_page])).to eq(expected_offset)
+    end
+
+    it 'advances split-view pages by column stride' do
+      state.update({ %i[config view_mode] => :split,
+                     %i[reader left_page] => 0,
+                     %i[reader right_page] => lines_for(:split) })
+
+      nav = EbookReader::Domain::Services::NavigationService.new(container)
+      nav.next_page
+
+      expect(state.get(%i[reader left_page])).to eq(lines_for(:split))
+      expect(state.get(%i[reader right_page])).to eq(lines_for(:split) * 2)
     end
   end
 

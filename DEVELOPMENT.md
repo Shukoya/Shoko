@@ -53,7 +53,7 @@ reader/
 ├── bin/                         # Executables (rspec, rubocop, ebook_reader, etc.)
 ├── lib/
 │   └── ebook_reader/
-│       ├── annotations/         # Mouse helpers, popup components, annotation utilities
+│       ├── annotations/         # Reader mouse helpers for selection/coordinates
 │       ├── application/         # Orchestrators (UnifiedApplication, frame/pagination coordination)
 │       ├── builders/            # Page/setup builders shared across layers
 │       ├── components/          # Presentation components (screens, reading, sidebar, overlays)
@@ -62,7 +62,7 @@ reader/
 │       ├── helpers/             # EPUB/HTML/text helpers and processors
 │       ├── infrastructure/      # Event bus, logger, state stores, document service, caches
 │       ├── input/               # Dispatcher, key definitions, command builders, bindings
-│       ├── main_menu/           # Menu-specific actions, screens, presenters
+│       ├── main_menu/           # Menu actions and presenters (screens live under components/)
 │       ├── models/              # Shared data/value objects (contexts, view models)
 │       ├── ui/                  # View models and UI metadata
 │       ├── validators/          # File and terminal validation

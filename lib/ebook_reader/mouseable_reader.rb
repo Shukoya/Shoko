@@ -62,6 +62,12 @@ module EbookReader
       event = @mouse_handler.parse_mouse_event(input)
       return unless event
 
+      editor_overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotation_editor_overlay(@state)
+      if editor_overlay&.respond_to?(:visible?) && editor_overlay.visible? && event[:released]
+        handle_annotation_editor_click(event)
+        return
+      end
+
       popup_menu = EbookReader::Domain::Selectors::ReaderSelectors.popup_menu(@state)
       if popup_menu&.visible && event[:released]
         handle_popup_click(event)
@@ -100,6 +106,23 @@ module EbookReader
         @mouse_handler.reset
         @state.dispatch(Domain::Actions::ClearSelectionAction.new)
       end
+      draw_screen
+    end
+
+    def handle_annotation_editor_click(event)
+      coords = @coordinate_service.mouse_to_terminal(event[:x], event[:y])
+      overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotation_editor_overlay(@state)
+      return unless overlay
+
+      result = overlay.handle_click(coords[:x], coords[:y])
+      if result
+        ui = @dependencies.resolve(:ui_controller)
+        if ui.respond_to?(:handle_annotation_editor_overlay_event, true)
+          ui.send(:handle_annotation_editor_overlay_event, result)
+        end
+      end
+      @mouse_handler.reset
+    ensure
       draw_screen
     end
 

@@ -16,7 +16,9 @@ module EbookReader
     end
 
     def start_frame
-      @buffer = [TerminalOutput::ANSI::Control::CLEAR, TerminalOutput::ANSI::Control::HOME]
+      @buffer = [TerminalOutput::ANSI::RESET,
+                 TerminalOutput::ANSI::Control::CLEAR,
+                 TerminalOutput::ANSI::Control::HOME]
     end
 
     def end_frame

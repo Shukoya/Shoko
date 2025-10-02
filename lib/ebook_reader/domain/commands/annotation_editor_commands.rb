@@ -26,10 +26,12 @@ module EbookReader
 
           case @action
           when :save
-            mode&.save_annotation
+            return :handled if dispatch_to_mode(mode, :save_annotation)
           when :cancel
             # Reader: cleanup + back to read; Menu: back to annotations
-            if ui
+            if dispatch_to_mode(mode, :cancel_annotation)
+              # Mode handled the cancel path completely
+            elsif ui
               begin
                 ui.cleanup_popup_state
               rescue StandardError
@@ -49,19 +51,28 @@ module EbookReader
               end
             end
           when :backspace
-            mode&.handle_backspace
+            return :handled if dispatch_to_mode(mode, :handle_backspace)
           when :enter
-            mode&.handle_enter
+            return :handled if dispatch_to_mode(mode, :handle_enter)
           when :insert_char
             ch = (params[:key] || '').to_s
             return :pass if ch.empty?
 
-            mode&.handle_character(ch)
+            return :handled if dispatch_to_mode(mode, :handle_character, ch)
           else
             return :pass
           end
 
           :handled
+        end
+
+        private
+
+        def dispatch_to_mode(mode, method, *args)
+          return false unless mode&.respond_to?(method)
+
+          mode.public_send(method, *args)
+          true
         end
       end
 

@@ -16,41 +16,27 @@ module EbookReader
       end
 
       def preferred_height(_available_height)
-        1 # Fixed height header
+        1
       end
 
       def do_render(surface, bounds)
         return unless @view_model_provider
 
         view_model = @view_model_provider.call
-        render_header(surface, bounds, view_model)
+        return unless view_model&.respond_to?(:document_title)
+
+        render_centered_title(surface, bounds, view_model.document_title.to_s)
       end
 
       private
 
-      def render_header(surface, bounds, view_model)
+      def render_centered_title(surface, bounds, title)
+        return if title.empty?
+
+        reset = Terminal::ANSI::RESET
         width = bounds.width
-
-        if view_model.view_mode == :single && view_model.mode == :read
-          render_single_view_header(surface, bounds, view_model, width)
-        else
-          render_default_header(surface, bounds, width)
-        end
-      end
-
-      def render_single_view_header(surface, bounds, view_model, width)
-        reset = Terminal::ANSI::RESET
-        title_text = view_model.document_title.to_s
-        centered_col = [(width - title_text.length) / 2, 1].max
-        surface.write(bounds, 1, centered_col, "#{COLOR_TEXT_PRIMARY}#{title_text}#{reset}")
-      end
-
-      def render_default_header(surface, bounds, width)
-        reset = Terminal::ANSI::RESET
-        surface.write(bounds, 1, 1, "#{COLOR_TEXT_PRIMARY}Reader#{reset}")
-        right_text = 'q:Quit ?:Help t:ToC B:Bookmarks'
-        right_col = [width - right_text.length + 1, 1].max
-        surface.write(bounds, 1, right_col, "#{COLOR_TEXT_PRIMARY}#{right_text}#{reset}")
+        col = [(width - title.length) / 2, 1].max
+        surface.write(bounds, 1, col, "#{COLOR_TEXT_PRIMARY}#{title}#{reset}")
       end
     end
   end

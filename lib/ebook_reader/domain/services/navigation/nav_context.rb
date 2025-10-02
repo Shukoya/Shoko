@@ -15,11 +15,13 @@ module EbookReader
           :single_page,          # Integer (absolute single)
           :left_page,            # Integer (absolute split left)
           :right_page,           # Integer (absolute split right)
-          :max_page_in_chapter,  # Integer (absolute)
+          :max_page_in_chapter,  # Integer (absolute page count)
+          :lines_per_page,       # Integer (absolute single stride)
+          :column_lines_per_page, # Integer (absolute split stride)
+          :max_offset_in_chapter, # Integer (absolute last offset)
           keyword_init: true
         )
       end
     end
   end
 end
-

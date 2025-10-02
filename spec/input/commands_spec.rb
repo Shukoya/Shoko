@@ -4,7 +4,7 @@ require 'spec_helper'
 
 RSpec.describe EbookReader::Input::Commands do
   before do
-    allow(EbookReader::Input::DomainCommandBridge).to receive(:has_domain_command?).and_return(false)
+    allow(EbookReader::Input::DomainCommandBridge).to receive(:domain_command?).and_return(false)
   end
 
   it 'executes symbol methods with or without args' do

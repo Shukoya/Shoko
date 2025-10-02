@@ -129,6 +129,8 @@ require_relative 'ebook_reader/domain/actions/update_pagination_state_action'
 require_relative 'ebook_reader/domain/actions/update_reader_meta_action'
 require_relative 'ebook_reader/domain/actions/update_annotations_action'
 require_relative 'ebook_reader/domain/actions/update_menu_action'
+require_relative 'ebook_reader/domain/actions/update_annotations_overlay_action'
+require_relative 'ebook_reader/domain/actions/update_annotation_editor_overlay_action'
 require_relative 'ebook_reader/domain/actions/action_creators'
 
 # Domain selectors for state access
@@ -184,6 +186,7 @@ require_relative 'ebook_reader/components/screens/base_screen_component'
 require_relative 'ebook_reader/components/screens/menu_screen_component'
 require_relative 'ebook_reader/components/screens/annotation_detail_screen_component'
 require_relative 'ebook_reader/components/screens/annotation_editor_screen_component'
+require_relative 'ebook_reader/components/annotation_editor_overlay_component'
 
 # UI components
 require_relative 'ebook_reader/main_menu'

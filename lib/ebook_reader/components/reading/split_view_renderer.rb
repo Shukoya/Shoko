@@ -8,6 +8,10 @@ module EbookReader
       # Renderer for split-view (two-column) reading mode
       # Supports both dynamic and absolute page numbering modes
       class SplitViewRenderer < BaseViewRenderer
+        LEFT_MARGIN = 2
+        RIGHT_MARGIN = 2
+        COLUMN_GAP = 4
+
         def render_with_context(surface, bounds, context)
           if context.page_numbering_mode == :dynamic
             render_dynamic_mode_with_context(surface, bounds, context)
@@ -29,33 +33,40 @@ module EbookReader
         # Context-based rendering methods
         def render_dynamic_mode_with_context(surface, bounds, context)
           page_calculator = context.page_calculator
-          col_width, _, _, displayable = compute_layout(bounds, :split,
-                                                        context.config)
+          layout = split_layout(bounds, context.config)
+          col_width = layout[:col_width]
+          displayable = layout[:displayable]
+          left_start = layout[:left_start]
+          right_start = layout[:right_start]
+          divider_param = layout[:divider_param]
 
           chapter = context.current_chapter
           render_chapter_header_with_context(surface, bounds, context.state, chapter) if chapter
 
           idx = context.current_page_index
           if page_calculator && (left_pd = page_calculator.get_page(idx))
-            render_dynamic_from_page_data(surface, bounds, context, col_width, left_pd,
+            render_dynamic_from_page_data(surface, bounds, context, col_width, left_start,
+                                          right_start, divider_param, left_pd,
                                           page_calculator.get_page(idx + 1))
             return
           end
 
           # Fallback when dynamic map not ready yet
           base_offset = (idx || 0) * [displayable, 1].max
-          render_dynamic_fallback(surface, bounds, context, col_width, base_offset, displayable)
+          render_dynamic_fallback(surface, bounds, context, col_width, left_start,
+                                  right_start, divider_param, base_offset, displayable)
         end
 
         def render_absolute_mode_with_context(surface, bounds, context)
           chapter = context.current_chapter
           return unless chapter
 
-          bw = bounds.width
-          bh = bounds.height
-          col_width, content_height = layout_metrics(bw, bh, :split)
-          spacing = resolve_line_spacing(context.config)
-          display_height = adjust_for_line_spacing(content_height, spacing)
+          layout = split_layout(bounds, context.config)
+          col_width = layout[:col_width]
+          display_height = layout[:displayable]
+          left_start = layout[:left_start]
+          right_start = layout[:right_start]
+          divider_param = layout[:divider_param]
 
           st = context&.state
           return unless st
@@ -65,7 +76,9 @@ module EbookReader
           # Render components
           render_chapter_header_with_context(surface, bounds, st, chapter)
           col = ColumnContext.new(col_width: col_width, display_height: display_height,
-                                  left_offset: left_offset, right_offset: right_offset)
+                                  left_offset: left_offset, right_offset: right_offset,
+                                  left_start: left_start, right_start: right_start,
+                                  divider_param: divider_param)
           render_absolute_columns(surface, bounds, context, col)
         end
 
@@ -73,67 +86,73 @@ module EbookReader
           idx = st.get(%i[reader current_chapter]) + 1
           info = "[#{idx}] #{chapter.title || 'Unknown'}"
           reset = Terminal::ANSI::RESET
-          surface.write(bounds, 1, 1,
-                        EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + info[0, bounds.width - 2].to_s + reset)
+          header_col = bounds.x + LEFT_MARGIN
+          available = bounds.width - LEFT_MARGIN - RIGHT_MARGIN
+          surface.write(bounds, 1, header_col,
+                        EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + info[0, available].to_s + reset)
         end
 
-        def render_dynamic_left_column_with_context(surface, bounds, lines, col_width,
-                                                    context)
-          render_column_lines(surface, bounds, lines, 1, col_width, context)
-        end
-
-        def render_dynamic_right_column_with_context(surface, bounds, lines, col_width,
-                                                     context)
-          render_column_lines(surface, bounds, lines, col_width + 5, col_width, context)
-        end
-
-        def render_left_column_with_context(surface, bounds, wrapped, st, col_width,
-                                            display_height)
-          left_lines = wrapped.slice(st.get(%i[reader left_page]) || 0,
-                                     display_height) || []
-          render_column_lines(surface, bounds, left_lines, 1, col_width, nil)
-        end
-
-        def render_right_column_with_context(surface, bounds, wrapped, st, col_width,
-                                             display_height)
-          right_lines = wrapped.slice(st.get(%i[reader right_page]) || 0,
-                                      display_height) || []
-          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width, nil)
-        end
-
-        def render_dynamic_from_page_data(surface, bounds, context, col_width, left_pd, right_pd)
-          render_column_lines(surface, bounds, left_pd[:lines], 1, col_width, context)
-          draw_divider(surface, bounds, col_width)
+        def render_dynamic_from_page_data(surface, bounds, context, col_width, left_start,
+                                          right_start, divider_param, left_pd, right_pd)
+          render_column_lines(surface, bounds, left_pd[:lines], left_start, col_width, context)
+          draw_divider(surface, bounds, divider_param)
           return unless right_pd
 
-          render_column_lines(surface, bounds, right_pd[:lines], col_width + 5, col_width, context)
+          render_column_lines(surface, bounds, right_pd[:lines], right_start, col_width, context)
         end
 
-        def render_dynamic_fallback(surface, bounds, context, col_width, base_offset, displayable)
+        def render_dynamic_fallback(surface, bounds, context, col_width, left_start,
+                                    right_start, divider_param, base_offset, displayable)
           left_lines = fetch_wrapped_lines(context, col_width, base_offset, displayable)
-          render_column_lines(surface, bounds, left_lines, 1, col_width, context)
-          draw_divider(surface, bounds, col_width)
+          render_column_lines(surface, bounds, left_lines, left_start, col_width, context)
+          draw_divider(surface, bounds, divider_param)
           right_lines = fetch_wrapped_lines(context, col_width, base_offset + displayable,
                                             displayable)
-          render_column_lines(surface, bounds, right_lines, col_width + 5, col_width, context)
+          render_column_lines(surface, bounds, right_lines, right_start, col_width, context)
         end
 
-        ColumnContext = Struct.new(:col_width, :display_height, :left_offset, :right_offset, keyword_init: true)
+        ColumnContext = Struct.new(:col_width, :display_height, :left_offset, :right_offset,
+                                   :left_start, :right_start, :divider_param, keyword_init: true)
 
         def render_absolute_columns(surface, bounds, context, col)
           cw = col.col_width
           dh = col.display_height
           left_lines = fetch_wrapped_lines(context, cw, col.left_offset, dh)
-          render_column_lines(surface, bounds, left_lines, 1, cw, context)
-          draw_divider(surface, bounds, cw)
+          render_column_lines(surface, bounds, left_lines, col.left_start, cw, context)
+          draw_divider(surface, bounds, col.divider_param)
           right_lines = fetch_wrapped_lines(context, cw, col.right_offset, dh)
-          render_column_lines(surface, bounds, right_lines, cw + 5, cw, context)
+          render_column_lines(surface, bounds, right_lines, col.right_start, cw, context)
         end
 
         def fetch_wrapped_lines(context, col_width, offset, length)
           st = context.state
           chapter_index = st.get(%i[reader current_chapter]) || 0
           super(context.document, chapter_index, col_width, offset, length)
+        end
+
+        def split_layout(bounds, config)
+          total_width = bounds.width
+          content_height = [bounds.height - 2, 1].max
+          spacing = resolve_line_spacing(config)
+          displayable = adjust_for_line_spacing(content_height, spacing)
+
+          usable_width = total_width - LEFT_MARGIN - RIGHT_MARGIN
+          usable_width = [usable_width, 40].max
+          col_width = [(usable_width - COLUMN_GAP) / 2, 20].max
+
+          left_start = bounds.x + LEFT_MARGIN
+          right_start = left_start + col_width + COLUMN_GAP
+          divider_param = col_width + left_start - 2
+
+          {
+            col_width: col_width,
+            content_height: content_height,
+            spacing: spacing,
+            displayable: displayable,
+            left_start: left_start,
+            right_start: right_start,
+            divider_param: divider_param,
+          }
         end
       end
     end

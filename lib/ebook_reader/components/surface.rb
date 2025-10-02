@@ -8,6 +8,7 @@ module EbookReader
     class Surface
       def initialize(output = Terminal)
         @output = output
+        @style_stack = []
       end
 
       # Write text at local (row, col) relative to bounds
@@ -30,6 +31,7 @@ module EbookReader
 
         max_width = b_right - abs_col + 1
         clipped = text.to_s[0, max_width]
+        clipped = apply_dim(clipped) if dimmed?
         return if clipped.nil? || clipped.empty?
 
         @output.write(abs_row, abs_col, clipped)
@@ -43,6 +45,28 @@ module EbookReader
         (0...h).each do |r|
           write(bounds, r + 1, 1, line)
         end
+      end
+
+      def with_dimmed
+        @style_stack << :dim
+        yield
+      ensure
+        @style_stack.pop
+      end
+
+      private
+
+      def dimmed?
+        @style_stack.include?(:dim)
+      end
+
+      def apply_dim(text)
+        dim = Terminal::ANSI::DIM
+        reset = Terminal::ANSI::RESET
+        return text if text.empty?
+
+        transformed = text.gsub(reset, "#{reset}#{dim}")
+        "#{dim}#{transformed}#{reset}"
       end
     end
   end

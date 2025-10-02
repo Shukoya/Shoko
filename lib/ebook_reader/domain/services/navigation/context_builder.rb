@@ -27,7 +27,10 @@ module EbookReader
               single_page: ContextHelpers.single_page(snapshot),
               left_page: ContextHelpers.left_page(snapshot),
               right_page: ContextHelpers.right_page(snapshot),
-              max_page_in_chapter: 0
+              max_page_in_chapter: 0,
+              lines_per_page: 0,
+              column_lines_per_page: 0,
+              max_offset_in_chapter: 0
             )
           end
 

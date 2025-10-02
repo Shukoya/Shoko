@@ -16,6 +16,7 @@ require_relative 'components/footer_component'
 require_relative 'components/tooltip_overlay_component'
 require_relative 'components/screens/loading_overlay_component'
 require_relative 'components/sidebar_panel_component'
+require_relative 'application/annotation_editor_overlay_session'
 require_relative 'input/dispatcher'
 require_relative 'application/frame_coordinator'
 require_relative 'application/render_pipeline'
@@ -76,7 +77,9 @@ module EbookReader
       @dependencies.register(:background_worker, @background_worker)
 
       # Load document before creating controllers that depend on it
-      load_document
+      @doc = preload_document_from_dependencies
+      reset_navigable_toc_cache! if @doc
+      load_document unless @doc
       # Expose current book path in state for downstream services/screens
       @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(book_path: @path))
 
@@ -155,6 +158,8 @@ module EbookReader
     def draw_screen
       height, width = @terminal_service.size
 
+      tick_notifications
+
       # Update page maps on resize
       if size_changed?(width, height)
         refresh_page_map(width, height) unless @defer_page_map
@@ -216,8 +221,12 @@ module EbookReader
         next if keys.empty?
 
         # Intercept keys for popup menu if visible
+        overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotations_overlay(@state)
         popup_menu = EbookReader::Domain::Selectors::ReaderSelectors.popup_menu(@state)
-        if popup_menu&.visible
+        editor_overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotation_editor_overlay(@state)
+        if overlay&.respond_to?(:visible?) && overlay.visible? && !(editor_overlay&.respond_to?(:visible?) && editor_overlay.visible?)
+          @input_controller.handle_annotations_overlay_input(keys)
+        elsif popup_menu&.visible
           @input_controller.handle_popup_menu_input(keys)
         else
           keys.each { |k| @input_controller.handle_key(k) }
@@ -415,10 +424,34 @@ module EbookReader
 
     private
 
+    def preload_document_from_dependencies
+      return nil unless @dependencies.respond_to?(:registered?) && @dependencies.registered?(:document)
+
+      @dependencies.resolve(:document)
+    rescue StandardError
+      nil
+    end
+
+    def tick_notifications
+      resolve_notification_service&.tick(@state)
+    end
+
+    def resolve_notification_service
+      return @notification_service if defined?(@notification_service)
+
+      @notification_service = begin
+        @dependencies.resolve(:notification_service)
+      rescue StandardError
+        nil
+      end
+    end
+
     # Expose controlled flag setters for the orchestrator
     attr_writer :defer_page_map
 
     def load_document
+      return @doc if @doc
+
       factory = @dependencies.resolve(:document_service_factory)
       document_service = factory.call(@path)
       @doc = document_service.load_document
@@ -434,6 +467,7 @@ module EbookReader
       rescue StandardError
         # best-effort
       end
+      @doc
     end
 
     def load_data
@@ -464,21 +498,18 @@ module EbookReader
         if edit_flag && ann
           ann_text = ann[:text] || ann['text']
           ann_range = ann[:range] || ann['range']
-          ann_id = ann[:id] || ann['id']
-          ann_note = ann[:note] || ann['note']
           ann_chapter = ann[:chapter_index] || ann['chapter_index']
-          # Switch to annotation editor with existing annotation payload
-          @ui_controller.switch_mode(:annotation_editor,
-                                     text: ann_text,
-                                     range: ann_range,
-                                     annotation: {
-                                       'id' => ann_id,
-                                       'text' => ann_text,
-                                       'note' => ann_note,
-                                       'chapter_index' => ann_chapter,
-                                       'range' => ann_range,
-                                     },
-                                     chapter_index: chapter_index)
+          normalized = {
+            id: ann[:id] || ann['id'],
+            text: ann_text,
+            note: ann[:note] || ann['note'],
+            chapter_index: ann_chapter,
+            range: ann_range,
+          }
+          @ui_controller.open_annotation_editor_overlay(text: ann_text,
+                                                        range: ann_range,
+                                                        chapter_index: chapter_index,
+                                                        annotation: normalized)
         end
       ensure
         @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_jump: nil))
@@ -687,6 +718,23 @@ module EbookReader
       # no-op in base controller
     end
 
+    def activate_annotation_editor_overlay_session
+      @overlay_session ||= EbookReader::Application::AnnotationEditorOverlaySession.new(@state,
+                                                                                       @dependencies,
+                                                                                       @ui_controller)
+    end
+
+    def deactivate_annotation_editor_overlay_session
+      @overlay_session = nil
+    end
+
+    def current_editor_component
+      return @overlay_session if @overlay_session&.active?
+
+      deactivate_annotation_editor_overlay_session
+      @ui_controller.current_mode
+    end
+
     # Ensure both UI state and any local selection handlers are cleared
     def cleanup_popup_state
       @ui_controller.cleanup_popup_state
@@ -706,5 +754,9 @@ module EbookReader
     def background_worker
       @background_worker
     end
+
+    public :activate_annotation_editor_overlay_session,
+           :deactivate_annotation_editor_overlay_session,
+           :current_editor_component
   end
 end

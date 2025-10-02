@@ -31,7 +31,7 @@ A fast, keyboard-driven terminal EPUB reader written in Ruby.
 ### Via RubyGems
 
 ```bash
-gem install Reader
+gem install reader
 ```
 
 ### Via Bundler
@@ -39,7 +39,7 @@ gem install Reader
 Add to your Gemfile:
 
 ```ruby
-gem 'Reader'
+gem 'reader'
 ```
 
 Then run:
@@ -136,7 +136,8 @@ Configuration is stored in `~/.config/reader/config.json`:
 ### Configuration Options
 
 - **view_mode**: `"split"` or `"single"` - Default reading view
-- **theme**: `"dark"` or `"light"` - Color theme (currently dark only)
+- **theme**: `"dark"` (default) or one of `default`, `gray`, `sepia`, `grass`, `cherry`, `sky`,
+  `solarized`, `gruvbox`, `nord` – selects the active color palette
 - **show_page_numbers**: `true` or `false` - Display page numbers
 - **line_spacing**: `"compact"` (tight), `"normal"` (moderate spacing), or `"relaxed"` (double spacing); default `compact`
 - **highlight_quotes**: `true` or `false` - Highlight quoted text

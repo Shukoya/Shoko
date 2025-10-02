@@ -222,6 +222,7 @@ module EbookReader
       end
 
       def draw_screen
+        notification_service&.tick(@state)
         @frame_coordinator.with_frame do |surface, bounds, _w, _h|
           @render_pipeline.render_component(surface, bounds, @main_menu_component)
         end
@@ -264,6 +265,14 @@ module EbookReader
           nil
         end
         recent_repository ? recent_repository.all : []
+      end
+
+      def notification_service
+        @notification_service ||= begin
+          @dependencies.resolve(:notification_service)
+        rescue StandardError
+          nil
+        end
       end
 
       def handle_dialog_error(error)

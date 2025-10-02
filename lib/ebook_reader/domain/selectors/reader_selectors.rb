@@ -125,6 +125,14 @@ module EbookReader
           state.get(%i[reader popup_menu])
         end
 
+        def self.annotations_overlay(state)
+          state.get(%i[reader annotations_overlay])
+        end
+
+        def self.annotation_editor_overlay(state)
+          state.get(%i[reader annotation_editor_overlay])
+        end
+
         # Sidebar selectors
         def self.sidebar_visible(state)
           state.get(%i[reader sidebar_visible])

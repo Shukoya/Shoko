@@ -9,138 +9,110 @@ module EbookReader
       def initialize(view_model_provider = nil)
         super()
         @view_model_provider = view_model_provider
+        @cached_view_model = nil
       end
 
       def preferred_height(_available_height)
-        2 # Fixed height footer
+        vm = resolve_view_model
+        return 0 unless vm
+
+        height = 0
+        height = 1 if renderable_page_info?(vm)
+        height += 1 if message_present?(vm)
+        height
       end
 
       def do_render(surface, bounds)
-        return unless @view_model_provider
+        vm = resolve_view_model
+        return unless vm
 
-        view_model = @view_model_provider.call
-        render_footer(surface, bounds, view_model)
+        page_rows = renderable_page_info?(vm) ? 1 : 0
+        if page_rows.positive?
+          page_row = [bounds.height - (message_present?(vm) ? 1 : 0), 1].max
+          render_page_info(surface, bounds, vm, page_row)
+        end
+
+        render_message_overlay(surface, bounds, vm) if message_present?(vm)
+      ensure
+        @cached_view_model = nil
       end
 
       private
 
-      def render_footer(surface, bounds, view_model)
-        vm = view_model
-        vm_mode = vm.mode
-        vm_view = vm.view_mode
-        read_mode = (vm_mode == :read)
-        if vm_view == :single && read_mode
-          render_single_mode_footer(surface, bounds, vm)
-        elsif vm_view == :split && read_mode
-          render_split_mode_footer(surface, bounds, vm)
+      def resolve_view_model
+        return nil unless @view_model_provider
+
+        @cached_view_model ||= @view_model_provider.call
+      rescue StandardError
+        nil
+      end
+
+      def message_present?(view_model)
+        msg = view_model&.message
+        msg && !msg.to_s.empty?
+      end
+
+      def renderable_page_info?(view_model)
+        disallowed_modes = %i[help toc bookmarks]
+        return false if view_model.respond_to?(:mode) && disallowed_modes.include?(view_model.mode)
+        return false unless view_model.respond_to?(:show_page_numbers) && view_model.show_page_numbers
+
+        info = view_model.page_info
+        info && !info.empty?
+      end
+
+      def render_page_info(surface, bounds, view_model, row)
+        ui = EbookReader::Constants::UIConstants
+        width = bounds.width
+        info = view_model.page_info
+
+        if view_model.view_mode == :split && info[:left]
+          render_split_page_info(surface, bounds, info, width, row, ui)
         else
-          render_default_footer(surface, bounds, vm)
+          render_single_page_info(surface, bounds, info, width, row, ui)
         end
-
-        render_message_overlay(surface, bounds, vm)
       end
 
-      def render_single_mode_footer(surface, bounds, view_model)
-        ui = EbookReader::Constants::UIConstants
-        width = bounds.width
-        height = bounds.height
-        return unless view_model.show_page_numbers
+      def render_single_page_info(surface, bounds, info, width, row, ui)
+        current = info[:current].to_i
+        total = info[:total].to_i
+        return if current.zero? && total.zero?
 
-        pinfo = view_model.page_info
-        current = pinfo[:current].to_i
-        total = pinfo[:total].to_i
-        return if current <= 0 && total <= 0
-
-        page_text = page_label(current, total)
-        centered_col = center_col(width, page_text.length)
-        write_colored(surface, bounds, height, centered_col,
-                      page_text,
-                      ui::COLOR_TEXT_DIM + ui::COLOR_TEXT_SECONDARY)
+        label = page_label(current, total)
+        col = center_col(width, label.length)
+        write_colored(surface, bounds, row, col, label, ui::COLOR_TEXT_DIM + ui::COLOR_TEXT_SECONDARY)
       end
 
-      def render_split_mode_footer(surface, bounds, view_model)
-        ui = EbookReader::Constants::UIConstants
-        width = bounds.width
-        height = bounds.height
-        page_info = view_model.page_info
-        left = page_info[:left]
-        return unless view_model.show_page_numbers && left
+      def render_split_page_info(surface, bounds, info, width, row, ui)
+        left = info[:left]
+        right = info[:right]
+        return unless left
 
-        left_current = left[:current].to_i
-        left_total = left[:total].to_i
-        return if left_current <= 0 && left_total <= 0
+        dim_secondary = ui::COLOR_TEXT_DIM + ui::COLOR_TEXT_SECONDARY
 
-        # Left page number
-        left_text = page_label(left_current, left_total)
-        left_col = quarter_center_col(width, left_text.length, :left)
-        dim_secondary = EbookReader::Constants::UIConstants::COLOR_TEXT_DIM + EbookReader::Constants::UIConstants::COLOR_TEXT_SECONDARY
-        write_colored(surface, bounds, height, left_col, left_text, dim_secondary)
+        left_label = page_label(left[:current].to_i, left[:total].to_i)
+        left_col = quarter_center_col(width, left_label.length, :left)
+        write_colored(surface, bounds, row, left_col, left_label, dim_secondary) unless left_label.empty?
 
-        # Right page number
-        right = page_info[:right]
-        return unless right
-
-        right_current = right[:current].to_i
-        right_total = right[:total].to_i
-        right_text = page_label(right_current, right_total)
-        right_col = quarter_center_col(width, right_text.length, :right)
-        write_colored(surface, bounds, height, right_col, right_text, dim_secondary)
-      end
-
-      def render_default_footer(surface, bounds, view_model)
-        ui = EbookReader::Constants::UIConstants
-        width = bounds.width
-        height = bounds.height
-        row1 = [height - 1, 1].max
-
-        # Progress left
-        left_prog = "[#{view_model.current_chapter + 1}/#{view_model.total_chapters}]"
-        write_colored(surface, bounds, row1, 1,
-                      left_prog,
-                      ui::COLOR_TEXT_ACCENT)
-
-        # Mode center
-        mode_label = view_model.view_mode == :split ? '[SPLIT]' : '[SINGLE]'
-        page_mode = view_model.page_numbering_mode.to_s.upcase
-        mode_text = "#{mode_label} [#{page_mode}]"
-        write_colored(surface, bounds, row1, [(width / 2) - 10, 1].max,
-                      mode_text,
-                      ui::COLOR_TEXT_WARNING)
-
-        # Status right
-        right_prog = "L#{view_model.line_spacing.to_s[0]} B#{view_model.bookmarks.count}"
-        write_colored(surface, bounds, row1, [width - right_prog.length - 1, 1].max,
-                      right_prog,
-                      ui::COLOR_TEXT_ACCENT)
-
-        # Second line with doc metadata
-        return unless height >= 2
-
-        title_text = view_model.document_title[0, [width - 15, 0].max]
-        write_colored(surface, bounds, height, 1,
-                      "[#{title_text}]",
-                      ui::COLOR_TEXT_PRIMARY)
-        write_colored(surface, bounds, height, [width - 10, 1].max,
-                      "[#{view_model.language}]",
-                      ui::COLOR_TEXT_PRIMARY)
+        if right
+          right_label = page_label(right[:current].to_i, right[:total].to_i)
+          right_col = quarter_center_col(width, right_label.length, :right)
+          write_colored(surface, bounds, row, right_col, right_label, dim_secondary) unless right_label.empty?
+        end
       end
 
       def render_message_overlay(surface, bounds, view_model)
         ui = EbookReader::Constants::UIConstants
         width = bounds.width
-        height = bounds.height
-        msg = view_model.message
-        return unless msg && !msg.to_s.empty?
-
-        text = " #{msg} "
-        col = [(width - text.length) / 2, 1].max
-        mid_row = [(height / 2.0).ceil, 1].max
-        write_colored(surface, bounds, mid_row, col,
-                      text,
-                      ui::BG_PRIMARY + ui::BG_ACCENT)
+        message = " #{view_model.message} "
+        col = [(width - message.length) / 2, 1].max
+        row = bounds.height
+        surface.write(bounds, row, col,
+                      "#{ui::BG_PRIMARY}#{ui::BG_ACCENT}#{message}#{Terminal::ANSI::RESET}")
       end
 
       # ----- helpers -----
+
       def page_label(current, total)
         total.positive? ? "#{current} / #{total}" : "Page #{current}"
       end

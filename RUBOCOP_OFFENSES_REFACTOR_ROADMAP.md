@@ -1,34 +1,34 @@
 # RuboCop Offenses Refactor Roadmap
 
-Status audited: 2025-04-XX (updated)
+Status audited: 2025-09-14 (updated)
 
 Scope and counts
 - Scope: `lib/` only (matches how we enforce style in code, excludes `bin/` and `spec/`).
-- Offenses: 848 total across 121 files (`bundle exec rubocop lib --format offenses`; cache directory creation was skipped under sandbox permissions, but counts are accurate).
+- Offenses: 755 total across 121 files (`bundle exec rubocop lib --format offenses`; cache directory creation warnings were benign).
 - Top offense categories (count):
   - Metrics/MethodLength (107)
   - Metrics/AbcSize (82)
-  - Layout/IndentationConsistency (71) [Safe Correctable]
-  - Layout/IndentationWidth (55) [Safe Correctable]
   - Metrics/CyclomaticComplexity (55)
   - Metrics/PerceivedComplexity (50)
   - Naming/MethodParameterName (47)
   - Metrics/ParameterLists (40)
   - Style/Documentation (40)
   - Layout/EmptyLineAfterGuardClause (28) [Safe Correctable]
+  - Layout/IndentationConsistency (26) [Safe Correctable]
   - Layout/LineLength (22) [Safe Correctable]
   - Naming/AccessorMethodName (12)
   - Lint/RedundantSafeNavigation (11) [Unsafe Correctable]
+  - Layout/IndentationWidth (10) [Safe Correctable]
   - Lint/SuppressedException (10)
   - Metrics/ClassLength (10)
   - Naming/PredicatePrefix (9)
   - Layout/FirstHashElementIndentation (8) [Safe Correctable]
-  - Layout/HashAlignment (8) [Safe Correctable]
   - Naming/BlockForwarding (8) [Safe Correctable]
   - Naming/PredicateMethod (8)
   - Style/ArgumentsForwarding (8) [Safe Correctable]
   - Style/IfUnlessModifier (8) [Safe Correctable]
   - Style/TrailingCommaInArguments (8) [Safe Correctable]
+  - Layout/HashAlignment (7) [Safe Correctable]
   - Layout/TrailingEmptyLines (7) [Safe Correctable]
   - Lint/UselessConstantScoping (7)
 
@@ -88,9 +88,9 @@ Milestones and acceptance criteria
 - M7: State/Repo trims + docs. Offense delta: −20 to −30.
 
 Tracking (current)
-- Current snapshot (2025-04-XX): 848 offenses in lib (121 files). Spike comes from layout cops (indentation/argument alignment) introduced during the controller split; clearing those safe-correctable issues alone will remove ~160 violations.
+- Current snapshot (2025-09-14): 755 offenses in lib (121 files). Metrics cops dominate; clearing safe-correctable layout items would still remove roughly 120 violations.
 - Target (phase end): ≤ 100 offenses in lib (mainly long, inherently complex algorithms where extraction would add risk without benefit).
 
 Notes
-- The rubocop runs over the full repo currently report ~637 offenses (including `spec/` and binstubs). This roadmap focuses strictly on `lib/` as per project policy and to avoid churning test files/binstubs.
+- Full-repo counts were not re-sampled in this audit; prior (2025-04-XX) snapshot was ~637 offenses including `spec/` and binstubs. This roadmap continues to focus strictly on `lib/` as per project policy.
 - Any public API renames must ship with deprecation shims for at least one release.
