@@ -200,6 +200,8 @@ require_relative 'ebook_reader/init_annotations'
 
 # Test-only shims and coverage warmup
 if defined?(RSpec)
+  require_relative 'ebook_reader/test_support/test_mode'
+  EbookReader::TestSupport::TestMode.activate!
   require_relative 'ebook_reader/test_shims'
   EbookReader::TestShims.run!
   require_relative 'ebook_reader/test_coverage_warmup'

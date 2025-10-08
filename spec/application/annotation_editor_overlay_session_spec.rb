@@ -67,6 +67,9 @@ RSpec.describe EbookReader::Application::AnnotationEditorOverlaySession do
 
   before do
     ui_controller.current_book_path = '/books/test.epub'
+    allow(annotation_service).to receive(:add)
+    allow(annotation_service).to receive(:update)
+    allow(annotation_service).to receive(:list_for_book).and_return([])
   end
 
   def overlay_from_state

@@ -20,6 +20,8 @@ unless defined?(JSON::Fragment)
   end
 end
 
+ENV['EBOOK_READER_TEST_MODE'] ||= '1'
+
 require 'json'
 require 'simplecov'
 SimpleCov.start do
@@ -80,6 +82,14 @@ RSpec.configure do |config|
   # Clean up state between tests
   config.before(:each) do
     EbookReader.reset! if EbookReader.respond_to?(:reset!)
+    if defined?(EbookReader::TestSupport::TerminalDouble)
+      EbookReader::TestSupport::TerminalDouble.reset!
+    end
+    if defined?(EbookReader::Infrastructure::Logger) && defined?(EbookReader::TestSupport::TestMode)
+      null_io = EbookReader::TestSupport::TestMode.logger_null_io
+      EbookReader::Infrastructure::Logger.output = null_io if null_io
+      EbookReader::Infrastructure::Logger.level = :fatal
+    end
   end
 
   # Include FakeFS for file system tests

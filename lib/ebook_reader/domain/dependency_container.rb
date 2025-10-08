@@ -194,6 +194,10 @@ module EbookReader
           EbookReader::Infrastructure::LibraryScanner.new
         end
 
+        if defined?(EbookReader::TestSupport::TestMode)
+          EbookReader::TestSupport::TestMode.configure_container(container)
+        end
+
         container
       end
 
@@ -213,6 +217,10 @@ module EbookReader
 
         # Provide a domain event bus backed by the mocked infrastructure bus
         container.register(:domain_event_bus, Domain::Events::DomainEventBus.new(container.resolve(:event_bus)))
+
+        if defined?(EbookReader::TestSupport::TestMode)
+          EbookReader::TestSupport::TestMode.configure_container(container)
+        end
 
         container
       end

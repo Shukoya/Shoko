@@ -86,8 +86,11 @@ RSpec.describe 'MainMenu search mode integration' do
     # Move selection down once (should point to the second filtered match)
     dispatcher.handle_key("\e[B")
 
-    # Expect run_reader to be invoked with the selected book path, not the first default
-    expect(menu).to receive(:run_reader).with('/gamma.epub')
+    controller = menu.instance_variable_get(:@controller)
+    state_controller = controller.state_controller
+    allow(state_controller).to receive(:run_reader)
+    expect(state_controller).to receive(:run_reader).with('/gamma.epub')
+
     dispatcher.handle_key("\r")
   end
 end

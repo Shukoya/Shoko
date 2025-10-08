@@ -18,6 +18,9 @@ RSpec.describe 'Wipe Cache setting' do
     ENV['XDG_CACHE_HOME'] = xdg_cache
     stub_const('EbookReader::EPUBFinder::CACHE_FILE', epub_cache_file)
     stub_const('EbookReader::RecentFiles::RECENT_FILE', recent_file)
+    allow(EbookReader::EPUBFinder).to receive(:clear_cache) do
+      FileUtils.rm_f(EbookReader::EPUBFinder::CACHE_FILE)
+    end
 
     FileUtils.mkdir_p(reader_cache_root)
     FileUtils.mkdir_p(File.join(reader_cache_root, 'dummysha'))
@@ -42,8 +45,10 @@ RSpec.describe 'Wipe Cache setting' do
     expect(File).not_to exist(recent_file)
 
     # Scanner state resets and message was set
-    expect(mm.scanner.epubs).to eq([])
-    expect(mm.scanner.scan_status).to eq(:idle)
-    expect(mm.scanner.scan_message).to match(/wiped/i)
+    controller = mm.instance_variable_get(:@controller)
+    catalog = controller.catalog
+    expect(catalog.entries).to eq([])
+    expect(catalog.scan_status).to eq(:idle)
+    expect(catalog.scan_message).to match(/wiped/i)
   end
 end

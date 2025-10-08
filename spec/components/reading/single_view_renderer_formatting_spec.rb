@@ -117,6 +117,6 @@ RSpec.describe EbookReader::Components::Reading::SingleViewRenderer do
 
     code_write = writes.find { |(_, _, text)| text.include?('code line 1') }
     expect(code_write).not_to be_nil
-    expect(code_write[2]).to include(EbookReader::Terminal::ANSI::DIM)
+    expect(code_write[2]).to include(EbookReader::Terminal::ANSI::YELLOW)
   end
 end

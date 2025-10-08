@@ -10,11 +10,28 @@ RSpec.describe EbookReader::Domain::Services::LibraryService do
   let(:reader_root) { File.join(xdg_cache, 'reader') }
   let(:book_dir) { File.join(reader_root, 'deadbeef') }
 
-  let(:dependencies) do
-    # Minimal container double
+  let(:recent_repository) do
     Class.new do
-      def resolve(_name) = nil
-    end.new
+      def initialize(items)
+        @items = items
+      end
+
+      def all
+        @items
+      end
+    end.new([
+               { 'path' => '/tmp/book.epub', 'accessed' => '2020-01-01T00:00:00Z' },
+             ])
+  end
+
+  let(:dependencies) do
+    container = EbookReader::Domain::DependencyContainer.new
+    container.register(
+      :cached_library_repository,
+      EbookReader::Infrastructure::Repositories::CachedLibraryRepository.new(cache_root: reader_root)
+    )
+    container.register(:recent_library_repository, recent_repository)
+    container
   end
 
   subject(:service) { described_class.new(dependencies) }
