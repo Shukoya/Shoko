@@ -17,7 +17,6 @@ module EbookReader
           state = controller.state
           page_calculator = controller.page_calculator
           doc = controller.doc
-          sc = nil
 
           # Query terminal size (FrameCoordinator will update state during rendering)
           height, width = begin
@@ -73,17 +72,15 @@ module EbookReader
         nil
       end
 
-      def submit_background_job(initial_state_controller, &block)
+      def submit_background_job(_initial_state_controller, &)
         worker = resolve_background_worker
         if worker
-          worker.submit(&block)
+          worker.submit(&)
         else
           Thread.new do
-            begin
-              block.call
-            rescue StandardError
-              # ignore background failures
-            end
+            yield
+          rescue StandardError
+            # ignore background failures
           end
         end
       rescue StandardError

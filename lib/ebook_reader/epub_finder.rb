@@ -4,7 +4,6 @@ require 'fileutils'
 require 'json'
 require 'time'
 require 'timeout'
-require 'set'
 
 require_relative 'models/scanner_context'
 require_relative 'epub_finder/directory_scanner'
@@ -44,6 +43,7 @@ module EbookReader
 
       def cache_valid?(cache)
         return false unless cache
+
         files = cache['files']
         ts = cache['timestamp']
         files.is_a?(Array) && !files.empty? && ts && !cache_expired?(ts)
@@ -137,10 +137,10 @@ module EbookReader
       def save_cache(files)
         FileUtils.mkdir_p(CONFIG_DIR)
         payload = JSON.pretty_generate({
-                                          'timestamp' => Time.now.iso8601,
-                                          'files' => files || [],
-                                          'version' => VERSION,
-                                        })
+                                         'timestamp' => Time.now.iso8601,
+                                         'files' => files || [],
+                                         'version' => VERSION,
+                                       })
         Infrastructure::AtomicFileWriter.write(CACHE_FILE, payload)
       rescue StandardError => e
         warn_debug "Cache save error: #{e.message}"

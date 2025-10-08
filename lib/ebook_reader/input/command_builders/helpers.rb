@@ -42,7 +42,7 @@ module EbookReader
         end
 
         def value_at(ctx, base, field)
-          (ctx.state.get([base, field]) || 0)
+          ctx.state.get([base, field]) || 0
         end
 
         def dispatch_for(ctx, action_type, field, value)

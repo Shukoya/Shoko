@@ -40,7 +40,7 @@ module EbookReader
             { current_page_index: total - 1 }
           end
 
-          def jump_to_chapter(context, index)
+          def jump_to_chapter(_context, index)
             # Facade will map chapter -> page index precisely; here provide chapter intent.
             { current_chapter: index, current_page_index: 0 }
           end
@@ -49,4 +49,3 @@ module EbookReader
     end
   end
 end
-

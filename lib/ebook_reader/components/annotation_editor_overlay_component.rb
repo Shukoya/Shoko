@@ -14,11 +14,11 @@ module EbookReader
 
       SAVE_KEYS = ["\x13"].freeze # Ctrl+S
       BACKSPACE_KEYS = ["\x08", "\x7F", '\b'].freeze
-      SAVE_BUTTON_BG = "\e[48;2;69;173;130m".freeze
-      CANCEL_BUTTON_BG = "\e[48;2;191;97;106m".freeze
+      SAVE_BUTTON_BG = "\e[48;2;69;173;130m"
+      CANCEL_BUTTON_BG = "\e[48;2;191;97;106m"
       BUTTON_FG = Terminal::ANSI::BRIGHT_WHITE
 
-      attr_reader :visible, :selected_text
+      attr_reader :visible, :selected_text, :note, :chapter_index
 
       def initialize(selected_text:, range:, chapter_index:, annotation: nil)
         super()
@@ -43,18 +43,10 @@ module EbookReader
         @visible = false
       end
 
-      def note
-        @note
-      end
-
       def annotation_id
         return nil unless @annotation.is_a?(Hash)
 
         @annotation[:id] || @annotation['id']
-      end
-
-      def chapter_index
-        @chapter_index
       end
 
       def selection_range
@@ -263,10 +255,9 @@ module EbookReader
           text_x: text_x,
           text_width: text_width,
           note_rows: note_rows,
-          buttons_row: inner_y + inner_height - 2
+          buttons_row: inner_y + inner_height - 2,
         }
       end
-
     end
   end
 end

@@ -47,9 +47,8 @@ module EbookReader
 
       def install_terminal_double!
         return if @terminal_installed
-        real_terminal = if EbookReader.const_defined?(:Terminal, false)
-                          EbookReader.const_get(:Terminal)
-                        end
+
+        real_terminal = (EbookReader.const_get(:Terminal) if EbookReader.const_defined?(:Terminal, false))
         EbookReader.const_set(:RealTerminal, real_terminal) unless EbookReader.const_defined?(:RealTerminal)
         EbookReader.send(:remove_const, :Terminal) if EbookReader.const_defined?(:Terminal, false)
         EbookReader.const_set(:Terminal, EbookReader::TestSupport::TerminalDouble)

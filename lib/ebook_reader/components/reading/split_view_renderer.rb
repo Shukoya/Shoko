@@ -70,6 +70,7 @@ module EbookReader
 
           st = context&.state
           return unless st
+
           left_offset  = st.get(%i[reader left_page]) || 0
           right_offset = st.get(%i[reader right_page]) || display_height
 

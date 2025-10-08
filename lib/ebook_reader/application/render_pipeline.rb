@@ -44,7 +44,7 @@ module EbookReader
 
       def annotation_overlay_active?
         overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotation_editor_overlay(@state)
-        overlay&.respond_to?(:visible?) && overlay.visible?
+        overlay.respond_to?(:visible?) && overlay.visible?
       rescue StandardError
         false
       end

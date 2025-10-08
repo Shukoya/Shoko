@@ -17,7 +17,7 @@ module EbookReader
 
       def active?
         overlay = current_overlay
-        overlay&.respond_to?(:visible?) && overlay.visible?
+        overlay.respond_to?(:visible?) && overlay.visible?
       end
 
       def save_annotation
@@ -70,13 +70,13 @@ module EbookReader
 
       def handle_enter
         overlay = current_overlay
-        overlay&.handle_enter if overlay&.respond_to?(:handle_enter)
+        overlay&.handle_enter if overlay.respond_to?(:handle_enter)
         :handled
       end
 
       def handle_character(char)
         overlay = current_overlay
-        overlay&.handle_character(char) if overlay&.respond_to?(:handle_character)
+        overlay&.handle_character(char) if overlay.respond_to?(:handle_character)
         :handled
       end
 

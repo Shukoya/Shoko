@@ -13,7 +13,7 @@ module EbookReader
         include Constants::UIConstants
         include UI::TextUtils
 
-        BookItemCtx = Struct.new(:row, :width, :book, :selected, keyword_init: true)
+        BookItemCtx = Struct.new(:row, :book, :selected, :layout, keyword_init: true)
 
         def initialize(catalog_service, state)
           super()
@@ -73,52 +73,16 @@ module EbookReader
 
         def do_render(surface, bounds)
           @filtered_epubs ||= []
-          height = bounds.height
-          width = bounds.width
+          layout = layout_metrics(bounds)
 
-          # Header (show visual indicator when search is active)
-          mode = @state.get(%i[menu mode])
-          search_active = @state.get(%i[menu search_active])
-          in_search = (mode == :search) || search_active
-          if in_search
-            title = "#{COLOR_TEXT_ACCENT}📚 Browse Books  [SEARCH]#{Terminal::ANSI::RESET}"
-            right_text = "#{COLOR_TEXT_DIM}[/] Exit Search#{Terminal::ANSI::RESET}"
-          else
-            title = "#{COLOR_TEXT_ACCENT}📚 Browse Books#{Terminal::ANSI::RESET}"
-            right_text = "#{COLOR_TEXT_DIM}[r] Refresh [ESC] Back#{Terminal::ANSI::RESET}"
-          end
-          surface.write(bounds, 1, 2, title)
-          surface.write(bounds, 1, [width - 30, 40].max, right_text)
+          render_search(surface, bounds, layout)
+          render_status(surface, bounds, layout)
 
-          # Search bar
-          surface.write(bounds, 3, 2, "#{COLOR_TEXT_PRIMARY}Search: #{Terminal::ANSI::RESET}")
-          search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
-          search_display = search_query.dup
-          cursor_pos = EbookReader::Domain::Selectors::MenuSelectors.search_cursor(@state).to_i.clamp(
-            0, search_display.length
-          )
-          search_display.insert(cursor_pos, '_')
-          surface.write(bounds, 3, 10, SELECTION_HIGHLIGHT + search_display + Terminal::ANSI::RESET)
-
-          # Status from scanner
-          render_status(surface, bounds, width, height)
-
-          # Books list or empty state
           if @filtered_epubs.nil? || @filtered_epubs.empty?
-            render_empty_state(surface, bounds, width, height)
+            render_empty_state(surface, bounds, layout)
           else
-            render_books_list(surface, bounds, width, height)
+            render_books_list(surface, bounds, layout)
           end
-
-          # Footer
-          book_count = @filtered_epubs&.length.to_i
-          hint = if in_search
-                   "#{book_count} books • ↑↓ Navigate • Enter Open • / Exit Search"
-                 else
-                   "#{book_count} books • ↑↓ Navigate • Enter Open • / Search • r Refresh • ESC Back"
-                 end
-          surface.write(bounds, height - 1, [(width - hint.length) / 2, 1].max,
-                        COLOR_TEXT_DIM + hint + Terminal::ANSI::RESET)
         end
 
         def preferred_height(_available_height)
@@ -136,60 +100,65 @@ module EbookReader
           @filtered_epubs = books.select do |book|
             name = book['name']&.downcase
             author = book['author']&.downcase
-            (name && name.include?(q)) || (author && author.include?(q))
+            name&.include?(q) || author&.include?(q)
           end
         end
 
-        def render_status(surface, bounds, _width, _height)
+        def render_status(surface, bounds, layout)
+          total = @filtered_epubs&.length.to_i
           status = @catalog.scan_status
+          message = @catalog.scan_message.to_s
+
+          count_text = "#{COLOR_TEXT_DIM}Found #{total} #{total == 1 ? 'book' : 'books'}#{Terminal::ANSI::RESET}"
+          surface.write(bounds, layout[:status_row], layout[:indent], count_text)
+
           return unless status
 
-          msg = @catalog.scan_message || ''
-          text = case status
-                 when :scanning then "#{COLOR_TEXT_WARNING}⟳ #{msg}#{Terminal::ANSI::RESET}"
-                 when :error    then "#{COLOR_TEXT_ERROR}✗ #{msg}#{Terminal::ANSI::RESET}"
-                 when :done     then "#{COLOR_TEXT_SUCCESS}✓ #{msg}#{Terminal::ANSI::RESET}"
-                 else ''
-                 end
-          surface.write(bounds, 4, 2, text) unless text.empty?
+          status_text = case status
+                        when :scanning then "#{COLOR_TEXT_WARNING}⟳ #{message}#{Terminal::ANSI::RESET}"
+                        when :error    then "#{COLOR_TEXT_ERROR}✗ #{message}#{Terminal::ANSI::RESET}"
+                        when :done     then "#{COLOR_TEXT_SUCCESS}✓ #{message}#{Terminal::ANSI::RESET}"
+                        else ''
+                        end
+          return if status_text.empty?
+
+          surface.write(bounds, layout[:status_row], layout[:indent] + count_text.length + 2, status_text)
         end
 
-        def render_empty_state(surface, bounds, width, height)
+        def render_empty_state(surface, bounds, layout)
           status = @catalog.scan_status
           empty_text = if status == :scanning
                          "#{COLOR_TEXT_WARNING}⟳ Scanning for books...#{Terminal::ANSI::RESET}"
                        else
                          "#{COLOR_TEXT_DIM}No matching books#{Terminal::ANSI::RESET}"
                        end
-          surface.write(bounds, height / 2, [(width - 20) / 2, 1].max, empty_text)
+          row = (bounds.height / 2).clamp(layout[:list_start_row], bounds.bottom - 2)
+          surface.write(bounds, row, layout[:indent], empty_text)
         end
 
-        def render_books_list(surface, bounds, width, height)
-          list_start_row = 6
-          list_height = height - list_start_row - 2
+        def render_books_list(surface, bounds, layout)
+          list_start_row = layout[:list_start_row]
+          list_height = bounds.height - list_start_row - 2
           return if list_height <= 0
 
           selected = EbookReader::Domain::Selectors::MenuSelectors.browse_selected(@state)
           start_index, visible_books = UI::ListHelpers.slice_visible(@filtered_epubs, list_height, selected)
 
-          # Draw header row and divider
-          draw_list_header(surface, bounds, width, list_start_row - 1)
-          list_start_row += 1
+          draw_list_header(surface, bounds, layout, layout[:header_row])
+          current_row = list_start_row
 
-          # Inline loading info
           loading_path = @state.get(%i[menu loading_path])
           loading_active = @state.get(%i[menu loading_active])
           loading_progress = (@state.get(%i[menu loading_progress]) || 0.0).to_f
 
-          current_row = list_start_row
           visible_books.each_with_index do |book, index|
             is_selected = (start_index + index) == selected
-            ctx = BookItemCtx.new(row: current_row, width: width, book: book, selected: is_selected)
+            ctx = BookItemCtx.new(row: current_row, book: book, selected: is_selected, layout: layout)
             render_book_item(surface, bounds, ctx)
 
-            next_row = current_row + 1
-            if loading_active && loading_path == book['path'] && next_row < bounds.bottom
-              draw_inline_progress(surface, bounds, width, next_row, loading_progress)
+            progress_row = current_row + 1
+            if loading_active && loading_path == book['path'] && progress_row < bounds.bottom
+              draw_inline_progress(surface, layout, progress_row, loading_progress)
               current_row += 2
             else
               current_row += 1
@@ -203,59 +172,42 @@ module EbookReader
           meta = @catalog.metadata_for(path)
 
           title = (meta[:title] || book['name'] || 'Unknown').to_s
-          authors = (meta[:author_str] || '').to_s
-          year = (meta[:year] || '').to_s
           size_mb = format_size(book['size'] || @catalog.size_for(path))
 
           # Compute column widths
-          pointer_w = 2
-          gap = 2
-          remaining = ctx.width - pointer_w - (gap * 3)
-          year_w = 6
-          size_w = 8
-          author_w = [(remaining * 0.25).to_i, 12].max.clamp(12, remaining - 20 - year_w - size_w)
-          title_w = [remaining - author_w - year_w - size_w, 20].max
+          cols = ctx.layout[:columns]
+          gap = ' ' * ctx.layout[:gap]
 
-          # Compose columns
-          sel = ctx.selected
-          pointer = sel ? '▸ ' : '  '
-          title_col = truncate_text(title, title_w).ljust(title_w)
-          author_col = truncate_text(authors, author_w).ljust(author_w)
-          year_col = year[0, 4].ljust(year_w)
-          size_col = size_mb.rjust(size_w)
+          title_col = truncate_text(title, cols[:title]).ljust(cols[:title])
+          size_col = size_mb.rjust(cols[:size])
 
-          line = [title_col, author_col, year_col, size_col].join(' ' * gap)
-          r = ctx.row
-          if sel
-            surface.write(bounds, r, 1, SELECTION_HIGHLIGHT + pointer + line + Terminal::ANSI::RESET)
-          else
-            surface.write(bounds, r, 1, COLOR_TEXT_PRIMARY + pointer + line + Terminal::ANSI::RESET)
-          end
+          line = [title_col, size_col].join(gap)
+          row = ctx.row
+          indent = ctx.layout[:indent]
+
+          content = if ctx.selected
+                      Terminal::ANSI::BOLD + COLOR_TEXT_ACCENT + line + Terminal::ANSI::RESET
+                    else
+                      COLOR_TEXT_PRIMARY + line + Terminal::ANSI::RESET
+                    end
+          surface.write(bounds, row, indent, content)
         end
 
-        def draw_list_header(surface, bounds, width, row)
+        def draw_list_header(surface, bounds, layout, row)
           return if row < 5
 
-          pointer_w = 2
-          gap = 2
-          remaining = width - pointer_w - (gap * 3)
-          year_w = 6
-          size_w = 8
-          author_w = [(remaining * 0.25).to_i, 12].max.clamp(12, remaining - 20 - year_w - size_w)
-          title_w = [remaining - author_w - year_w - size_w, 20].max
-
+          cols = layout[:columns]
+          gap = ' ' * layout[:gap]
           headers = [
-            'Title'.ljust(title_w),
-            'Author(s)'.ljust(author_w),
-            'Year'.ljust(year_w),
-            'Size'.rjust(size_w),
-          ].join(' ' * gap)
+            'Title'.ljust(cols[:title]),
+            'Size'.rjust(cols[:size]),
+          ].join(gap)
 
           header_style = Terminal::ANSI::BOLD + Terminal::ANSI::LIGHT_GREY
-          surface.write(bounds, row, 1, header_style + (' ' * pointer_w) + headers + Terminal::ANSI::RESET)
+          surface.write(bounds, row, layout[:indent], header_style + headers.ljust(layout[:content_width]) + Terminal::ANSI::RESET)
           # Divider line
-          divider = ('─' * [width - 2, 1].max)
-          surface.write(bounds, row + 1, 1, COLOR_TEXT_DIM + divider + Terminal::ANSI::RESET)
+          divider = ('─' * [layout[:content_width], 1].max)
+          surface.write(bounds, row + 1, layout[:indent], COLOR_TEXT_DIM + divider + Terminal::ANSI::RESET)
         end
 
         def format_size(bytes)
@@ -263,15 +215,70 @@ module EbookReader
           format('%.1f MB', mb)
         end
 
-        def draw_inline_progress(surface, bounds, width, row, progress)
-          bar_col = 3
-          usable = [width - bar_col - 2, 10].max
+        def draw_inline_progress(surface, layout, row, progress)
+          bar_col = layout[:indent]
+          usable = [layout[:content_width], 10].max
           filled = (usable * progress.to_f.clamp(0.0, 1.0)).round
-          green = Terminal::ANSI::BRIGHT_GREEN
-          grey  = Terminal::ANSI::GRAY
+          accent = Terminal::ANSI::BRIGHT_GREEN
+          dim = Terminal::ANSI::DIM
           reset = Terminal::ANSI::RESET
-          track = (green + ('━' * filled)) + (grey + ('━' * (usable - filled))) + reset
+          track = accent + ('━' * filled) + reset
+          track << (dim + ('━' * (usable - filled)) + reset) if filled < usable
           surface.write(bounds, row, bar_col, track)
+        end
+
+        def render_search(surface, bounds, layout)
+          row = layout[:search_row]
+          indent = layout[:indent]
+
+          surface.write(bounds, row, indent, "#{COLOR_TEXT_DIM}Search#{Terminal::ANSI::RESET}")
+
+          search_query = EbookReader::Domain::Selectors::MenuSelectors.search_query(@state)
+          search_display = search_query.dup
+          cursor_pos = EbookReader::Domain::Selectors::MenuSelectors.search_cursor(@state)
+          cursor_pos = cursor_pos.to_i.clamp(0, search_display.length)
+          search_display.insert(cursor_pos, '_')
+          field_text = search_display.ljust(layout[:content_width])
+
+          surface.write(bounds, row + 1, indent,
+                        "#{SELECTION_HIGHLIGHT}#{field_text}#{Terminal::ANSI::RESET}")
+        end
+
+        def layout_metrics(bounds)
+          height = bounds.height
+          width  = bounds.width
+
+          base_width = [width - 8, 72].min
+          columns = column_layout(base_width)
+          indent = ((width - columns[:content_width]) / 2).floor
+          indent = indent.clamp(2, width / 3)
+
+          {
+            indent: indent,
+            content_width: columns[:content_width],
+            columns: columns[:columns],
+            gap: columns[:gap],
+            search_row: [(height / 6), 2].max,
+            status_row: [((height / 6) + 2), 4].max,
+            header_row: [((height / 6) + 4), 6].max,
+            list_start_row: [((height / 6) + 6), 8].max,
+          }
+        end
+
+        def column_layout(content_width)
+          gap = 4
+          size_w = 8
+          title_w = [content_width - size_w - gap, 24].max
+          content_width = title_w + size_w + gap
+
+          {
+            content_width: content_width,
+            columns: {
+              title: title_w,
+              size: size_w,
+            },
+            gap: gap,
+          }
         end
 
         # truncate_text provided by UI::TextUtils

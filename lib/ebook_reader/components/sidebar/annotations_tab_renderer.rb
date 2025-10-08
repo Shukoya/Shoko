@@ -78,7 +78,7 @@ module EbookReader
         def render_annotation_item(surface, bounds, metrics, ctx)
           is_selected = (ctx.index == ctx.selected_index)
           bx = metrics.x
-          by = metrics.y
+          metrics.y
           bw = metrics.width
           max_width = bw - 4
 

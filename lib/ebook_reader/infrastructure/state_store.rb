@@ -4,14 +4,12 @@ require 'fileutils'
 begin
   require 'json'
 rescue NameError => e
-  if e.name == :Fragment
-    module JSON
-      Fragment = Object unless const_defined?(:Fragment)
-    end
-    require 'json'
-  else
-    raise
+  raise unless e.name == :Fragment
+
+  module JSON
+    Fragment = Object unless const_defined?(:Fragment)
   end
+  require 'json'
 end
 require_relative 'atomic_file_writer'
 

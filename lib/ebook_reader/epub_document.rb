@@ -231,6 +231,9 @@ module EbookReader
       chapter_index = 0 if chapter_index.negative?
       begin
         @formatting_service.ensure_formatted!(self, chapter_index, chapter)
+      rescue EbookReader::FormattingError => e
+        Infrastructure::Logger.error('Formatting error', error: e.message, chapter: number)
+        raise
       rescue StandardError
         # Fallback handled by caller
       end
@@ -242,13 +245,13 @@ module EbookReader
     end
 
     def assign_toc_entries(entries)
-     raw_entries = entries || []
-     href_to_index = {}
-     @chapters.each_with_index do |ref, idx|
-       next unless ref&.href
+      raw_entries = entries || []
+      href_to_index = {}
+      @chapters.each_with_index do |ref, idx|
+        next unless ref&.href
 
-       href_to_index[ref.href] = idx
-     end
+        href_to_index[ref.href] = idx
+      end
 
       @toc_entries = raw_entries.map do |entry|
         level = entry[:level].to_i
@@ -282,7 +285,7 @@ module EbookReader
       end
       manifest = processor.build_manifest_map
       chapter_titles = processor.extract_chapter_titles(manifest)
-      processor.process_spine(manifest, chapter_titles) do |file_path, number, title, href|
+      processor.process_spine(manifest, chapter_titles) do |file_path, number, title, _href|
         index = number - 1
         if (ref = @chapters[index])
           ref.file_path ||= file_path if ref.respond_to?(:file_path=)
@@ -408,42 +411,42 @@ module EbookReader
         spine_val = hget(data, :spine)
         return false unless data.is_a?(Hash) && spine_val.is_a?(Array)
 
-      @cache_dir = dir
-      title_v = hget(data, :title)
-      @title = title_v.to_s if title_v
-      @opf_path = s(hget(data, :opf_path))
-      @spine_relative_paths = (spine_val || []).map { |x| x.to_s }
-      epub_path_v = s(hget(data, :epub_path))
-      @source_path = epub_path_v unless epub_path_v.empty?
+        @cache_dir = dir
+        title_v = hget(data, :title)
+        @title = title_v.to_s if title_v
+        @opf_path = s(hget(data, :opf_path))
+        @spine_relative_paths = (spine_val || []).map(&:to_s)
+        epub_path_v = s(hget(data, :epub_path))
+        @source_path = epub_path_v unless epub_path_v.empty?
 
-      sanitize = lambda do |rel|
-        cleaned = Pathname.new(rel.to_s).cleanpath.to_s
-        next nil if cleaned.empty?
+        sanitize = lambda do |rel|
+          cleaned = Pathname.new(rel.to_s).cleanpath.to_s
+          next nil if cleaned.empty?
 
-        dest = File.expand_path(cleaned, @cache_dir)
-        prefix = @cache_dir.end_with?(File::SEPARATOR) ? @cache_dir : (@cache_dir + File::SEPARATOR)
-        next dest if dest.start_with?(prefix) || dest == @cache_dir
+          dest = File.expand_path(cleaned, @cache_dir)
+          prefix = @cache_dir.end_with?(File::SEPARATOR) ? @cache_dir : (@cache_dir + File::SEPARATOR)
+          next dest if dest.start_with?(prefix) || dest == @cache_dir
 
-        nil
-      end
+          nil
+        end
 
-      container_path = sanitize.call(File.join('META-INF', 'container.xml'))
-      return false unless container_path && File.exist?(container_path)
+        container_path = sanitize.call(File.join('META-INF', 'container.xml'))
+        return false unless container_path && File.exist?(container_path)
 
-      opf_path = sanitize.call(@opf_path)
-      return false unless opf_path && File.exist?(opf_path)
+        opf_path = sanitize.call(@opf_path)
+        return false unless opf_path && File.exist?(opf_path)
 
-      @chapters = []
-      @spine_relative_paths.each_with_index do |rel, idx|
-        abs = sanitize.call(rel)
-        return false unless abs && File.exist?(abs)
+        @chapters = []
+        @spine_relative_paths.each_with_index do |rel, idx|
+          abs = sanitize.call(rel)
+          return false unless abs && File.exist?(abs)
 
-        @chapters << ChapterRef.new(file_path: abs, number: idx + 1, title: nil,
-                                    href: resolve_href_reference(rel))
-      end
-      @loaded_from_cache = true
-      assign_toc_entries(load_cached_toc_entries)
-      true
+          @chapters << ChapterRef.new(file_path: abs, number: idx + 1, title: nil,
+                                      href: resolve_href_reference(rel))
+        end
+        @loaded_from_cache = true
+        assign_toc_entries(load_cached_toc_entries)
+        true
       end
     rescue StandardError
       false

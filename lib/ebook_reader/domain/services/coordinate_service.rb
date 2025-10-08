@@ -34,9 +34,7 @@ module EbookReader
           sy = start_pos[:y]
           ey = end_pos[:y]
           # Swap if end comes before start
-          if ey < sy || (ey == sy && end_pos[:x] < start_pos[:x])
-            start_pos, end_pos = end_pos, start_pos
-          end
+          start_pos, end_pos = end_pos, start_pos if ey < sy || (ey == sy && end_pos[:x] < start_pos[:x])
 
           { start: start_pos, end: end_pos }
         end

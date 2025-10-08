@@ -166,15 +166,13 @@ module EbookReader
         svc = if @dependencies.respond_to?(:resolve) && @dependencies.registered?(:annotation_service)
                 @dependencies.resolve(:annotation_service)
               end
-        unless svc && normalized[:id]
-          return @state.get(%i[reader sidebar_annotations_selected]) || 0
-        end
+        return @state.get(%i[reader sidebar_annotations_selected]) || 0 unless svc && normalized[:id]
 
         svc.delete(@path, normalized[:id])
         annotations = svc.list_for_book(@path)
         @state.dispatch(EbookReader::Domain::Actions::UpdateAnnotationsAction.new(annotations))
 
-        new_index = [(@state.get(%i[reader sidebar_annotations_selected]) || 0), annotations.length - 1].min
+        new_index = [@state.get(%i[reader sidebar_annotations_selected]) || 0, annotations.length - 1].min
         new_index = 0 if new_index.negative?
         @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(
                           annotations_selected: new_index,
@@ -218,8 +216,8 @@ module EbookReader
       def normalize_annotation(annotation)
         return {} unless annotation.is_a?(Hash)
 
-        annotation.each_with_object({}) do |(key, value), acc|
-          acc[key.is_a?(String) ? key.to_sym : key] = value
+        annotation.transform_keys do |key|
+          key.is_a?(String) ? key.to_sym : key
         end
       end
 

@@ -11,7 +11,7 @@ module EbookReader
 
       def build(page_info)
         ch = @state.get(%i[reader current_chapter])
-        toc_entries = if @doc&.respond_to?(:toc_entries)
+        toc_entries = if @doc.respond_to?(:toc_entries)
                         @doc.toc_entries
                       else
                         []

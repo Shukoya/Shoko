@@ -83,6 +83,7 @@ module EbookReader
         opf = h['opf_path'].to_s
         spine = Array(h['spine']).map(&:to_s)
         return false if opf.empty? || spine.empty?
+
         container_path = safe_cache_path('META-INF/container.xml')
         return false unless container_path && File.exist?(container_path)
 

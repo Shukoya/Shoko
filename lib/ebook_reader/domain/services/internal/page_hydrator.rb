@@ -73,7 +73,7 @@ module EbookReader
           end
 
           def resolve_wrapping_service
-            return nil unless @dependencies&.respond_to?(:resolve)
+            return nil unless @dependencies.respond_to?(:resolve)
 
             @dependencies.resolve(:wrapping_service)
           rescue StandardError

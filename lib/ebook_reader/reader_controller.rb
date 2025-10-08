@@ -45,7 +45,9 @@ module EbookReader
     # Helpers::ReaderHelpers removed; wrapping is provided by DI-backed WrappingService
     include Input::KeyDefinitions::Helpers
 
-    attr_reader :doc, :path, :state, :page_calculator, :dependencies, :terminal_service
+    attr_reader :doc, :path, :state, :page_calculator, :dependencies,
+                :terminal_service, :input_controller, :metrics_start_time,
+                :background_worker
 
     # Navigation is handled via Domain::NavigationService through input commands
 
@@ -195,44 +197,46 @@ module EbookReader
       @content_component&.invalidate
     end
 
+    def perform_first_paint
+      Infrastructure::PerformanceMonitor.time('render.first_paint') { draw_screen }
+      return unless metrics_start_time
+
+      first_paint_completed_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      Infrastructure::PerformanceMonitor.record_metric(
+        'render.first_paint.ttfp',
+        first_paint_completed_at - metrics_start_time,
+        0
+      )
+    end
+
+    def dispatch_input_keys(keys)
+      if annotations_overlay_active? && !annotation_editor_visible?
+        input_controller.handle_annotations_overlay_input(keys)
+      elsif popup_menu_visible?
+        input_controller.handle_popup_menu_input(keys)
+      else
+        keys.each { |key| input_controller.handle_key(key) }
+      end
+    end
+
+    def annotations_overlay_active?
+      overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotations_overlay(@state)
+      overlay.respond_to?(:visible?) && overlay.visible?
+    end
+
+    def annotation_editor_visible?
+      editor_overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotation_editor_overlay(@state)
+      editor_overlay.respond_to?(:visible?) && editor_overlay.visible?
+    end
+
+    def popup_menu_visible?
+      popup_menu = EbookReader::Domain::Selectors::ReaderSelectors.popup_menu(@state)
+      popup_menu&.visible
+    end
+
     # Main application loop
     def main_loop
-      Infrastructure::PerformanceMonitor.time('render.first_paint') { draw_screen }
-      if @metrics_start_time
-        first_paint_completed_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-        Infrastructure::PerformanceMonitor.record_metric(
-          'render.first_paint.ttfp',
-          first_paint_completed_at - @metrics_start_time,
-          0
-        )
-      end
-      tti_recorded = false
-      startup_reference = @metrics_start_time
-      while EbookReader::Domain::Selectors::ReaderSelectors.running?(@state)
-        keys = read_input_keys
-        if !tti_recorded && startup_reference && keys.any?
-          Infrastructure::PerformanceMonitor.record_metric(
-            'render.tti',
-            Process.clock_gettime(Process::CLOCK_MONOTONIC) - startup_reference,
-            0
-          )
-          tti_recorded = true
-        end
-        next if keys.empty?
-
-        # Intercept keys for popup menu if visible
-        overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotations_overlay(@state)
-        popup_menu = EbookReader::Domain::Selectors::ReaderSelectors.popup_menu(@state)
-        editor_overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotation_editor_overlay(@state)
-        if overlay&.respond_to?(:visible?) && overlay.visible? && !(editor_overlay&.respond_to?(:visible?) && editor_overlay.visible?)
-          @input_controller.handle_annotations_overlay_input(keys)
-        elsif popup_menu&.visible
-          @input_controller.handle_popup_menu_input(keys)
-        else
-          keys.each { |k| @input_controller.handle_key(k) }
-        end
-        draw_screen
-      end
+      ReaderEventLoop.new(self, @state, @metrics_start_time).run
     end
 
     # Page calculation and navigation support
@@ -263,7 +267,7 @@ module EbookReader
           page_map = Array(@state.get(%i[reader page_map]) || [])
         end
 
-        current_chapter = (@state.get(%i[reader current_chapter]) || 0)
+        current_chapter = @state.get(%i[reader current_chapter]) || 0
         pages_before = page_map[0...current_chapter].sum
         line_offset = if view_mode == :split
                         @state.get(%i[reader left_page])
@@ -305,11 +309,9 @@ module EbookReader
           pm = Array(@state.get(%i[reader page_map]) || [])
         end
         total_pages = @state.get(%i[reader total_pages])
-        unless total_pages.positive?
-          return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } }
-        end
+        return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } } unless total_pages.positive?
 
-        current_chapter = (@state.get(%i[reader current_chapter]) || 0)
+        current_chapter = @state.get(%i[reader current_chapter]) || 0
         pages_before = pm[0...current_chapter].sum
 
         # Calculate left page
@@ -350,9 +352,9 @@ module EbookReader
       return if next_index == current
 
       @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(
-                       toc_selected: next_index,
-                       sidebar_toc_selected: next_index
-                     ))
+                        toc_selected: next_index,
+                        sidebar_toc_selected: next_index
+                      ))
     end
 
     def toc_up
@@ -361,9 +363,9 @@ module EbookReader
       return if next_index == current
 
       @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(
-                       toc_selected: next_index,
-                       sidebar_toc_selected: next_index
-                     ))
+                        toc_selected: next_index,
+                        sidebar_toc_selected: next_index
+                      ))
     end
 
     def toc_select
@@ -396,9 +398,7 @@ module EbookReader
     end
 
     def perform_initial_calculations_if_needed
-      if pending_initial_calculation? && !preloaded_page_data?
-        perform_initial_calculations_with_progress
-      end
+      perform_initial_calculations_with_progress if pending_initial_calculation? && !preloaded_page_data?
       @pending_initial_calculation = false
     end
 
@@ -437,9 +437,9 @@ module EbookReader
     end
 
     def resolve_notification_service
-      return @notification_service if defined?(@notification_service)
+      return @resolve_notification_service if defined?(@resolve_notification_service)
 
-      @notification_service = begin
+      @resolve_notification_service = begin
         @dependencies.resolve(:notification_service)
       rescue StandardError
         nil
@@ -492,9 +492,7 @@ module EbookReader
             # best-effort
           end
         end
-        if selection_range
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection_range))
-        end
+        @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection_range)) if selection_range
         if edit_flag && ann
           ann_text = ann[:text] || ann['text']
           ann_range = ann[:range] || ann['range']
@@ -690,7 +688,7 @@ module EbookReader
                 else
                   []
                 end
-      indices = entries.map(&:chapter_index).compact.uniq.sort
+      indices = entries.filter_map(&:chapter_index).uniq.sort
       if indices.empty?
         chapters_count = @doc&.chapters&.length.to_i
         @navigable_toc_indices = (0...chapters_count).to_a
@@ -719,9 +717,9 @@ module EbookReader
     end
 
     def activate_annotation_editor_overlay_session
-      @overlay_session ||= EbookReader::Application::AnnotationEditorOverlaySession.new(@state,
-                                                                                       @dependencies,
-                                                                                       @ui_controller)
+      @activate_annotation_editor_overlay_session ||= EbookReader::Application::AnnotationEditorOverlaySession.new(@state,
+                                                                                                                   @dependencies,
+                                                                                                                   @ui_controller)
     end
 
     def deactivate_annotation_editor_overlay_session
@@ -751,12 +749,52 @@ module EbookReader
 
     # Test helper moved to WrappingService#fetch_window_and_prefetch
 
-    def background_worker
-      @background_worker
-    end
-
     public :activate_annotation_editor_overlay_session,
            :deactivate_annotation_editor_overlay_session,
            :current_editor_component
+
+    # Encapsulates the main reader event loop to tame ReaderController complexity.
+    class ReaderEventLoop
+      def initialize(controller, state, metrics_start_time)
+        @controller = controller
+        @state = state
+        @metrics_start_time = metrics_start_time
+      end
+
+      def run
+        controller.perform_first_paint
+        tti_recorded = false
+        startup_reference = metrics_start_time
+
+        while running?
+          keys = controller.read_input_keys
+          tti_recorded = record_tti(tti_recorded, startup_reference, keys)
+          next if keys.empty?
+
+          controller.dispatch_input_keys(keys)
+          controller.draw_screen
+        end
+      end
+
+      private
+
+      attr_reader :controller, :state, :metrics_start_time
+
+      def running?
+        EbookReader::Domain::Selectors::ReaderSelectors.running?(state)
+      end
+
+      def record_tti(already_recorded, startup_reference, keys)
+        return true if already_recorded
+        return false unless startup_reference && keys.any?
+
+        Infrastructure::PerformanceMonitor.record_metric(
+          'render.tti',
+          Process.clock_gettime(Process::CLOCK_MONOTONIC) - startup_reference,
+          0
+        )
+        true
+      end
+    end
   end
 end

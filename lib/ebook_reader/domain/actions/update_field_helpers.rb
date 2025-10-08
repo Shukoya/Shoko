@@ -14,6 +14,7 @@ module EbookReader
           updates = {}
           payload.each do |field, value|
             next unless allowed.include?(field)
+
             updates[[namespace, field]] = value
           end
           state.update(updates) unless updates.empty?
@@ -22,4 +23,3 @@ module EbookReader
     end
   end
 end
-

@@ -12,7 +12,7 @@ require 'ebook_reader/domain/selectors/reader_selectors'
 RSpec.describe EbookReader::Application::AnnotationEditorOverlaySession do
   class StubUIController
     attr_accessor :current_book_path
-    attr_reader :messages, :closed_count, :refreshed
+    attr_reader :messages, :closed_count, :refreshed, :current_book_path
 
     def initialize(state)
       @state = state
@@ -29,13 +29,9 @@ RSpec.describe EbookReader::Application::AnnotationEditorOverlaySession do
       @refreshed += 1
     end
 
-    def current_book_path
-      @current_book_path
-    end
-
     def close_annotation_editor_overlay
       overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotation_editor_overlay(@state)
-      overlay&.hide if overlay&.respond_to?(:hide)
+      overlay&.hide if overlay.respond_to?(:hide)
       @state.dispatch(EbookReader::Domain::Actions::ClearAnnotationEditorOverlayAction.new)
       @closed_count += 1
     end

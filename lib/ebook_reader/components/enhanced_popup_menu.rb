@@ -101,7 +101,7 @@ module EbookReader
         actions << {
           label: 'Create Annotation',
           action: :create_annotation,
-          icon: '📝',
+          icon: '󱓩',
         }
 
         # Only offer clipboard if available
@@ -109,7 +109,7 @@ module EbookReader
           actions << {
             label: 'Copy to Clipboard',
             action: :copy_to_clipboard,
-            icon: '📋',
+            icon: '',
           }
         end
 

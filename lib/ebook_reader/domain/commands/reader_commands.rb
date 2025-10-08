@@ -69,7 +69,7 @@ module EbookReader
         private
 
         def resolve_state_store(deps, context)
-          return deps.resolve(:state_store) if deps&.respond_to?(:resolve)
+          return deps.resolve(:state_store) if deps.respond_to?(:resolve)
 
           context.respond_to?(:state) ? context.state : nil
         rescue StandardError
@@ -77,7 +77,7 @@ module EbookReader
         end
 
         def resolve_document(deps, context)
-          if deps&.respond_to?(:resolve)
+          if deps.respond_to?(:resolve)
             begin
               return deps.resolve(:document)
             rescue StandardError
@@ -89,7 +89,7 @@ module EbookReader
         end
 
         def resolve_navigation_service(deps)
-          return deps.resolve(:navigation_service) if deps&.respond_to?(:resolve)
+          return deps.resolve(:navigation_service) if deps.respond_to?(:resolve)
 
           nil
         rescue StandardError
@@ -126,13 +126,13 @@ module EbookReader
         def navigable_indices(doc)
           return @cached_indices if defined?(@cached_indices) && @cached_indices
 
-          entries = if doc&.respond_to?(:toc_entries)
+          entries = if doc.respond_to?(:toc_entries)
                       Array(doc.toc_entries)
                     else
                       []
                     end
 
-          indices = entries.map(&:chapter_index).compact.uniq.sort
+          indices = entries.filter_map(&:chapter_index).uniq.sort
           if indices.empty?
             chapters_count = doc&.chapters&.length.to_i
             @cached_indices = (0...chapters_count).to_a

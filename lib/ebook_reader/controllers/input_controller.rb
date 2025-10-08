@@ -26,6 +26,7 @@ module EbookReader
         with_popup_menu do |menu|
           res = menu.handle_key(key)
           next :pass unless res
+
           :handled
         end
       end
@@ -72,11 +73,17 @@ module EbookReader
                               sidebar_annotations_selected: index
                             ))
           when :open
-            ui_controller.open_annotation_from_overlay(result[:annotation]) if ui_controller.respond_to?(:open_annotation_from_overlay)
+            if ui_controller.respond_to?(:open_annotation_from_overlay)
+              ui_controller.open_annotation_from_overlay(result[:annotation])
+            end
           when :edit
-            ui_controller.edit_annotation_from_overlay(result[:annotation]) if ui_controller.respond_to?(:edit_annotation_from_overlay)
+            if ui_controller.respond_to?(:edit_annotation_from_overlay)
+              ui_controller.edit_annotation_from_overlay(result[:annotation])
+            end
           when :delete
-            ui_controller.delete_annotation_from_overlay(result[:annotation]) if ui_controller.respond_to?(:delete_annotation_from_overlay)
+            if ui_controller.respond_to?(:delete_annotation_from_overlay)
+              ui_controller.delete_annotation_from_overlay(result[:annotation])
+            end
           when :close
             ui_controller.close_annotations_overlay if ui_controller.respond_to?(:close_annotations_overlay)
           end
@@ -88,6 +95,7 @@ module EbookReader
       def with_popup_menu
         popup_menu = EbookReader::Domain::Selectors::ReaderSelectors.popup_menu(@state)
         return :pass unless popup_menu
+
         yield popup_menu
       end
 

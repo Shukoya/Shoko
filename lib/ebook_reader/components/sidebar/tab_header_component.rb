@@ -67,6 +67,7 @@ module EbookReader
           y1 = y + 1
           y2 = y + 2
           return render_active(surface, bounds, x, y1, y2, w, icon, label, reset) if ctx.active
+
           render_inactive(surface, bounds, x, y1, y2, w, icon, key, reset)
         end
 

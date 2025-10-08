@@ -19,6 +19,7 @@ module EbookReader
 
         @mutex.synchronize do
           raise WorkerStoppedError, 'worker is shutting down' if @shutdown
+
           @queue << block
         end
         true
@@ -28,6 +29,7 @@ module EbookReader
         thread = nil
         @mutex.synchronize do
           return if @shutdown
+
           @shutdown = true
           thread = @thread
           @queue << nil if thread&.alive?
@@ -54,8 +56,8 @@ module EbookReader
               job.call
             rescue StandardError => e
               Infrastructure::Logger.error('Background worker job failed',
-                                            worker: @name,
-                                            error: e.message)
+                                           worker: @name,
+                                           error: e.message)
             end
           end
         end

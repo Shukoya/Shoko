@@ -13,7 +13,7 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
   end
 
   after do
-    FileUtils.remove_entry(tmp_dir) if File.exist?(tmp_dir)
+    FileUtils.rm_rf(tmp_dir)
   end
 
   it 'skips copying entries that escape the cache directory' do

@@ -161,28 +161,15 @@ overlay = Components::TooltipOverlayComponent.new(reader_controller,
 
 We follow the [Ruby Style Guide](https://rubystyle.guide/) with some modifications:
 
-- **Line Length**: 100 characters (relaxed from 80)
-- **Method Length**: 20 lines maximum
+- **Line Length**: 120 characters (relaxed from 80)
+- **Method Length**: 15 lines maximum
 - **Class Length**: 200 lines maximum
 - **ABC Complexity**: 20 maximum
 
 ### Documentation
 
-All public methods must have YARD documentation:
-
-```ruby
-# Calculate the reading time for a chapter
-#
-# @param chapter [Hash] Chapter data with :lines array
-# @param words_per_minute [Integer] Reading speed (default: 250)
-# @return [Integer] Estimated reading time in minutes
-# @example
-#   time = calculate_reading_time(chapter, 300)
-#   puts "#{time} minutes to read"
-def calculate_reading_time(chapter, words_per_minute = 250)
-  # Implementation
-end
-```
+Provide YARD comments for new public classes/modules and any non-obvious public APIs. The `Style/Documentation` cop
+enforces top-level class/module documentation.
 
 ### Naming Conventions
 
@@ -286,13 +273,23 @@ DEBUG=1 ebook_reader
 ebook_reader --debug
 ```
 
+Logging environment variables:
+
+- `READER_LOG_PATH=/tmp/reader.log` writes structured JSON log entries to the specified path (directories are created automatically).
+- `READER_LOG_LEVEL=info` adjusts verbosity for non-debug runs (`debug`, `info`, `warn`, `error`, `fatal`).
+
+CLI equivalents are available when environment configuration is inconvenient:
+
+- `ebook_reader --log /tmp/reader.log`
+- `ebook_reader --log-level info`
+
 ### Logging
 
 Use the built-in logger:
 
 ```ruby
-EbookReader.logger.debug("Processing chapter", index: 0)
-EbookReader.logger.error("Failed to parse", error: e)
+EbookReader::Infrastructure::Logger.debug('Processing chapter', index: 0)
+EbookReader::Infrastructure::Logger.error('Failed to parse', error: e)
 ```
 
 ### Interactive Debugging
@@ -385,6 +382,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 - Open an issue for bugs or features
 - Start a discussion for questions
 - Check the wiki for additional documentation
-# In a controller (creating a document service)
-factory = @dependencies.resolve(:document_service_factory)
-doc = factory.call(path).load_document

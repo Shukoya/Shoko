@@ -11,6 +11,7 @@ module EbookReader
 
           def load_json_or_empty(file_path)
             return {} unless File.exist?(file_path)
+
             JSON.parse(File.read(file_path))
           rescue StandardError
             {}
@@ -20,4 +21,3 @@ module EbookReader
     end
   end
 end
-

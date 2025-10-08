@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'thread'
-
 module EbookReader
   module TestSupport
     # Lightweight replacement for the production Terminal facade that keeps
@@ -153,7 +151,7 @@ module EbookReader
         private
 
         def ensure_input_queue
-          @input_queue ||= Queue.new
+          @ensure_input_queue ||= Queue.new
         end
 
         def pop_key(non_block: false, timeout: nil)

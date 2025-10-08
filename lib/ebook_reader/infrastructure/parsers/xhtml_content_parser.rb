@@ -1,20 +1,22 @@
 # frozen_string_literal: true
 
-require 'rexml/document'
+require 'nokogiri'
+require 'nokogiri/html5'
+
 require_relative '../../domain/models/content_block'
+require_relative '../../errors'
+require_relative '../logger'
 
 module EbookReader
   module Infrastructure
     module Parsers
       # Parses XHTML content into semantic content blocks + text segments.
       class XHTMLContentParser
-        include REXML
-
         INLINE_NEWLINE = "\n"
 
-        BLOCK_TYPES = %w[p div section article aside header footer figure figcaption]
-        HEADING_TYPES = %w[h1 h2 h3 h4 h5 h6]
-        LIST_TYPES = %w[ul ol]
+        BLOCK_TYPES = %w[p div section article aside header footer figure figcaption main].freeze
+        HEADING_TYPES = %w[h1 h2 h3 h4 h5 h6].freeze
+        LIST_TYPES = %w[ul ol].freeze
         LIST_ITEM = 'li'
         BLOCKQUOTE = 'blockquote'
         PRE = 'pre'
@@ -31,14 +33,27 @@ module EbookReader
         def parse
           return [] if @html.strip.empty?
 
-          document = REXML::Document.new(@html)
-          body = document.elements['//body'] || document.root
+          document = Nokogiri::HTML5.parse(@html)
+          body = document.at('body') || document.root
           return [] unless body
 
           blocks = []
           traverse_children(body, blocks, Context.new(list_stack: [], in_blockquote: false))
-          compact_blocks(blocks)
-        rescue REXML::ParseException
+          compacted = compact_blocks(blocks)
+
+          text_content = body.text.to_s.strip
+          if !text_content.empty? && compacted.empty?
+            Infrastructure::Logger.error(
+              'Formatting produced no blocks',
+              source: 'XHTMLContentParser',
+              sample: text_content.slice(0, 120)
+            )
+            raise EbookReader::FormattingError.new('chapter', 'normalized block list was empty')
+          end
+
+          compacted
+        rescue Nokogiri::XML::SyntaxError => e
+          Infrastructure::Logger.error('Failed to parse chapter HTML', error: e.message)
           []
         end
 
@@ -47,12 +62,15 @@ module EbookReader
         Context = Struct.new(:list_stack, :in_blockquote, keyword_init: true)
         private_constant :Context
 
+        ListContext = Struct.new(:ordered, :index, keyword_init: true)
+        private_constant :ListContext
+
         def traverse_children(node, blocks, context)
-          node.each do |child|
+          node.children.each do |child|
             case child
-            when REXML::Element
+            when Nokogiri::XML::Element
               handle_element(child, blocks, context)
-            when REXML::Text
+            when Nokogiri::XML::Text
               append_text_block(child, blocks)
             end
           end
@@ -77,7 +95,7 @@ module EbookReader
             blocks << build_separator_block
           elsif name == TABLE
             blocks.concat(build_table_blocks(element))
-          elsif BLOCK_TYPES.include?(name)
+          elsif BLOCK_TYPES.include?(name) || block_via_style?(element)
             paragraph = build_paragraph(element)
             blocks << paragraph if paragraph
           elsif name == BR
@@ -92,9 +110,10 @@ module EbookReader
         end
 
         def append_text_block(text_node, blocks)
-          return if text_node.to_s.strip.empty?
+          content = text_node.text
+          return if content.to_s.strip.empty?
 
-          segment = text_segment(text_node.to_s)
+          segment = text_segment(content)
           blocks << build_paragraph_from_segments([segment])
         end
 
@@ -109,7 +128,7 @@ module EbookReader
           )
         end
 
-        def traverse_blockquote(element, blocks, context)
+        def traverse_blockquote(element, blocks, _context)
           segments = collect_segments(element).map do |segment|
             EbookReader::Domain::Models::TextSegment.new(
               text: segment.text,
@@ -124,9 +143,9 @@ module EbookReader
         end
 
         def traverse_list(element, blocks, context, ordered: false)
-          stack = context.list_stack || []
+          stack = context.list_stack ||= []
           stack.push(ListContext.new(ordered:, index: 0))
-          element.elements.each do |child|
+          element.element_children.each do |child|
             next unless child.name&.downcase == LIST_ITEM
 
             blocks << build_list_item(child, context)
@@ -134,11 +153,8 @@ module EbookReader
           stack.pop
         end
 
-        ListContext = Struct.new(:ordered, :index, keyword_init: true)
-        private_constant :ListContext
-
         def build_list_item(element, context)
-          stack = context.list_stack || []
+          stack = context.list_stack ||= []
           stack.last.index += 1 if stack.last
           level = stack.size
           marker = list_marker_for(stack)
@@ -167,7 +183,7 @@ module EbookReader
 
         def build_preformatted(element)
           text = extract_raw_text(element)
-          segments = [text_segment(text, code: true)]
+          segments = [text_segment(text, code: true, preserve_whitespace: true)]
           EbookReader::Domain::Models::ContentBlock.new(
             type: :code,
             segments: segments,
@@ -190,20 +206,18 @@ module EbookReader
         end
 
         def build_table_blocks(element)
-          rows = []
-          element.elements.each('tr') { |row| rows << row }
+          rows = element.css('tr')
           return [] if rows.empty?
 
           lines = rows.map do |row|
-            cells = []
-            row.elements.each do |cell|
-              cells << collect_segments(cell).map(&:text).join.strip
+            cells = row.element_children.map do |cell|
+              collect_segments(cell).map(&:text).join.strip
             end
             cells.reject(&:empty?).join(' | ')
           end
           block = EbookReader::Domain::Models::ContentBlock.new(
             type: :table,
-            segments: [text_segment(lines.join(INLINE_NEWLINE))],
+            segments: [text_segment(lines.join(INLINE_NEWLINE), preserve_whitespace: true)],
             metadata: { preserve_whitespace: true }
           )
           [block]
@@ -228,16 +242,17 @@ module EbookReader
           )
         end
 
-        def collect_segments(element, inherited_styles = {})
+        def collect_segments(element, inherited_styles = {},
+                             context = Context.new(list_stack: [], in_blockquote: false))
           segments = []
           element.children.each do |child|
             case child
-            when REXML::Text
-              text = child.to_s
+            when Nokogiri::XML::Text
+              text = child.text
               next if text.strip.empty?
 
               segments << text_segment(text, inherited_styles)
-            when REXML::Element
+            when Nokogiri::XML::Element
               name = child.name.downcase
               if name == BR
                 segments << text_segment(INLINE_NEWLINE, inherited_styles.merge(break: true))
@@ -245,7 +260,7 @@ module EbookReader
               end
 
               new_styles = inherited_styles.merge(styles_for(name, child))
-              segments.concat(collect_segments(child, new_styles))
+              segments.concat(collect_segments(child, new_styles, context))
             end
           end
           segments
@@ -264,29 +279,33 @@ module EbookReader
             { bold: true }
           when 'em', 'i'
             { italic: true }
+          when 'u'
+            { underline: true }
           when 'code', 'kbd', 'samp'
-            { code: true }
+            { code: true, preserve_whitespace: true }
           when 'span'
             span_styles(element)
+          when 'a'
+            { link: element['href'] }.merge(span_styles(element))
           else
             {}
           end
         end
 
         def span_styles(element)
-          style_attr = element.attributes['style']
+          style_attr = element['style']
           return {} unless style_attr
 
           styles = {}
-          styles[:bold] = true if style_attr =~ /font-weight:\s*bold/i
-          styles[:italic] = true if style_attr =~ /font-style:\s*italic/i
+          styles[:bold] = true if /font-weight\s*:\s*bold/i.match?(style_attr)
+          styles[:italic] = true if /font-style\s*:\s*italic/i.match?(style_attr)
+          styles[:underline] = true if /text-decoration\s*:\s*underline/i.match?(style_attr)
           styles
         end
 
         def normalize_text(text, styles)
           return text if styles[:code] || styles[:preserve_whitespace]
 
-          # Do not collapse explicit line breaks inserted via <br>
           if styles[:break]
             return text == INLINE_NEWLINE ? INLINE_NEWLINE : text
           end
@@ -295,21 +314,20 @@ module EbookReader
         end
 
         def extract_raw_text(element)
-          buffer = []
-          element.children.each do |child|
-            if child.is_a?(REXML::Text)
-              buffer << child.to_s
-            elsif child.is_a?(REXML::Element)
-              buffer << extract_raw_text(child)
-            end
-          end
-          buffer.join
+          element.text.to_s
         end
 
         def compact_blocks(blocks)
           blocks.reject do |block|
             block.nil? || block.segments.empty? || block.text.strip.empty?
           end
+        end
+
+        def block_via_style?(element)
+          style = element['style'].to_s
+          return true if /display\s*:\s*(block|list-item)/i.match?(style)
+
+          false
         end
       end
     end

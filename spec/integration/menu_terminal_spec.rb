@@ -50,13 +50,14 @@ RSpec.describe EbookReader::Controllers::Menu::StateController do
 
         def start_frame; end
         def end_frame; end
+
         def size
           [24, 80]
         end
 
         def print(*) end
         def flush(*) end
-        def move(*) '' end
+        def move(*) = ''
       end
     end
   end
@@ -73,7 +74,7 @@ RSpec.describe EbookReader::Controllers::Menu::StateController do
                                            delete_for_book: nil),
       recent_library_repository: instance_double('RecentLibraryRepository', add: nil),
       annotation_service: instance_double('AnnotationService', list_for_book: [], list_all: {}),
-      page_calculator: instance_double('PageCalculator', get_page: nil)
+      page_calculator: instance_double('PageCalculator', get_page: nil),
     }
   end
   let(:container) { StubContainer.new(registry) }
@@ -94,6 +95,8 @@ RSpec.describe EbookReader::Controllers::Menu::StateController do
       def switch_to_mode(mode)
         @last_mode = mode
       end
+
+      def draw_screen; end
     end.new(state, container, catalog, terminal_service)
   end
 
@@ -134,5 +137,58 @@ RSpec.describe EbookReader::Controllers::Menu::StateController do
 
     expect(terminal_class.cleanup_calls).to eq(1)
     expect(EbookReader::Domain::Services::TerminalService.session_depth).to eq(0)
+  end
+
+  it 'forces terminal cleanup when menu exits with non-zero depth' do
+    state_controller = described_class.new(menu)
+    ui_controller = EbookReader::Controllers::Menu::UIController.new(menu, state_controller)
+
+    terminal_service.setup
+    expect do
+      expect do
+        ui_controller.cleanup_and_exit(0, 'bye')
+      end.to raise_error(SystemExit)
+    end.to change { terminal_class.cleanup_calls }.by(1)
+
+    expect(EbookReader::Domain::Services::TerminalService.session_depth).to eq(0)
+  ensure
+    EbookReader::Domain::Services::TerminalService.session_depth = 0
+  end
+
+  it 'shows the progress overlay when not skipped by configuration' do
+    state_controller = described_class.new(menu)
+
+    presenter = Class.new do
+      class << self
+        attr_accessor :show_calls, :clear_calls
+      end
+
+      def initialize(*); end
+
+      def show(**)
+        self.class.show_calls = (self.class.show_calls || 0) + 1
+      end
+
+      def update(done:, total:); end
+
+      def clear
+        self.class.clear_calls = (self.class.clear_calls || 0) + 1
+      end
+    end
+
+    stub_const('EbookReader::MainMenu::MenuProgressPresenter', presenter)
+
+    previous_env = ENV.fetch('READER_SKIP_PROGRESS_OVERLAY', nil)
+    ENV['READER_SKIP_PROGRESS_OVERLAY'] = '0'
+
+    allow(state_controller).to receive(:prepare_reader_launch).and_return(nil)
+    expect(state_controller).to receive(:run_reader).with('/tmp/book.epub')
+
+    state_controller.load_and_open_with_progress('/tmp/book.epub')
+
+    expect(presenter.show_calls).to eq(1)
+    expect(presenter.clear_calls).to eq(1)
+  ensure
+    ENV['READER_SKIP_PROGRESS_OVERLAY'] = previous_env
   end
 end

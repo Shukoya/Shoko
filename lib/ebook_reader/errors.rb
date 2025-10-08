@@ -83,4 +83,14 @@ module EbookReader
       @component = component
     end
   end
+
+  # Raised when content normalization produces no semantic blocks
+  class FormattingError < Error
+    attr_reader :source
+
+    def initialize(source, message)
+      super("Formatting failed for #{source}: #{message}")
+      @source = source
+    end
+  end
 end

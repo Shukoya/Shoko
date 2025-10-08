@@ -23,7 +23,7 @@ module EbookReader
         attr_reader :pages_data
 
         def initialize(dependencies)
-          super(dependencies)
+          super
           @text_wrapper = DefaultTextWrapper.new
           @cache = {}
           @pages_data = []
@@ -41,14 +41,14 @@ module EbookReader
         end
 
         # Build complete page map (PageManager compatibility)
-        def build_page_map(terminal_width, terminal_height, doc, config, &on_progress)
+        def build_page_map(terminal_width, terminal_height, doc, config, &)
           return unless EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(config) == :dynamic
 
           result = @pagination_workflow.build_dynamic(doc: doc,
                                                       width: terminal_width,
                                                       height: terminal_height,
                                                       config: config,
-                                                      &on_progress)
+                                                      &)
           @doc_ref = doc
           @pages_data = result.pages
         end

@@ -35,21 +35,20 @@ module EbookReader
         entries = annotations
         return { type: :close } if entries.empty? && cancel_key?(key)
 
-        case
-        when up_key?(key)
+        if up_key?(key)
           move_selection(-1)
-        when down_key?(key)
+        elsif down_key?(key)
           move_selection(1)
-        when confirm_key?(key)
+        elsif confirm_key?(key)
           annotation = current_annotation
           annotation ? { type: :open, annotation: annotation } : nil
-        when edit_key?(key)
+        elsif edit_key?(key)
           annotation = current_annotation
           annotation ? { type: :edit, annotation: annotation } : nil
-        when delete_key?(key)
+        elsif delete_key?(key)
           annotation = current_annotation
           annotation ? { type: :delete, annotation: annotation } : nil
-        when cancel_key?(key)
+        elsif cancel_key?(key)
           { type: :close }
         end
       end
@@ -89,11 +88,11 @@ module EbookReader
 
       def clamp_selection!
         count = @annotations.length
-        if count.zero?
-          @selected_index = 0
-        else
-          @selected_index = @selected_index.clamp(0, count - 1)
-        end
+        @selected_index = if count.zero?
+                            0
+                          else
+                            @selected_index.clamp(0, count - 1)
+                          end
       end
 
       def move_selection(delta)
@@ -125,7 +124,7 @@ module EbookReader
 
         if entries.empty?
           message = "#{COLOR_TEXT_DIM}No annotations yet#{Terminal::ANSI::RESET}"
-          row = origin_y + height / 2
+          row = origin_y + (height / 2)
           col = origin_x + [(width - message.length) / 2, 2].max
           surface.write(bounds, row, col, message)
           return
@@ -165,7 +164,7 @@ module EbookReader
         end
       end
 
-      def draw_footer(surface, bounds, origin_x, origin_y, width, height)
+      def draw_footer(surface, bounds, origin_x, origin_y, _width, height)
         hint = "#{COLOR_TEXT_DIM}Use ↑/↓ to navigate • Enter to open#{Terminal::ANSI::RESET}"
         surface.write(bounds, origin_y + height - 2, origin_x + 2, hint)
       end
@@ -215,8 +214,8 @@ module EbookReader
       def symbolize_keys(annotation)
         return annotation unless annotation.is_a?(Hash)
 
-        annotation.each_with_object({}) do |(key, value), acc|
-          acc[key.is_a?(String) ? key.to_sym : key] = value
+        annotation.transform_keys do |key|
+          key.is_a?(String) ? key.to_sym : key
         end
       end
     end

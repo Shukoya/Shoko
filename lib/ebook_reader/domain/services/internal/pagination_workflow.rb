@@ -21,6 +21,7 @@ module EbookReader
 
             layout = layout_for(width, height, config)
             return Result.new(pages: [], cached: false) if layout[:lines_per_page] <= 0
+
             pages = Internal::DynamicPageMapBuilder.build(
               doc,
               layout[:col_width],
@@ -36,6 +37,7 @@ module EbookReader
           def build_absolute(doc:, width:, height:, state:, &on_progress)
             layout = layout_for(width, height, state)
             return [] if layout[:lines_per_page] <= 0
+
             wrapper = resolve_wrapping_service
             Internal::AbsolutePageMapBuilder.build(
               doc,
@@ -100,7 +102,7 @@ module EbookReader
           end
 
           def resolve_wrapping_service
-            return nil unless @dependencies&.respond_to?(:resolve)
+            return nil unless @dependencies.respond_to?(:resolve)
 
             @dependencies.resolve(:wrapping_service)
           rescue StandardError
@@ -122,8 +124,6 @@ module EbookReader
               config.dig(:config, :line_spacing)
             elsif config.respond_to?(:get)
               config.get(%i[config line_spacing])
-            else
-              nil
             end || EbookReader::Constants::DEFAULT_LINE_SPACING
           end
         end

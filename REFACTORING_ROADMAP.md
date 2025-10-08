@@ -3,7 +3,7 @@
 **Current Status: Phase 4.6 - Documentation + Input Alignment**  
 **Overall Progress: ~88% Complete (audited 2025-09-11, updated)**  
 **Estimated Completion: Phase 4.6**  
-**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation alignment is complete—`DEVELOPMENT.md` now mirrors the current layout. Terminal exit regression was fixed: `Menu::StateController#run_reader` relies on `TerminalService` session depth unwinding so the shell is restored. Progress is shown inline during menu-driven open, and direct CLI open renders the same loading overlay via `Application::PaginationOrchestrator.initial_build`. Canonical book identity (`EPUBDocument#canonical_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and the first frame lands on the saved page in dynamic mode once pagination completes. Annotation popup input now validates DI wiring (`UIController#activate_annotation_editor_overlay_session`) and an integration spec asserts that `:annotation_editor` remains at the top of the dispatcher stack so reader bindings cannot leak back in.
+**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation alignment is still pending—`DEVELOPMENT.md` carries stale guidance that needs updating. Terminal exit regression remains reproducible when returning from the reader via `q`; reopen the cleanup work so the shell state is restored consistently. Progress is shown inline during menu-driven open, and direct CLI open renders the same loading overlay via `Application::PaginationOrchestrator.initial_build`. Canonical book identity (`EPUBDocument#canonical_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and the first frame lands on the saved page in dynamic mode once pagination completes. Annotation popup input is still managed via `ReaderController#activate_annotation_editor_overlay_session`; add DI validation as part of upcoming cleanup.
 
 ## Phase 1: Infrastructure Foundation ✅ COMPLETE
 
@@ -71,7 +71,7 @@
 - [x] Navigation commands (:next_page, :prev_page, :next_chapter, :prev_chapter, :scroll_up, :scroll_down) now use NavigationService through Domain layer
 
 ### 3.3 Terminal Access Elimination 🔶 PARTIAL
-**Reality Check (2025-04-XX)**: Terminal session depth now unwinds correctly after returning from the reader (covered by `spec/integration/menu_terminal_spec.rb`), but menu exit flows still surface messages only via logs—migrate those into state-driven notifications so the renderer controls user-visible output.
+**Reality Check (2025-04-XX)**: Terminal session depth is now guarded by `TerminalService.force_cleanup` and covered by `spec/integration/menu_terminal_spec.rb` (menu → reader → exit); keep an eye on field reports but the regression fix is back under test.
 - [x] Balance menu ⇄ reader terminal lifecycle and add regression coverage.
 - [x] Replace direct STDOUT writes in menu controllers with logger/notification based handling.
 - [x] Remove direct Terminal writes from MouseableReader.

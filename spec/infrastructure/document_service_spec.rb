@@ -47,7 +47,7 @@ RSpec.describe EbookReader::Infrastructure::DocumentService do
     wrapping = instance_double('WrappingService')
     service = described_class.new('/tmp/sample.epub', wrapping)
     chapter = EbookReader::Domain::Models::Chapter.new(number: '3', title: 'Third',
-                                                       lines: ['alpha', 'beta'])
+                                                       lines: %w[alpha beta])
     document = instance_double('EPUBDocument')
     allow(document).to receive(:get_chapter).with(2).and_return(chapter)
     service.instance_variable_set(:@document, document)

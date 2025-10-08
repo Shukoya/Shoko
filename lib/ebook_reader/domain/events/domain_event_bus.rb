@@ -46,8 +46,8 @@ module EbookReader
         # @param event_type [Class] Event class to subscribe to
         # @param handler [Proc] Handler block or callable
         # @yield [event] Block to handle the event
-        def subscribe(event_type, handler = nil, &block)
-          handler = resolve_callable!(handler, &block)
+        def subscribe(event_type, handler = nil, &)
+          handler = resolve_callable!(handler, &)
           @subscribers[event_type] << handler
         end
 
@@ -56,8 +56,8 @@ module EbookReader
         # @param event_types [Array<Class>] Event classes to subscribe to
         # @param handler [Proc] Handler block or callable
         # @yield [event] Block to handle the event
-        def subscribe_to_many(event_types, handler = nil, &block)
-          handler = resolve_callable!(handler, &block)
+        def subscribe_to_many(event_types, handler = nil, &)
+          handler = resolve_callable!(handler, &)
           event_types.each { |type| subscribe(type, handler) }
         end
 
@@ -87,6 +87,7 @@ module EbookReader
         def resolve_callable!(callable, &block)
           callable = block if block_given?
           raise ArgumentError, 'Handler must be provided' unless callable
+
           callable
         end
 

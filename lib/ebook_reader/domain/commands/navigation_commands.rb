@@ -54,14 +54,14 @@ module EbookReader
           @action
         end
 
-       private
+        private
 
-       def humanize_action(action)
+        def humanize_action(action)
           action.to_s.tr('_', ' ')
-       end
+        end
 
         def current_chapter_from(state_store)
-          return 0 unless state_store && state_store.respond_to?(:current_state)
+          return 0 unless state_store.respond_to?(:current_state)
 
           (state_store.current_state || {}).dig(:reader, :current_chapter) || 0
         rescue StandardError

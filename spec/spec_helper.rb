@@ -21,6 +21,7 @@ unless defined?(JSON::Fragment)
 end
 
 ENV['EBOOK_READER_TEST_MODE'] ||= '1'
+ENV['READER_SKIP_PROGRESS_OVERLAY'] ||= '1'
 
 require 'json'
 require 'simplecov'
@@ -82,9 +83,7 @@ RSpec.configure do |config|
   # Clean up state between tests
   config.before(:each) do
     EbookReader.reset! if EbookReader.respond_to?(:reset!)
-    if defined?(EbookReader::TestSupport::TerminalDouble)
-      EbookReader::TestSupport::TerminalDouble.reset!
-    end
+    EbookReader::TestSupport::TerminalDouble.reset! if defined?(EbookReader::TestSupport::TerminalDouble)
     if defined?(EbookReader::Infrastructure::Logger) && defined?(EbookReader::TestSupport::TestMode)
       null_io = EbookReader::TestSupport::TestMode.logger_null_io
       EbookReader::Infrastructure::Logger.output = null_io if null_io

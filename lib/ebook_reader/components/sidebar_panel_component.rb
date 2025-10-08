@@ -17,9 +17,9 @@ module EbookReader
       TABS = %i[toc annotations bookmarks].freeze
       TAB_TITLES = { toc: 'Contents', annotations: 'Annotations', bookmarks: 'Bookmarks' }.freeze
       HELP_TEXTS = {
-        toc: "↑↓ Navigate • ⏎ Jump • / Filter",
-        annotations: "↑↓ Navigate • ⏎ Jump • e Edit • d Delete",
-        bookmarks: "↑↓ Navigate • ⏎ Jump • d Delete",
+        toc: '↑↓ Navigate • ⏎ Jump • / Filter',
+        annotations: '↑↓ Navigate • ⏎ Jump • e Edit • d Delete',
+        bookmarks: '↑↓ Navigate • ⏎ Jump • d Delete',
       }.freeze
       DEFAULT_WIDTH_PERCENT = 30
       MIN_WIDTH = 24
@@ -167,7 +167,8 @@ module EbookReader
 
       def render_active_tab(surface, bounds)
         active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(@state)
-        renderer = { toc: @toc_renderer, annotations: @annotations_renderer, bookmarks: @bookmarks_renderer }[active_tab]
+        renderer = { toc: @toc_renderer, annotations: @annotations_renderer,
+                     bookmarks: @bookmarks_renderer }[active_tab]
         renderer&.render(surface, bounds)
       end
     end

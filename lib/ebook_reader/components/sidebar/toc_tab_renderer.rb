@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'set'
-
 require_relative '../base_component'
 require_relative '../ui/list_helpers'
 require_relative '../../domain/models/toc_entry'
@@ -50,7 +48,7 @@ module EbookReader
           # Calculate visible area
           available_height = metrics.height - (content_start_y - by)
           render_entries_list(surface, bounds, metrics, entries, selected_entry_index, selected_chapter,
-                               content_start_y, available_height)
+                              content_start_y, available_height)
         end
 
         private
@@ -60,7 +58,7 @@ module EbookReader
         end
 
         def resolve_document
-          return @dependencies.resolve(:document) if @dependencies&.respond_to?(:resolve)
+          return @dependencies.resolve(:document) if @dependencies.respond_to?(:resolve)
 
           nil
         rescue StandardError
@@ -84,7 +82,7 @@ module EbookReader
             x = bx + [(bw - message.length) / 2, 2].max
             y = start_y + i
             surface.write(bounds, y, x, "#{COLOR_TEXT_DIM}#{message}#{reset}")
-        end
+          end
         end
 
         def get_filtered_entries(entries, state)
@@ -180,18 +178,18 @@ module EbookReader
                       end
 
           base_color = if entry.level.zero?
-                          COLOR_TEXT_ACCENT
-                        elsif navigable
-                          COLOR_TEXT_PRIMARY
-                        else
-                          COLOR_TEXT_DIM
-                        end
+                         COLOR_TEXT_ACCENT
+                       elsif navigable
+                         COLOR_TEXT_PRIMARY
+                       else
+                         COLOR_TEXT_DIM
+                       end
 
           text = if selected
-                    "#{SELECTION_HIGHLIGHT}#{indent}#{title}#{reset}"
-                  else
-                    "#{base_color}#{indent}#{title}#{reset}"
-                  end
+                   "#{SELECTION_HIGHLIGHT}#{indent}#{title}#{reset}"
+                 else
+                   "#{base_color}#{indent}#{title}#{reset}"
+                 end
 
           surface.write(bounds, y, bx + 1, indicator)
           surface.write(bounds, y, bx + 3, text)

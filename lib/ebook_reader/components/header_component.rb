@@ -23,7 +23,7 @@ module EbookReader
         return unless @view_model_provider
 
         view_model = @view_model_provider.call
-        return unless view_model&.respond_to?(:document_title)
+        return unless view_model.respond_to?(:document_title)
 
         render_centered_title(surface, bounds, view_model.document_title.to_s)
       end

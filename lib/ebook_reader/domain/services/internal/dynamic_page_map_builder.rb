@@ -46,6 +46,7 @@ module EbookReader
 
             def wrap_lines(lines, width)
               return [] if lines.empty? || width <= 0
+
               wrapped = []
               lines.each do |line|
                 if line.length <= width

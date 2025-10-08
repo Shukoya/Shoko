@@ -68,7 +68,7 @@ module EbookReader
           width = bounds.width
           title = entry_title(entry)
           indent = '  ' * [entry.level, 0].max
-          line = (indent + title)[0, width - 6]
+          (indent + title)[0, width - 6]
 
           selected = entry.chapter_index && entry.chapter_index == ctx.selected_chapter_index
           pointer = if selected
@@ -94,7 +94,7 @@ module EbookReader
           pointer_text = if selected
                            pointer
                          elsif entry.navigable
-                           EbookReader::Constants::UIConstants::COLOR_TEXT_DIM + '○ ' + reset
+                           "#{EbookReader::Constants::UIConstants::COLOR_TEXT_DIM}○ #{reset}"
                          else
                            '  '
                          end

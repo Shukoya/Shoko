@@ -167,7 +167,7 @@ module EbookReader
 
             render_annotation_item(surface, bounds, row, width, annotation, is_selected,
                                    abs_idx, in_all)
-        end
+          end
         end
 
         def render_annotation_item(surface, bounds, row, width, annotation, is_selected,

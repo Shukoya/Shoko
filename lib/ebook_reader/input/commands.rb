@@ -54,7 +54,6 @@ module EbookReader
 
         context.public_send(command, key)
       end
-
     end
   end
 end

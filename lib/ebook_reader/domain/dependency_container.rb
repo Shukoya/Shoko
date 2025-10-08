@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'set'
-
 require_relative '../infrastructure/repositories/cached_library_repository'
 
 module EbookReader

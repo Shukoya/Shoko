@@ -138,6 +138,7 @@ module EbookReader
 
       def cached_fetch(key, default: nil)
         return @content_cache[key] if @content_cache.key?(key)
+
         value = yield
         @content_cache[key] = value
         value
@@ -146,6 +147,7 @@ module EbookReader
       def with_chapter(index, default: nil)
         chapter = get_chapter(index)
         return default unless chapter
+
         yield chapter
       end
     end

@@ -91,8 +91,8 @@ module EbookReader
         return false unless dir
 
         base = File.join(dir, 'pagination', key)
-        mp = base + '.msgpack'
-        js = base + '.json'
+        mp = "#{base}.msgpack"
+        js = "#{base}.json"
         File.exist?(mp) || File.exist?(js)
       rescue StandardError
         false
@@ -109,8 +109,8 @@ module EbookReader
         return false unless dir
 
         base = File.join(dir, 'pagination', key)
-        mp = base + '.msgpack'
-        js = base + '.json'
+        mp = "#{base}.msgpack"
+        js = "#{base}.json"
         removed = false
         [mp, js].each do |p|
           next unless File.exist?(p)
@@ -130,11 +130,10 @@ module EbookReader
           pages = data['pages'] || data[:pages]
           return nil unless version.nil? || version.to_i <= SCHEMA_VERSION
           return nil unless pages.is_a?(Array)
+
           pages
         when Array
           data
-        else
-          nil
         end
       end
     end

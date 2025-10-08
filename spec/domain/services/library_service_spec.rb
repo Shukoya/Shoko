@@ -20,8 +20,8 @@ RSpec.describe EbookReader::Domain::Services::LibraryService do
         @items
       end
     end.new([
-               { 'path' => '/tmp/book.epub', 'accessed' => '2020-01-01T00:00:00Z' },
-             ])
+              { 'path' => '/tmp/book.epub', 'accessed' => '2020-01-01T00:00:00Z' },
+            ])
   end
 
   let(:dependencies) do

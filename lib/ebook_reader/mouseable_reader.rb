@@ -34,13 +34,6 @@ module EbookReader
       @terminal_service.disable_mouse
     end
 
-    def draw_screen
-      # Render the base UI via components
-      super
-
-      # Overlay and frame end are handled by ReaderController now
-    end
-
     def read_input_keys
       key = @terminal_service.read_input_with_mouse
       return [] unless key
@@ -63,7 +56,7 @@ module EbookReader
       return unless event
 
       editor_overlay = EbookReader::Domain::Selectors::ReaderSelectors.annotation_editor_overlay(@state)
-      if editor_overlay&.respond_to?(:visible?) && editor_overlay.visible? && event[:released]
+      if editor_overlay.respond_to?(:visible?) && editor_overlay.visible? && event[:released]
         handle_annotation_editor_click(event)
         return
       end

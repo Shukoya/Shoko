@@ -196,17 +196,18 @@ module EbookReader
       def placeholder_label?(label)
         stripped = label.to_s.strip
         return true if stripped.empty?
+
         stripped.match?(/\A[cC][0-9A-Za-z]{2,}\z/)
       end
 
       def extract_anchor_text(content, anchor)
-        regex = /<(?<tag>[^>\s]+)[^>]*\s(?:id|name|xml:id)\s*=\s*["']#{Regexp.escape(anchor)}["'][^>]*>(?<text>.*?)<\/\k<tag>>/im
+        regex = %r{<(?<tag>[^>\s]+)[^>]*\s(?:id|name|xml:id)\s*=\s*["']#{Regexp.escape(anchor)}["'][^>]*>(?<text>.*?)</\k<tag>>}im
         match = content.match(regex)
         match && match[:text]
       end
 
       def extract_following_link_text(content, anchor)
-        regex = /(?:id|name|xml:id)\s*=\s*["']#{Regexp.escape(anchor)}["'][^>]*>\s*<[^>]*>(?<text>[^<]+)<\/[^>]+>/im
+        regex = %r{(?:id|name|xml:id)\s*=\s*["']#{Regexp.escape(anchor)}["'][^>]*>\s*<[^>]*>(?<text>[^<]+)</[^>]+>}im
         match = content.match(regex)
         match && match[:text]
       end
@@ -219,12 +220,12 @@ module EbookReader
         @document_heading_queue[path] = []
         return unless content
 
-        content.scan(/<(h[1-6])[^>]*?(?:id|name|xml:id)\s*=\s*["']([^"']+)["'][^>]*>(.*?)<\/\1>/im) do |_tag, anchor, text|
+        content.scan(%r{<(h[1-6])[^>]*?(?:id|name|xml:id)\s*=\s*["']([^"']+)["'][^>]*>(.*?)</\1>}im) do |_tag, anchor, text|
           label = clean_label(text)
           @document_anchor_map[path][anchor] = label unless label.empty?
         end
 
-        content.scan(/<(h[1-6])[^>]*>(.*?)<\/\1>/im) do |_tag, text|
+        content.scan(%r{<(h[1-6])[^>]*>(.*?)</\1>}im) do |_tag, text|
           label = clean_label(text)
           @document_heading_queue[path] << label unless label.empty?
         end

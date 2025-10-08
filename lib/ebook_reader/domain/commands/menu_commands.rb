@@ -35,9 +35,9 @@ module EbookReader
           when :toggle_view_mode then context.toggle_view_mode if context.respond_to?(:toggle_view_mode)
           when :cycle_line_spacing then context.cycle_line_spacing if context.respond_to?(:cycle_line_spacing)
           when :toggle_page_numbers then context.toggle_page_numbers if context.respond_to?(:toggle_page_numbers)
-          when :toggle_page_numbering_mode then
+          when :toggle_page_numbering_mode
             context.toggle_page_numbering_mode if context.respond_to?(:toggle_page_numbering_mode)
-          when :toggle_highlight_quotes then
+          when :toggle_highlight_quotes
             context.toggle_highlight_quotes if context.respond_to?(:toggle_highlight_quotes)
           when :wipe_cache then context.wipe_cache if context.respond_to?(:wipe_cache)
           when :start_search
@@ -46,7 +46,7 @@ module EbookReader
             else
               # Fallback: set mode/search_active via actions
               state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(mode: :search,
-                                                                              search_active: true))
+                                                                                search_active: true))
             end
             current = (state.get(%i[menu search_query]) || '').to_s
             state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(search_cursor: current.length))
@@ -55,7 +55,7 @@ module EbookReader
               context.switch_to_browse
             else
               state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(mode: :browse,
-                                                                              search_active: false))
+                                                                                search_active: false))
             end
           # recent_* actions removed
           # Annotations list (menu) actions
@@ -70,9 +70,9 @@ module EbookReader
               path = screen.current_book_path
               if ann && path
                 state.update({
-                                       %i[menu selected_annotation] => ann,
-                                       %i[menu selected_annotation_book] => path,
-                                     })
+                               %i[menu selected_annotation] => ann,
+                               %i[menu selected_annotation_book] => path,
+                             })
                 switch_mode(context, :annotation_detail, can_switch)
               end
             end
@@ -98,6 +98,7 @@ module EbookReader
 
         def delete_selected_annotation_if_available(context, can_switch)
           return unless context.respond_to?(:delete_selected_annotation)
+
           context.delete_selected_annotation
           switch_mode(context, :annotations, can_switch)
         end
@@ -114,7 +115,7 @@ module EbookReader
           state = context.state
           # Prefer component's filtered list length; fall back to public accessor
           mmc = context.respond_to?(:main_menu_component) ? context.main_menu_component : nil
-          max_idx = if mmc && mmc.respond_to?(:browse_screen)
+          max_idx = if mmc.respond_to?(:browse_screen)
                       cnt = mmc.browse_screen.filtered_count
                       [(cnt || 0) - 1, 0].max
                     else

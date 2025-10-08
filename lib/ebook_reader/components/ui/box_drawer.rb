@@ -8,9 +8,7 @@ module EbookReader
           # Top border
           hline = '─' * (w - 2)
           surface.write(bounds, y, x, "╭#{hline}╮")
-          if label && w > (label.to_s.length + 6)
-            surface.write(bounds, y, x + 2, "[ #{label} ]")
-          end
+          surface.write(bounds, y, x + 2, "[ #{label} ]") if label && w > (label.to_s.length + 6)
           # Sides
           (1...(h - 1)).each do |i|
             row = y + i

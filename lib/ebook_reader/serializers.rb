@@ -4,6 +4,7 @@ module EbookReader
   module Infrastructure
     module SerializerSupport
       module_function
+
       def msgpack_available?
         require 'msgpack'
         true

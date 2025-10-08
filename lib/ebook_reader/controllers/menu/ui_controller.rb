@@ -61,7 +61,7 @@ module EbookReader
         end
 
         def cleanup_and_exit(code, message, error = nil)
-          menu.terminal_service.cleanup
+          cleanup_terminal
 
           log_exit(message, error)
           exit code
@@ -77,20 +77,9 @@ module EbookReader
 
         def handle_backspace_input
           if selectors.search_active?(state)
-            current = (selectors.search_query(state) || '').to_s
-            cursor = (state.get(%i[menu search_cursor]) || current.length).to_i
-            if cursor.positive?
-              prev = cursor - 1
-              before = current[0, prev] || ''
-              after  = current[cursor..] || ''
-              state.dispatch(menu_action(search_query: before + after, search_cursor: prev))
-            end
+            handle_search_backspace
           else
-            file_input = (selectors.file_input(state) || '').to_s
-            if file_input.length.positive?
-              new_val = file_input[0...-1]
-              state.dispatch(menu_action(file_input: new_val))
-            end
+            handle_file_backspace
           end
           menu.open_file_screen.input = state.get(%i[menu file_input])
         end
@@ -149,22 +138,11 @@ module EbookReader
         end
 
         def library_select
-          screen = menu.main_menu_component&.current_screen
-          items = screen.respond_to?(:items) ? screen.items : []
-          index = selectors.browse_selected(state) || 0
-          item = items[index]
+          item = selected_library_item
           return unless item
 
-          target_path = item.open_path
-          unless state_controller.valid_cache_directory?(target_path)
-            alt_path = item.respond_to?(:epub_path) ? item.epub_path : nil
-            if alt_path && !alt_path.empty? && File.exist?(alt_path)
-              target_path = alt_path
-            else
-              state_controller.file_not_found
-              return
-            end
-          end
+          target_path = resolve_library_path(item)
+          return state_controller.file_not_found unless target_path
 
           state_controller.run_reader(target_path)
         end
@@ -179,6 +157,21 @@ module EbookReader
           return unless error
 
           logger&.error('Menu exit error', error: error.message, backtrace: Array(error.backtrace))
+        end
+
+        def cleanup_terminal
+          terminal = menu.terminal_service
+          return unless terminal
+
+          cleanup_error = nil
+          begin
+            terminal.cleanup
+          rescue StandardError => e
+            cleanup_error = e
+            resolve_logger&.error('Menu terminal cleanup failed', error: e.message)
+          ensure
+            force_cleanup_if_needed(terminal, cleanup_error)
+          end
         end
 
         def selectors
@@ -204,6 +197,54 @@ module EbookReader
           state.dispatch(menu_action(annotations_all: service.list_all))
         rescue StandardError
           state.dispatch(menu_action(annotations_all: {}))
+        end
+
+        def force_cleanup_if_needed(terminal, cleanup_error)
+          return unless terminal.respond_to?(:force_cleanup)
+
+          remaining_depth = EbookReader::Domain::Services::TerminalService.session_depth || 0
+          needs_force = cleanup_error || remaining_depth.positive?
+          return unless needs_force
+
+          terminal.force_cleanup
+        rescue StandardError => e
+          resolve_logger&.error('Menu terminal force cleanup failed', error: e.message)
+        end
+
+        def handle_search_backspace
+          current = (selectors.search_query(state) || '').to_s
+          cursor = (state.get(%i[menu search_cursor]) || current.length).to_i
+          return unless cursor.positive?
+
+          prev = cursor - 1
+          before = current[0, prev] || ''
+          after  = current[cursor..] || ''
+          state.dispatch(menu_action(search_query: before + after, search_cursor: prev))
+        end
+
+        def handle_file_backspace
+          file_input = (selectors.file_input(state) || '').to_s
+          return unless file_input.length.positive?
+
+          new_val = file_input[0...-1]
+          state.dispatch(menu_action(file_input: new_val))
+        end
+
+        def selected_library_item
+          screen = menu.main_menu_component&.current_screen
+          items = screen.respond_to?(:items) ? screen.items : []
+          index = selectors.browse_selected(state) || 0
+          items[index]
+        end
+
+        def resolve_library_path(item)
+          primary = item.respond_to?(:open_path) ? item.open_path : nil
+          return primary if state_controller.valid_cache_directory?(primary)
+
+          fallback = item.respond_to?(:epub_path) ? item.epub_path : nil
+          return fallback if fallback && !fallback.empty? && File.exist?(fallback)
+
+          nil
         end
       end
     end

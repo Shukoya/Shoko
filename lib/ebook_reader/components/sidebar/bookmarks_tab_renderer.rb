@@ -56,7 +56,7 @@ module EbookReader
             y = start_y + i
             surface.write(bounds, y, x, "#{COLOR_TEXT_DIM}#{message}#{reset}")
           end
-      end
+        end
 
         def render_bookmarks_list(surface, bounds, metrics, bookmarks, doc, selected_index)
           # Each bookmark takes 2 lines: title/chapter + snippet
@@ -127,7 +127,7 @@ module EbookReader
         end
 
         def resolve_document
-          return @dependencies.resolve(:document) if @dependencies&.respond_to?(:resolve)
+          return @dependencies.resolve(:document) if @dependencies.respond_to?(:resolve)
 
           nil
         rescue StandardError

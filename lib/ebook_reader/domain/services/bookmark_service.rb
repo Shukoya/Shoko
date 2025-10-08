@@ -70,9 +70,9 @@ module EbookReader
         # @param bookmark [Bookmark] Bookmark to navigate to
         def jump_to_bookmark(bookmark)
           apply_state_updates({
-                               %i[reader current_chapter] => bookmark.chapter_index,
-                               %i[reader current_page] => bookmark.page_offset,
-                             })
+                                %i[reader current_chapter] => bookmark.chapter_index,
+                                %i[reader current_page] => bookmark.page_offset,
+                              })
 
           # Publish domain event
           @domain_event_bus.publish(Events::BookmarkNavigated.new(
@@ -139,7 +139,7 @@ module EbookReader
           @domain_event_bus = resolve(:domain_event_bus)
         end
 
-      private
+        private
 
         def get_current_line_offset(state)
           # Get the current line position depending on view mode

@@ -127,11 +127,7 @@ module EbookReader
             if pages.nil?
               st = resolve(:state_store) if registered?(:state_store)
               pages = begin
-                if st&.respond_to?(:get)
-                  st.get(%i[config prefetch_pages])
-                else
-                  nil
-                end
+                st.get(%i[config prefetch_pages]) if st.respond_to?(:get)
               rescue StandardError
                 nil
               end
@@ -214,11 +210,9 @@ module EbookReader
             worker.submit(&job)
           else
             Thread.new do
-              begin
-                job.call
-              rescue StandardError
-                # ignore background failures
-              end
+              job.call
+            rescue StandardError
+              # ignore background failures
             end
           end
         rescue StandardError

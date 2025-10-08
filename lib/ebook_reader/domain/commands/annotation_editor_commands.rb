@@ -68,10 +68,10 @@ module EbookReader
 
         private
 
-        def dispatch_to_mode(mode, method, *args)
-          return false unless mode&.respond_to?(method)
+        def dispatch_to_mode(mode, method, *)
+          return false unless mode.respond_to?(method)
 
-          mode.public_send(method, *args)
+          mode.public_send(method, *)
           true
         end
       end

@@ -20,9 +20,9 @@ module EbookReader
 
     attr_reader :controller
 
-    def method_missing(method_name, *args, &block)
+    def method_missing(method_name, *, &)
       if controller.respond_to?(method_name)
-        controller.public_send(method_name, *args, &block)
+        controller.public_send(method_name, *, &)
       else
         super
       end

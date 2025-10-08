@@ -216,8 +216,8 @@ module EbookReader
 
             plain_builder << text_for_display
             styled_builder << Components::RenderStyle.styled_segment(text_for_display,
-                                                                      segment.styles || {},
-                                                                      metadata: metadata)
+                                                                     segment.styles || {},
+                                                                     metadata: metadata)
             remaining -= EbookReader::Helpers::TextMetrics.visible_length(text_for_display)
           end
 

@@ -19,76 +19,89 @@ module EbookReader
         end
 
         MENU_ITEMS = [
-          { key: 'f', label: 'Browse Library',
-            description: 'Find and open books from your collection' },
-          { key: 'l', label: 'Library', description: 'Open cached/imported books instantly' },
-          { key: 'a', label: 'Annotations', description: 'View and manage your annotations' },
-          { key: 'o', label: 'Open File', description: 'Open an EPUB file directly' },
-          { key: 's', label: 'Settings', description: 'Customize reader preferences' },
-          { key: 'q', label: 'Quit', description: 'Exit the application' },
+          { icon: '', label: 'Browse Library' },
+          { icon: '', label: 'Library' },
+          { icon: '', label: 'Annotations' },
+          { icon: '', label: 'Open File' },
+          { icon: '', label: 'Settings' },
+          { icon: '', label: 'Quit' },
         ].freeze
 
         def do_render(surface, bounds)
           selected = EbookReader::Domain::Selectors::MenuSelectors.selected(@state) || 0
 
-          render_header(surface, bounds)
           render_menu_items(surface, bounds, selected)
-          render_footer(surface, bounds)
         end
 
         private
 
-        def render_header(surface, bounds)
-          title = "#{UIConstants::COLOR_TEXT_ACCENT}📚 EBook Reader#{Terminal::ANSI::RESET}"
-          write_header(surface, bounds, title)
-        end
-
         def render_menu_items(surface, bounds, selected)
-          b_height = bounds.height
-          b_width  = bounds.width
-          start_row = [(b_height - (MENU_ITEMS.size * 3)) / 2, 4].max
-          indent = (b_width - 60) / 2
+          metrics = layout_metrics(bounds)
 
           MENU_ITEMS.each_with_index do |item, index|
-            row = start_row + (index * 3)
-            next if row >= b_height - 4
+            row = metrics[:start_row] + (index * metrics[:row_height])
+            break if row >= metrics[:max_row]
 
-            ctx = MenuItemCtx.new(row: row, item: item, index: index, selected: selected, indent: indent)
+            ctx = MenuItemCtx.new(row: row, item: item, index: index,
+                                  selected: selected, indent: metrics[:indent])
             render_menu_item(surface, bounds, ctx)
           end
         end
 
         def render_menu_item(surface, bounds, ctx)
-          ui = UIConstants
-          reset = Terminal::ANSI::RESET
           item = ctx.item
           row = ctx.row
-          is_selected = (ctx.index == ctx.selected)
           indent = ctx.indent
 
-          # Selection indicator and key
-          key_col = indent + 6
-          key = item[:key]
-          label = item[:label]
-          if is_selected
-            surface.write(bounds, row, indent,
-                          "#{ui::SELECTION_HIGHLIGHT}▸ [#{key}]#{reset}")
-            surface.write(bounds, row, key_col,
-                          "#{ui::SELECTION_HIGHLIGHT}#{label}#{reset}")
-          else
-            surface.write(bounds, row, indent, "#{ui::COLOR_TEXT_DIM}  [#{key}]#{reset}")
-            surface.write(bounds, row, key_col,
-                          "#{ui::COLOR_TEXT_PRIMARY}#{label}#{reset}")
-          end
+          colors = row_colors(ctx.index == ctx.selected)
 
-          # Description
-          surface.write(bounds, row + 1, indent + 2,
-                        "#{ui::COLOR_TEXT_DIM}#{item[:description]}#{reset}")
+          surface.write(bounds, row, indent,
+                        formatted_row(item[:icon], item[:label], colors))
         end
 
-        def render_footer(surface, bounds)
-          text = "#{UIConstants::COLOR_TEXT_DIM}↑↓ Navigate • Enter Select • [key] Direct access#{Terminal::ANSI::RESET}"
-          write_footer(surface, bounds, text)
+        def layout_metrics(bounds)
+          height = bounds.height
+          width  = bounds.width
+          content_width = menu_content_width
+          indent = ((width - content_width) / 2).floor
+          indent = indent.clamp(2, [width - content_width, 0].max)
+          row_height = 2
+          {
+            indent: indent,
+            row_height: row_height,
+            start_row: [(height - (MENU_ITEMS.size * row_height)) / 2, 4].max,
+            max_row: height - 4,
+          }
+        end
+
+        def formatted_row(icon, label, colors)
+          icon_col = icon.to_s
+          text = label
+          "#{colors[:prefix]}#{colors[:fg]}#{icon_col}  #{text}#{Terminal::ANSI::RESET}"
+        end
+
+        def row_colors(selected)
+          if selected
+            {
+              prefix: Terminal::ANSI::BOLD,
+              fg: UIConstants::COLOR_TEXT_ACCENT,
+            }
+          else
+            {
+              prefix: '',
+              fg: UIConstants::COLOR_TEXT_PRIMARY,
+            }
+          end
+        end
+
+        def menu_content_width
+          max_label = MENU_ITEMS.map { |item| display_width(item[:label]) }.max
+          icon_width = MENU_ITEMS.map { |item| display_width(item[:icon]) }.max
+          icon_width + 2 + max_label
+        end
+
+        def display_width(text)
+          text.to_s.length
         end
       end
     end

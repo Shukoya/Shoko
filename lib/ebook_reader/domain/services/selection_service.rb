@@ -59,7 +59,7 @@ module EbookReader
 
               start_idx = [row_start_x - line_start, 0].max
               len = line_text.length
-              end_idx   = [row_end_x - line_start, len - 1].min
+              end_idx = [row_end_x - line_start, len - 1].min
 
               next unless end_idx >= start_idx && start_idx < len
 

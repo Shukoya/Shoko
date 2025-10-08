@@ -20,7 +20,7 @@ A fast, keyboard-driven terminal EPUB reader written in Ruby.
 - **Vim-style Navigation**: Familiar keyboard shortcuts for efficient reading
 - **Smart Bookmarks**: Save and organize bookmarks with contextual information
 - **Progress Tracking**: Automatic saving and restoration of reading position
-- **Recent Files**: Quick access to recently opened books with smart sorting
+- **Library Cache**: Browse cached books with recorded last-accessed timestamps from prior sessions
 - **Customizable Display**: Adjustable line spacing and visual preferences
 - **Performance Optimized**: Lazy loading and efficient rendering for large books
 - **Error Recovery**: Graceful handling of corrupted or invalid EPUB files
@@ -71,6 +71,8 @@ ebook_reader
 ebook_reader --help              # Show help
 ebook_reader --debug             # Enable debug mode
 ebook_reader /path/to/book.epub  # Open specific book
+ebook_reader --log /tmp/reader.log        # Persist logs to the given file
+ebook_reader --log-level info             # Adjust log verbosity
 ```
 
 ### First Time Setup
@@ -211,6 +213,16 @@ Or set the environment variable:
 ```bash
 DEBUG=1 ebook_reader
 ```
+
+Additional logging controls:
+
+- `--log PATH` (or `READER_LOG_PATH`) writes JSON log lines to the specified file.
+- `--log-level LEVEL` (or `READER_LOG_LEVEL`) sets verbosity (`debug`, `info`, `warn`, `error`, `fatal`).
+
+Additional logging controls:
+
+- `READER_LOG_PATH=/path/to/log` will persist structured logs to the given file (directories are created automatically).
+- `READER_LOG_LEVEL=info` adjusts verbosity when not using `--debug` (supported values: `debug`, `info`, `warn`, `error`, `fatal`).
 
 ## Contributing
 

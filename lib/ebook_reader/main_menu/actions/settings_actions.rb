@@ -32,7 +32,7 @@ module EbookReader
           message
         end
 
-      private
+        private
 
         def settings_service
           @settings_service ||= @dependencies.resolve(:settings_service)

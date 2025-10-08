@@ -94,11 +94,11 @@ module EbookReader
         left_col = quarter_center_col(width, left_label.length, :left)
         write_colored(surface, bounds, row, left_col, left_label, dim_secondary) unless left_label.empty?
 
-        if right
-          right_label = page_label(right[:current].to_i, right[:total].to_i)
-          right_col = quarter_center_col(width, right_label.length, :right)
-          write_colored(surface, bounds, row, right_col, right_label, dim_secondary) unless right_label.empty?
-        end
+        return unless right
+
+        right_label = page_label(right[:current].to_i, right[:total].to_i)
+        right_col = quarter_center_col(width, right_label.length, :right)
+        write_colored(surface, bounds, row, right_col, right_label, dim_secondary) unless right_label.empty?
       end
 
       def render_message_overlay(surface, bounds, view_model)

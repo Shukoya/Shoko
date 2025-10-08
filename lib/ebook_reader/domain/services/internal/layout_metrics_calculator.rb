@@ -73,10 +73,10 @@ module EbookReader
 
           def resolve_multiplier(line_spacing)
             key = begin
-                    line_spacing&.to_sym
-                  rescue StandardError
-                    nil
-                  end
+              line_spacing&.to_sym
+            rescue StandardError
+              nil
+            end
             EbookReader::Constants::LINE_SPACING_MULTIPLIERS.fetch(key, 1.0)
           end
         end

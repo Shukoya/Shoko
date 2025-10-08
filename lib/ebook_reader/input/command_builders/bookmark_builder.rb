@@ -25,7 +25,7 @@ module EbookReader
 
         def empty_commands
           {
-            :__default__ => lambda do |ctx, key|
+            __default__: lambda do |ctx, key|
               if trigger_keys.include?(key)
                 ctx.send(empty_handler)
                 :handled

@@ -251,10 +251,10 @@ module EbookReader
 
         def normalize_line_spacing(value)
           sym = begin
-                  value.is_a?(String) ? value.downcase.to_sym : value&.to_sym
-                rescue StandardError
-                  nil
-                end
+            value.is_a?(String) ? value.downcase.to_sym : value&.to_sym
+          rescue StandardError
+            nil
+          end
           LINE_SPACING_ALIASES.fetch(sym, sym || DEFAULT_CONFIG[:line_spacing])
         end
       end

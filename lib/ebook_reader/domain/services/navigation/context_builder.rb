@@ -39,7 +39,7 @@ module EbookReader
           attr_reader :page_calculator
 
           def dynamic_total_pages
-            return 0 unless page_calculator&.respond_to?(:total_pages)
+            return 0 unless page_calculator.respond_to?(:total_pages)
 
             page_calculator.total_pages.to_i
           rescue StandardError

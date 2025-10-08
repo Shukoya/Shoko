@@ -37,7 +37,7 @@ module EbookReader
 
         current_ch = state.get(%i[reader current_chapter])
         anns
-                   .select do |a|
+          .select do |a|
           a['chapter_index'] == current_ch
         end
                    .each do |annotation|
@@ -70,14 +70,14 @@ module EbookReader
 
       def render_annotations_overlay(surface, bounds)
         overlay = @controller.state.get(%i[reader annotations_overlay])
-        return unless overlay&.respond_to?(:visible?) && overlay.visible?
+        return unless overlay.respond_to?(:visible?) && overlay.visible?
 
         overlay.render(surface, bounds)
       end
 
       def render_annotation_editor_overlay(surface, bounds)
         overlay = @controller.state.get(%i[reader annotation_editor_overlay])
-        return unless overlay&.respond_to?(:visible?) && overlay.visible?
+        return unless overlay.respond_to?(:visible?) && overlay.visible?
 
         overlay.render(surface, bounds)
       end
@@ -138,9 +138,9 @@ module EbookReader
 
           clamp_start = [row_start_x, line_start_col].max
           clamp_end = [row_end_x, line_end_col].min
-  next if clamp_end < clamp_start
+          next if clamp_end < clamp_start
 
-  render_line_segment_highlight(surface, bounds, line_info, y, start_pos, end_pos, color,
+          render_line_segment_highlight(surface, bounds, line_info, y, start_pos, end_pos, color,
                                         clamp_start, clamp_end)
         end
       end
@@ -219,7 +219,7 @@ module EbookReader
 
         # Add text after highlight
         result += line_text[(e + 1)..] if e < line_text.length - 1
-        
+
         result
       end
 

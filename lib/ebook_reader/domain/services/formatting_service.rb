@@ -17,7 +17,7 @@ module EbookReader
         private_constant :FormattedChapter
 
         def initialize(dependencies = nil)
-          super(dependencies)
+          super
           @chapter_cache = {}
           @wrapped_cache = Hash.new { |h, k| h[k] = {} }
         end
@@ -53,7 +53,10 @@ module EbookReader
           @wrapped_cache.delete(key)
           apply_formatted_to_chapter(chapter, formatted)
           formatted
-        rescue StandardError
+        rescue EbookReader::FormattingError
+          raise
+        rescue StandardError => e
+          Infrastructure::Logger.error('Formatting service failed', error: e.message)
           nil
         end
 
@@ -118,12 +121,10 @@ module EbookReader
         end
 
         def apply_formatted_to_chapter(chapter, formatted)
-          if chapter.respond_to?(:blocks=)
-            chapter.blocks = formatted.blocks
-          end
-          if chapter.respond_to?(:lines=) && (chapter.lines.nil? || chapter.lines.empty?)
-            chapter.lines = formatted.plain_lines
-          end
+          chapter.blocks = formatted.blocks if chapter.respond_to?(:blocks=)
+          return unless chapter.respond_to?(:lines=) && (chapter.lines.nil? || chapter.lines.empty?)
+
+          chapter.lines = formatted.plain_lines
         end
 
         def chapter_cache_key(document, chapter_index)
@@ -145,7 +146,7 @@ module EbookReader
               lines << ''
             when :list_item
               indent = '  ' * [block.level.to_i - 1, 0].max
-              marker = block.metadata && block.metadata[:marker] || '•'
+              marker = (block.metadata && block.metadata[:marker]) || '•'
               lines << "#{indent}#{marker} #{block.text}"
             when :quote
               lines << "> #{block.text}"
@@ -154,7 +155,7 @@ module EbookReader
               block.text.split(/\r?\n/).each { |row| lines << row.rstrip }
               lines << ''
             when :separator
-              lines << '╌' * 40
+              lines << ('╌' * 40)
             end
           end
           lines.pop while lines.last&.strip&.empty?
@@ -220,9 +221,9 @@ module EbookReader
 
           def append_list_item(block)
             indent = '  ' * [block.level.to_i - 1, 0].max
-            marker = block.metadata && block.metadata[:marker] || '•'
-            first_prefix = indent + marker.to_s + ' '
-            continuation_prefix = indent + ' ' * (marker.to_s.length + 1)
+            marker = (block.metadata && block.metadata[:marker]) || '•'
+            first_prefix = "#{indent}#{marker} "
+            continuation_prefix = indent + (' ' * (marker.to_s.length + 1))
             append_wrapped_block(block, metadata_for(block).merge(list: true),
                                  prefix: first_prefix, continuation_prefix: continuation_prefix)
           end
@@ -262,6 +263,7 @@ module EbookReader
 
           def prefix_indent(prefix)
             return nil unless prefix
+
             ' ' * prefix.to_s.length
           end
 
@@ -278,30 +280,30 @@ module EbookReader
             prefix_for_next = continuation_tokens
 
             tokens.each do |token|
-          if token[:newline]
-            finalize_line(current_tokens, metadata)
-            current_tokens = prefix_for_next.dup
-            current_width = visible_length(current_tokens)
-            next
-          end
+              if token[:newline]
+                finalize_line(current_tokens, metadata)
+                current_tokens = prefix_for_next.dup
+                current_width = visible_length(current_tokens)
+                next
+              end
 
-          token_width = EbookReader::Helpers::TextMetrics.visible_length(token[:text])
+              token_width = EbookReader::Helpers::TextMetrics.visible_length(token[:text])
 
-          if exceeds_width?(current_width, token_width)
-            finalize_line(current_tokens, metadata)
-            current_tokens = prefix_for_next.dup
-            current_width = visible_length(current_tokens)
-            next if token[:text].strip.empty?
-          end
+              if exceeds_width?(current_width, token_width)
+                finalize_line(current_tokens, metadata)
+                current_tokens = prefix_for_next.dup
+                current_width = visible_length(current_tokens)
+                next if token[:text].strip.empty?
+              end
 
               next if current_tokens.empty? && token[:text].strip.empty?
 
               current_tokens << token
-            current_width += token_width
-          end
+              current_width += token_width
+            end
 
-          finalize_line(current_tokens, metadata) unless current_tokens.empty?
-        end
+            finalize_line(current_tokens, metadata) unless current_tokens.empty?
+          end
 
           def finalize_line(tokens, metadata)
             plain = tokens.select { |token| token[:text] }.map { |tok| tok[:text] }.join.rstrip
@@ -329,15 +331,15 @@ module EbookReader
             merged
           end
 
-        def exceeds_width?(current_width, token_width)
-          current_width.positive? && current_width + token_width > @width
-        end
+          def exceeds_width?(current_width, token_width)
+            current_width.positive? && current_width + token_width > @width
+          end
 
-        def visible_length(tokens)
-          tokens
-            .select { |token| token[:text] }
-            .sum { |token| EbookReader::Helpers::TextMetrics.visible_length(token[:text]) }
-        end
+          def visible_length(tokens)
+            tokens
+              .select { |token| token[:text] }
+              .sum { |token| EbookReader::Helpers::TextMetrics.visible_length(token[:text]) }
+          end
 
           def tokenize(segments)
             tokens = []

@@ -12,20 +12,20 @@ RSpec.describe EbookReader::Domain::Services::NavigationService do
   before do
     state.reset!
     state.update({
-      %i[config page_numbering_mode] => :absolute,
-      %i[config line_spacing] => :compact,
-      %i[config view_mode] => :single,
-      %i[ui terminal_width] => 100,
-      %i[ui terminal_height] => 30,
-      %i[reader current_chapter] => 0,
-      %i[reader current_page] => 0,
-      %i[reader single_page] => 0,
-      %i[reader left_page] => 0,
-      %i[reader right_page] => lines_for(:split),
-      %i[reader page_map] => [2, 1, 3],
-      %i[reader total_pages] => 6,
-      %i[reader total_chapters] => 3,
-    })
+                   %i[config page_numbering_mode] => :absolute,
+                   %i[config line_spacing] => :compact,
+                   %i[config view_mode] => :single,
+                   %i[ui terminal_width] => 100,
+                   %i[ui terminal_height] => 30,
+                   %i[reader current_chapter] => 0,
+                   %i[reader current_page] => 0,
+                   %i[reader single_page] => 0,
+                   %i[reader left_page] => 0,
+                   %i[reader right_page] => lines_for(:split),
+                   %i[reader page_map] => [2, 1, 3],
+                   %i[reader total_pages] => 6,
+                   %i[reader total_chapters] => 3,
+                 })
   end
 
   def lines_for(view_mode)
@@ -142,7 +142,7 @@ RSpec.describe EbookReader::Domain::Services::NavigationService do
     it 'does nothing when no chapters exist' do
       state.update({ %i[reader total_chapters] => 0,
                      %i[reader page_map] => [] })
-      expect { service.go_to_end }.not_to change { state.get(%i[reader current_chapter]) }
+      expect { service.go_to_end }.not_to(change { state.get(%i[reader current_chapter]) })
     end
   end
 

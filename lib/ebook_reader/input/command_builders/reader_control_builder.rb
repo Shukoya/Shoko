@@ -24,7 +24,10 @@ module EbookReader
 
           map_keys!(commands, reader[:show_annotations], :open_annotations) if reader.key?(:show_annotations)
           map_keys!(commands, reader[:rebuild_pagination], :rebuild_pagination) if reader.key?(:rebuild_pagination)
-          map_keys!(commands, reader[:invalidate_pagination], :invalidate_pagination_cache) if reader.key?(:invalidate_pagination)
+          if reader.key?(:invalidate_pagination)
+            map_keys!(commands, reader[:invalidate_pagination],
+                      :invalidate_pagination_cache)
+          end
 
           map_keys!(commands, actions[:quit], :quit_to_menu)
           map_keys!(commands, actions[:force_quit], :quit_application)

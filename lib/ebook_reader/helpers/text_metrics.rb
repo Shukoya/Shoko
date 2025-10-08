@@ -5,8 +5,9 @@ module EbookReader
     # Utility helpers for measuring and truncating strings that may
     # include ANSI escape sequences.
     module TextMetrics
-      ANSI_REGEX = /\[[0-9;]*[A-Za-z]/.freeze
-      TOKEN_REGEX = /\[[0-9;]*[A-Za-z]|./m.freeze
+      ANSI_REGEX = /\[[0-9;]*[A-Za-z]/
+      TOKEN_REGEX = /\[[0-9;]*[A-Za-z]|./m
+
       module_function
 
       def visible_length(text)
@@ -19,7 +20,7 @@ module EbookReader
         remaining = width.to_i
         buffer = +''
         text.to_s.scan(TOKEN_REGEX).each do |token|
-          if token.start_with?("[")
+          if token.start_with?("\e[")
             buffer << token
           elsif remaining.positive?
             buffer << token

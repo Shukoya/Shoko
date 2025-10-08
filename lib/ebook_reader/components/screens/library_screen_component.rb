@@ -52,19 +52,19 @@ module EbookReader
           entries = Array(@catalog.cached_library_entries)
           @items = entries.map do |entry|
             Item.new(
-              title:      entry[:title] || entry['title'],
-              authors:    entry[:authors] || entry['authors'],
-              year:       entry[:year] || entry['year'],
+              title: entry[:title] || entry['title'],
+              authors: entry[:authors] || entry['authors'],
+              year: entry[:year] || entry['year'],
               last_accessed: entry[:last_accessed] || entry['last_accessed'],
               size_bytes: entry[:size_bytes] || entry['size_bytes'] || @catalog.size_for(entry[:open_path] || entry['open_path']),
-              open_path:  entry[:open_path] || entry['open_path'],
-              epub_path:  entry[:epub_path] || entry['epub_path']
+              open_path: entry[:open_path] || entry['open_path'],
+              epub_path: entry[:epub_path] || entry['epub_path']
             )
           end
         end
 
         def render_header(surface, bounds)
-          write_header(surface, bounds, "#{UIConstants::COLOR_TEXT_ACCENT}📚 Library (Cached)#{Terminal::ANSI::RESET}")
+          write_header(surface, bounds, "#{UIConstants::COLOR_TEXT_ACCENT} Library (Cached)#{Terminal::ANSI::RESET}")
         end
 
         def render_empty(surface, bounds)

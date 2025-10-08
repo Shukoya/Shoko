@@ -340,7 +340,7 @@ module EbookReader
                   else
                     []
                   end
-        indices = entries.map(&:chapter_index).compact.uniq.sort
+        indices = entries.filter_map(&:chapter_index).uniq.sort
         if indices.empty?
           chapters_count = doc&.chapters&.length.to_i
           (0...chapters_count).to_a
@@ -375,9 +375,9 @@ module EbookReader
           success = clipboard_service.copy_with_feedback(selected_text) do |msg|
             set_message(msg)
           end
-          set_message('Failed to copy to clipboard') unless success
+          set_message(' Failed to copy to clipboard') unless success
         else
-          set_message('Copy to clipboard not available')
+          set_message(' Copy to clipboard not available')
         end
         switch_mode(:read)
       end
@@ -398,9 +398,7 @@ module EbookReader
         return unless normalized
 
         state_controller = @dependencies.resolve(:state_controller)
-        if state_controller.respond_to?(:jump_to_annotation)
-          state_controller.jump_to_annotation(normalized)
-        end
+        state_controller.jump_to_annotation(normalized) if state_controller.respond_to?(:jump_to_annotation)
         close_annotations_overlay
       rescue StandardError
         close_annotations_overlay
@@ -427,9 +425,9 @@ module EbookReader
                     end
 
         overlay = Domain::Selectors::ReaderSelectors.annotations_overlay(@state)
-        overlay.selected_index = new_index if overlay&.respond_to?(:selected_index=) && !new_index.nil?
+        overlay.selected_index = new_index if overlay.respond_to?(:selected_index=) && !new_index.nil?
 
-        annotations = (@state.get(%i[reader annotations]) || [])
+        annotations = @state.get(%i[reader annotations]) || []
         close_annotations_overlay if annotations.empty?
         set_message('Annotation deleted', 2)
       rescue StandardError
@@ -445,8 +443,8 @@ module EbookReader
       def normalize_annotation(annotation)
         return nil unless annotation.is_a?(Hash)
 
-        annotation.each_with_object({}) do |(key, value), acc|
-          acc[key.is_a?(String) ? key.to_sym : key] = value
+        annotation.transform_keys do |key|
+          key.is_a?(String) ? key.to_sym : key
         end
       end
 

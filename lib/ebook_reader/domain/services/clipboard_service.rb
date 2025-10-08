@@ -13,7 +13,7 @@ module EbookReader
         class ClipboardError < StandardError; end
 
         # Copy text to system clipboard
-        def copy(text)
+        def copy_text?(text)
           return false if text.nil? || text.strip.empty?
 
           command = detect_clipboard_command
@@ -32,15 +32,15 @@ module EbookReader
 
         # Copy text with user feedback
         def copy_with_feedback(text)
-          if copy(text)
-            yield('Text copied to clipboard') if block_given?
+          if copy_text?(text)
+            yield(' Copied to clipboard!') if block_given?
             true
           else
-            yield('Failed to copy to clipboard') if block_given?
+            yield(' Failed to copy to clipboard') if block_given?
             false
           end
         rescue ClipboardError => e
-          yield("Copy failed: #{e.message}") if block_given?
+          yield(" Copy failed: #{e.message}") if block_given?
           false
         end
 

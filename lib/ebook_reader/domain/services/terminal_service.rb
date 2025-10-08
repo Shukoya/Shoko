@@ -39,23 +39,34 @@ module EbookReader
         end
 
         def setup
-          sd = TerminalService.session_depth || 0
-          sd += 1
-          TerminalService.session_depth = sd
-          return if sd > 1
+          previous_depth = TerminalService.session_depth || 0
+          depth = previous_depth + 1
+          TerminalService.session_depth = depth
+          logger&.debug('terminal.setup', depth: depth)
+          return if previous_depth.positive?
 
           Terminal.setup
+        rescue StandardError => e
+          TerminalService.session_depth = previous_depth
+          logger&.error('terminal.setup_failed', error: e.message)
+          raise
         end
 
-        def cleanup
-          sd = TerminalService.session_depth
-          if sd && sd.positive?
-            sd -= 1
-            TerminalService.session_depth = sd
-          end
-          return if sd&.positive?
+        def cleanup(force: false)
+          return force_cleanup! if force
 
-          Terminal.cleanup
+          depth = decrement_session_depth
+          logger&.debug('terminal.cleanup', depth: depth)
+          return if depth.positive?
+
+          perform_terminal_cleanup
+        rescue StandardError => e
+          logger&.error('terminal.cleanup_failed', error: e.message)
+          raise
+        end
+
+        def force_cleanup
+          cleanup(force: true)
         end
 
         def start_frame
@@ -92,6 +103,36 @@ module EbookReader
 
         def required_dependencies
           [] # No dependencies required
+        end
+
+        private
+
+        def logger
+          @logger ||= begin
+            resolve(:logger)
+          rescue StandardError
+            nil
+          end
+        end
+
+        def force_cleanup!
+          depth = TerminalService.session_depth || 0
+          logger&.warn('terminal.cleanup.force', depth: depth)
+          TerminalService.session_depth = 0
+          perform_terminal_cleanup
+        end
+
+        def decrement_session_depth
+          depth = TerminalService.session_depth
+          return 0 unless depth
+
+          new_depth = depth.positive? ? depth - 1 : 0
+          TerminalService.session_depth = new_depth
+          new_depth
+        end
+
+        def perform_terminal_cleanup
+          Terminal.cleanup
         end
       end
     end

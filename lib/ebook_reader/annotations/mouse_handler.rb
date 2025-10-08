@@ -50,9 +50,7 @@ module EbookReader
         # Ensure start comes before end
         sy = start_pos[:y]
         ey = end_pos[:y]
-        if sy > ey || (sy == ey && start_pos[:x] > end_pos[:x])
-          start_pos, end_pos = end_pos, start_pos
-        end
+        start_pos, end_pos = end_pos, start_pos if sy > ey || (sy == ey && start_pos[:x] > end_pos[:x])
 
         { start: start_pos, end: end_pos }
       end

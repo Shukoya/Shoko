@@ -46,7 +46,7 @@ module EbookReader
           ctx = build_nav_context
           dynamic_route_exec(ctx,
                              -> { apply_dynamic_changes(Navigation::DynamicStrategy.next_page(ctx)) },
-                             -> do
+                             lambda do
                                populate_absolute_context(ctx)
                                apply_absolute_changes(Navigation::AbsoluteStrategy.next_page(ctx))
                              end)
@@ -67,19 +67,24 @@ module EbookReader
           validate_chapter_index(chapter_index)
           ctx = build_nav_context
           dynamic_route_exec(ctx,
-                             -> do
+                             lambda do
                                page_index = @page_calculator.find_page_index(chapter_index, 0)
                                page_index = 0 if page_index.nil? || page_index.negative?
-                               apply_updates({ %i[reader current_chapter] => chapter_index, %i[reader current_page_index] => page_index })
+                               apply_updates({ %i[reader current_chapter] => chapter_index,
+                                               %i[reader current_page_index] => page_index })
                              end,
-                             -> { apply_absolute_changes(Navigation::AbsoluteStrategy.jump_to_chapter(ctx, chapter_index)) })
+                             lambda {
+                               apply_absolute_changes(Navigation::AbsoluteStrategy.jump_to_chapter(ctx, chapter_index))
+                             })
         end
 
         # Navigate to beginning of book
         def go_to_start
           ctx = build_nav_context
           dynamic_route_exec(ctx,
-                             -> { apply_updates({ %i[reader current_chapter] => 0, %i[reader current_page_index] => 0 }) },
+                             lambda {
+                               apply_updates({ %i[reader current_chapter] => 0, %i[reader current_page_index] => 0 })
+                             },
                              -> { apply_absolute_changes(Navigation::AbsoluteStrategy.go_to_start(ctx)) })
         end
 
@@ -87,9 +92,10 @@ module EbookReader
         def go_to_end
           ctx = build_nav_context
           dynamic_route_exec(ctx,
-                             -> do
+                             lambda do
                                total = @page_calculator.total_pages
                                return if total <= 0
+
                                last_index = total - 1
                                page = @page_calculator.get_page(last_index)
                                updates = { %i[reader current_page_index] => last_index }
@@ -99,7 +105,7 @@ module EbookReader
                                end
                                apply_updates(updates)
                              end,
-                             -> do
+                             lambda do
                                total = ctx.total_chapters
                                return if total.to_i <= 0
 
@@ -134,6 +140,7 @@ module EbookReader
             # No-op for dynamic; scrolling is page-based via next/prev
             return
           end
+
           populate_absolute_context(ctx)
           changes = Navigation::AbsoluteStrategy.scroll(ctx, direction, lines)
           apply_absolute_changes(changes)
@@ -161,6 +168,7 @@ module EbookReader
 
         def apply_dynamic_changes(changes)
           return if changes.nil? || changes.empty?
+
           cpi = changes[:current_page_index]
           update_dynamic_index(cpi) if cpi
           ch = changes[:current_chapter]
@@ -229,6 +237,7 @@ module EbookReader
 
         def dynamic_mode?
           return false unless has_reader_get?
+
           EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(@state_store) == :dynamic
         end
 
@@ -288,17 +297,15 @@ module EbookReader
           page = @page_calculator&.get_page(new_index)
           if page
             current_chapter = page[:chapter_index]
-            current_chapter ||= (@state_store.current_state.dig(:reader, :current_chapter) || 0)
+            current_chapter ||= @state_store.current_state.dig(:reader, :current_chapter) || 0
             apply_updates({
-                           %i[reader current_page_index] => new_index,
-                           %i[reader current_chapter] => current_chapter,
-                         })
+                            %i[reader current_page_index] => new_index,
+                            %i[reader current_chapter] => current_chapter,
+                          })
+          elsif @state_store.respond_to?(:set)
+            @state_store.set(%i[reader current_page_index], new_index)
           else
-            if @state_store.respond_to?(:set)
-              @state_store.set(%i[reader current_page_index], new_index)
-            else
-              apply_updates({ %i[reader current_page_index] => new_index })
-            end
+            apply_updates({ %i[reader current_page_index] => new_index })
           end
         end
 

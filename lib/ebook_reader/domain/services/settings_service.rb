@@ -12,7 +12,7 @@ module EbookReader
     module Services
       # Centralises configuration toggles and cache maintenance for menu settings flows.
       class SettingsService < BaseService
-        WIPE_CACHE_MESSAGE = "All caches wiped. Use 'Find Book' to rescan".freeze
+        WIPE_CACHE_MESSAGE = "All caches wiped. Use 'Find Book' to rescan"
 
         def initialize(dependencies)
           super
