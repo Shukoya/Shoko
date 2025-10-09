@@ -19,6 +19,7 @@ module EbookReader
             idx = selectors.browse_selected(state)
             menu.filtered_epubs && menu.filtered_epubs[idx]
           end
+
           return unless book
 
           path = book['path']
@@ -41,6 +42,7 @@ module EbookReader
         def run_reader(path)
           prior_mode = selectors.mode(state)
 
+          return unless ensure_reader_document_for(path)
           recent_repository&.add(path)
           state.dispatch(action(:update_reader_meta, book_path: path, running: true))
           state.dispatch(action(:update_reader_mode, :read))
@@ -51,7 +53,24 @@ module EbookReader
         end
 
         def load_and_open_with_progress(path)
-          return run_reader(path) if skip_progress_overlay?
+          if skip_progress_overlay?
+            width, height = terminal_service.size
+            warm_launch_dependencies
+            begin
+              document = load_document_for(path)
+              register_document(document)
+              update_total_chapters(document)
+              unless document_cached?(document)
+                presenter = Object.new
+                presenter.define_singleton_method(:update) { |_payload = nil| nil }
+                build_pagination(document, width, height, presenter)
+              end
+            rescue StandardError => e
+              handle_reader_error(path, e)
+              return
+            end
+            return run_reader(path)
+          end
 
           index = selectors.browse_selected(state) || 0
           mode  = selectors.mode(state)
@@ -194,7 +213,11 @@ module EbookReader
           warm_launch_dependencies
 
           document = load_document_for(path)
-          return path if document_cached?(document)
+          if document_cached?(document)
+            register_document(document)
+            update_total_chapters(document)
+            return path
+          end
 
           register_document(document)
           update_total_chapters(document)
@@ -214,6 +237,18 @@ module EbookReader
         def load_document_for(path)
           factory = dependencies.resolve(:document_service_factory)
           factory.call(path).load_document
+        end
+
+        def ensure_reader_document_for(path)
+          return true unless valid_cache_directory?(path)
+
+          document = load_document_for(path)
+          register_document(document)
+          update_total_chapters(document)
+          true
+        rescue StandardError => e
+          handle_reader_error(path, e)
+          false
         end
 
         def document_cached?(document)

@@ -3,6 +3,7 @@
 require 'rexml/document'
 require 'cgi'
 
+require_relative '../infrastructure/perf_tracer'
 require_relative 'html_processor'
 
 module EbookReader
@@ -17,8 +18,14 @@ module EbookReader
         @opf_path = opf_path
         @opf_dir = File.dirname(opf_path)
         @zip = zip
-        content = zip ? zip.read(opf_path) : File.read(opf_path)
-        @opf = REXML::Document.new(content)
+        content = if zip
+                    EbookReader::Infrastructure::PerfTracer.measure('zip.read') { zip.read(opf_path) }
+                  else
+                    File.read(opf_path)
+                  end
+        @opf = EbookReader::Infrastructure::PerfTracer.measure('opf.parse') do
+          REXML::Document.new(content)
+        end
         @toc_entries = []
         @document_anchor_map = {}
         @document_heading_queue = {}

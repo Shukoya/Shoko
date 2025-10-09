@@ -2,6 +2,7 @@
 
 require_relative 'infrastructure/logger'
 require_relative 'infrastructure/performance_monitor'
+require_relative 'infrastructure/perf_tracer'
 
 require 'zip'
 require 'rexml/document'
@@ -39,12 +40,12 @@ module EbookReader
 
       # Try to use cache first; fall back to parsing the EPUB
       # Allow opening directly from a cache directory (Library open)
-      if load_from_cache_dir(@path)
+      if Infrastructure::PerfTracer.measure('cache.lookup') { load_from_cache_dir(@path) }
         Infrastructure::Logger.debug('Loaded EPUB from cache dir', dir: @path)
-      elsif load_from_cache
+      elsif Infrastructure::PerfTracer.measure('cache.lookup') { load_from_cache }
         Infrastructure::Logger.debug('Loaded EPUB from cache', path: @path)
       else
-        @zip = Zip::File.open(@path)
+        @zip = Infrastructure::PerfTracer.measure('zip.read') { Zip::File.open(@path) }
         parse_epub
         # Populate cache in the background to keep first open responsive
         schedule_cache_population
@@ -123,7 +124,7 @@ module EbookReader
     # EPUB. Its path is defined in META-INF/container.xml as required by
     # the EPUB specification.
     def find_opf_path
-      container_xml = @zip.read('META-INF/container.xml')
+      container_xml = Infrastructure::PerfTracer.measure('zip.read') { @zip.read('META-INF/container.xml') }
       begin
         container = REXML::Document.new(container_xml)
         elems = container.elements
@@ -277,7 +278,7 @@ module EbookReader
       zip = nil
       processor = nil
       if File.file?(@path)
-        zip = Zip::File.open(@path)
+        zip = Infrastructure::PerfTracer.measure('zip.read') { Zip::File.open(@path) }
         processor = Helpers::OPFProcessor.new(@opf_path, zip: zip)
       else
         base_dir = @cache_dir || File.dirname(@path)
@@ -328,7 +329,7 @@ module EbookReader
     # Utility method to read a file as UTF-8 while stripping any UTF-8
     # BOM that may be present.
     def read_entry_content(zip, path)
-      content = zip.read(path)
+      content = Infrastructure::PerfTracer.measure('zip.read') { zip.read(path) }
       content.force_encoding('UTF-8')
       content = content[1..] if content.start_with?("\uFEFF")
       content

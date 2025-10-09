@@ -2,6 +2,8 @@
 
 require 'cgi'
 
+require_relative '../infrastructure/perf_tracer'
+
 module EbookReader
   module Helpers
     # Processes HTML content
@@ -13,14 +15,11 @@ module EbookReader
       end
 
       def self.html_to_text(html)
-        text = html.dup
-        # Handle CDATA sections BEFORE removing other tags
-        text = handle_cdata_sections(text)
-        text = remove_scripts_and_styles(text)
-        text = replace_block_elements(text)
-        text = strip_tags(text)
-        text = CGI.unescapeHTML(text)
-        clean_whitespace(text)
+        if EbookReader::Infrastructure::PerfTracer.enabled?
+          EbookReader::Infrastructure::PerfTracer.measure('xhtml.normalize') { normalize_html(html) }
+        else
+          normalize_html(html)
+        end
       end
 
       BLOCK_REPLACEMENTS = {
@@ -34,6 +33,17 @@ module EbookReader
       }.freeze
 
       private_constant :BLOCK_REPLACEMENTS
+
+      private_class_method def self.normalize_html(html)
+        text = html.dup
+        # Handle CDATA sections BEFORE removing other tags
+        text = handle_cdata_sections(text)
+        text = remove_scripts_and_styles(text)
+        text = replace_block_elements(text)
+        text = strip_tags(text)
+        text = CGI.unescapeHTML(text)
+        clean_whitespace(text)
+      end
 
       private_class_method def self.handle_cdata_sections(text)
         # Extract CDATA content before other processing

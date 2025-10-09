@@ -4,6 +4,9 @@
 **Overall Progress: ~88% Complete (audited 2025-09-11, updated)**  
 **Estimated Completion: Phase 4.6**  
 **Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation alignment is still pending—`DEVELOPMENT.md` carries stale guidance that needs updating. Terminal exit regression remains reproducible when returning from the reader via `q`; reopen the cleanup work so the shell state is restored consistently. Progress is shown inline during menu-driven open, and direct CLI open renders the same loading overlay via `Application::PaginationOrchestrator.initial_build`. Canonical book identity (`EPUBDocument#canonical_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and the first frame lands on the saved page in dynamic mode once pagination completes. Annotation popup input is still managed via `ReaderController#activate_annotation_editor_overlay_session`; add DI validation as part of upcoming cleanup.
+- 2025-10-09 Library cached reopen regression traced to `lib/ebook_reader/controllers/menu/state_controller.rb:41` retaining the prior `:document` singleton for cached paths.
+- Fix primes cached launches via `ensure_reader_document_for` so each `run_reader` registers the freshly selected book before `MouseableReader` boots.
+- Regression guard: `spec/integration/library_reopens_selected_book_spec.rb` asserts Library A ➝ quit ➝ B opens the new selection.
 
 ## Phase 1: Infrastructure Foundation ✅ COMPLETE
 
@@ -499,6 +502,7 @@ Milestones
 - M3: Selection/Overlay locals; drop ≈ 10–15 warnings. (In progress; initial reductions applied)
 - M4: Sidebar/reading components locals; drop ≈ 20–30 warnings. (In progress; initial reductions applied)
 - Target: reduce DuplicateMethodCall warnings to ≤ 200 without sacrificing readability or introducing risk.
+- 2025-10-09: Resolved browse-library reopen bug by always registering the active document when skipping the progress overlay (`lib/ebook_reader/controllers/menu/state_controller.rb`:46-92). Added `spec/integration/browse_skip_overlay_spec.rb` to guard the regression. Risk: future refactors must keep per-open document registration intact when toggling `READER_SKIP_PROGRESS_OVERLAY`.
 
 ---
 

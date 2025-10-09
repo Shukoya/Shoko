@@ -3,6 +3,7 @@
 require 'json'
 require_relative '../serializers'
 require_relative 'atomic_file_writer'
+require_relative 'perf_tracer'
 
 module EbookReader
   module Infrastructure
@@ -25,7 +26,7 @@ module EbookReader
         path, serializer = locate(dir, key)
         return nil unless path
 
-        data = serializer.load_file(path)
+        data = Infrastructure::PerfTracer.measure('cache.lookup') { serializer.load_file(path) }
         pages = extract_pages(data)
         return nil unless pages
 

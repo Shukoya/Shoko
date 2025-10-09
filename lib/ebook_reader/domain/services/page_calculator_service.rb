@@ -7,6 +7,7 @@ require_relative 'internal/page_hydrator'
 require_relative 'internal/pagination_workflow'
 require_relative 'internal/layout_metrics_calculator'
 require_relative '../../helpers/text_metrics'
+require_relative '../../infrastructure/perf_tracer'
 
 module EbookReader
   module Domain
@@ -64,51 +65,53 @@ module EbookReader
           return page if page[:lines]
 
           # Lazily populate lines when loaded from cache (compact format)
-          begin
-            cs = @state_store.current_state
-            width  = cs.dig(:ui, :terminal_width) || 80
-            height = cs.dig(:ui, :terminal_height) || 24
-            config = @state_store
-            col_width, _content_height = @metrics_calculator.layout(width, height, config)
-            start_i = page[:start_line].to_i
-            end_i = page[:end_line].to_i
-            len = (end_i - start_i + 1)
-            wrapper = begin
-              @dependencies&.resolve(:wrapping_service)
-            rescue StandardError
-              nil
-            end
-            doc = @doc_ref
-            if doc.nil?
-              begin
-                doc = @dependencies&.resolve(:document)
+          Infrastructure::PerfTracer.measure('page_map.hydrate') do
+            begin
+              cs = @state_store.current_state
+              width  = cs.dig(:ui, :terminal_width) || 80
+              height = cs.dig(:ui, :terminal_height) || 24
+              config = @state_store
+              col_width, _content_height = @metrics_calculator.layout(width, height, config)
+              start_i = page[:start_line].to_i
+              end_i = page[:end_line].to_i
+              len = (end_i - start_i + 1)
+              wrapper = begin
+                @dependencies&.resolve(:wrapping_service)
               rescue StandardError
-                doc = nil
+                nil
               end
-            end
-            ch_i = page[:chapter_index].to_i
-            chapter = doc&.get_chapter(ch_i)
-            raw_lines = chapter&.lines || []
-            lines = if wrapper
-                      res = wrapper.wrap_window(raw_lines, ch_i, col_width, start_i, len)
-                      # Fallback to raw slicing if wrapper unexpectedly returns empty
-                      if res.nil? || res.empty?
-                        candidate = raw_lines[start_i, len] || []
-                        if candidate.empty? && defined?(RSpec)
-                          # Synthesize deterministic lines for tests when using fake docs
-                          (start_i..end_i).map { |i| "L#{i}" }
+              doc = @doc_ref
+              if doc.nil?
+                begin
+                  doc = @dependencies&.resolve(:document)
+                rescue StandardError
+                  doc = nil
+                end
+              end
+              ch_i = page[:chapter_index].to_i
+              chapter = doc&.get_chapter(ch_i)
+              raw_lines = chapter&.lines || []
+              lines = if wrapper
+                        res = wrapper.wrap_window(raw_lines, ch_i, col_width, start_i, len)
+                        # Fallback to raw slicing if wrapper unexpectedly returns empty
+                        if res.nil? || res.empty?
+                          candidate = raw_lines[start_i, len] || []
+                          if candidate.empty? && defined?(RSpec)
+                            # Synthesize deterministic lines for tests when using fake docs
+                            (start_i..end_i).map { |i| "L#{i}" }
+                          else
+                            candidate
+                          end
                         else
-                          candidate
+                          res
                         end
                       else
-                        res
+                        DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[start_i, len] || []
                       end
-                    else
-                      DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[start_i, len] || []
-                    end
-            page.merge(lines: lines)
-          rescue StandardError
-            page
+              page.merge(lines: lines)
+            rescue StandardError
+              page
+            end
           end
         end
 

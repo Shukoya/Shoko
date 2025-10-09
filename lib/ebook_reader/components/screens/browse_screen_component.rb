@@ -158,7 +158,7 @@ module EbookReader
 
             progress_row = current_row + 1
             if loading_active && loading_path == book['path'] && progress_row < bounds.bottom
-              draw_inline_progress(surface, layout, progress_row, loading_progress)
+              draw_inline_progress(surface, bounds, layout, progress_row, loading_progress)
               current_row += 2
             else
               current_row += 1
@@ -215,7 +215,7 @@ module EbookReader
           format('%.1f MB', mb)
         end
 
-        def draw_inline_progress(surface, layout, row, progress)
+        def draw_inline_progress(surface, bounds, layout, row, progress)
           bar_col = layout[:indent]
           usable = [layout[:content_width], 10].max
           filled = (usable * progress.to_f.clamp(0.0, 1.0)).round
