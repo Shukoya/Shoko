@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_component'
+require_relative '../models/selection_anchor'
 module EbookReader
   module Components
     # Unified overlay component that handles all tooltip/popup rendering
@@ -83,144 +84,91 @@ module EbookReader
       end
 
       def render_text_highlight(surface, bounds, range, color)
-        normalized_range = @coordinate_service.normalize_selection_range(range)
+        rendered_lines = @controller.state.get(%i[reader rendered_lines]) || {}
+        return if rendered_lines.empty?
+
+        normalized_range = @coordinate_service.normalize_selection_range(range, rendered_lines)
         return unless normalized_range
 
-        rendered_lines = @controller.state.get(%i[reader rendered_lines]) || {}
-        start_pos = normalized_range[:start]
-        end_pos = normalized_range[:end]
-        start_y = start_pos[:y]
-        end_y = end_pos[:y]
+        start_anchor = EbookReader::Models::SelectionAnchor.from(normalized_range[:start])
+        end_anchor = EbookReader::Models::SelectionAnchor.from(normalized_range[:end])
+        return unless start_anchor && end_anchor
 
-        # Determine which column the selection started in (for column-aware highlighting)
-        target_column_bounds = @coordinate_service.column_bounds_for(start_pos, rendered_lines)
+        geometry_index = build_geometry_index(rendered_lines)
+        return if geometry_index.empty?
 
-        (start_y..end_y).each do |y|
-          render_highlighted_line(surface, bounds, rendered_lines, y, start_pos, end_pos, color,
-                                  target_column_bounds)
+        ordered = order_geometry(geometry_index.values)
+        start_idx = ordered.index { |geo| geo.key == start_anchor.geometry_key }
+        end_idx = ordered.index { |geo| geo.key == end_anchor.geometry_key }
+        return unless start_idx && end_idx
+
+        ordered[start_idx..end_idx].each do |geometry|
+          start_cell = geometry.key == start_anchor.geometry_key ? start_anchor.cell_index : 0
+          end_cell = geometry.key == end_anchor.geometry_key ? end_anchor.cell_index : geometry.cells.length
+          render_geometry_highlight(surface, bounds, geometry, start_cell, end_cell, color)
         end
       end
 
-      def render_highlighted_line(surface, bounds, rendered_lines, y, start_pos, end_pos, color,
-                                  target_column_bounds = nil)
-        # Convert 0-based selection coordinates to 1-based terminal row
-        terminal_row = y + 1
-        start_y = start_pos[:y]
-        end_y = end_pos[:y]
-        start_x = start_pos[:x]
-        end_x = end_pos[:x]
-        is_start_row = (y == start_y)
-        is_end_row = (y == end_y)
+      def render_geometry_highlight(surface, bounds, geometry, start_cell, end_cell, color)
+        return if end_cell <= start_cell
 
-        # Find line segments for this row that belong to the target column
-        rendered_lines.each_value do |line_info|
-          next unless line_info[:row] == terminal_row
+        start_char = char_index_for_cell(geometry, start_cell)
+        end_char = char_index_for_cell(geometry, end_cell)
+        return if end_char <= start_char
 
-          line_start_col = line_info[:col]
-          line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
+        segment_text = geometry.plain_text[start_char...end_char]
+        return if segment_text.nil? || segment_text.empty?
 
-          # If we have column bounds, only highlight within the target column
-          if target_column_bounds
-            overlaps = @coordinate_service.column_overlaps?(line_start_col, line_end_col, target_column_bounds)
-            next unless overlaps
+        highlight = "#{color}#{COLOR_TEXT_PRIMARY}#{segment_text}#{Terminal::ANSI::RESET}"
+        start_col = screen_column_for_cell(geometry, start_cell)
+        surface.write(bounds, geometry.row, start_col, highlight)
+        record_selection_segment(geometry.row, start_col, segment_text)
+      end
 
-            # Constrain selection to target column bounds
-            row_start_x = is_start_row ? start_x : target_column_bounds[:start]
-            row_end_x = is_end_row ? end_x : target_column_bounds[:end]
-          else
-            # Original behavior for single-column mode or saved annotations
-            row_start_x = is_start_row ? start_x : 0
-            row_end_x = is_end_row ? end_x : Float::INFINITY
-          end
-
-          # Skip if selection doesn't overlap with this line segment
-          next if row_end_x < line_start_col || row_start_x > line_end_col
-
-          clamp_start = [row_start_x, line_start_col].max
-          clamp_end = [row_end_x, line_end_col].min
-          next if clamp_end < clamp_start
-
-          render_line_segment_highlight(surface, bounds, line_info, y, start_pos, end_pos, color,
-                                        clamp_start, clamp_end)
+      def screen_column_for_cell(geometry, cell_index)
+        if cell_index <= 0
+          geometry.column_origin
+        elsif cell_index >= geometry.cells.length
+          geometry.column_origin + geometry.visible_width
+        else
+          geometry.column_origin + geometry.cells[cell_index].screen_x
         end
       end
 
-      def render_line_segment_highlight(surface, bounds, line_info, y, start_pos, end_pos, color,
-                                        clamp_start = nil, clamp_end = nil)
-        line_text = line_info[:text]
-        return if line_text.empty?
+      def char_index_for_cell(geometry, cell_index)
+        cells = geometry.cells
+        return 0 if cells.empty?
 
-        line_start_col = line_info[:col]
-        terminal_row = line_info[:row]
-
-        # Calculate highlight boundaries within this line segment
-        highlight_bounds = calculate_line_highlight_bounds(
-          line_text, line_start_col, y, start_pos, end_pos
-        )
-        return unless highlight_bounds
-
-        if clamp_start || clamp_end
-          clamp_start ||= line_start_col
-          clamp_end ||= line_start_col + line_text.length - 1
-          clamp_rel_start = clamp_start - line_start_col
-          clamp_rel_end = clamp_end - line_start_col
-          highlight_bounds[:start] = [highlight_bounds[:start], clamp_rel_start].max
-          highlight_bounds[:end] = [highlight_bounds[:end], clamp_rel_end].min
-          return if highlight_bounds[:end] < highlight_bounds[:start]
+        if cell_index <= 0
+          0
+        elsif cell_index >= cells.length
+          geometry.plain_text.length
+        else
+          cells[cell_index].char_start
         end
-
-        # Build highlighted line text (overlay approach - don't modify original)
-        highlighted_text = build_highlighted_text(
-          line_text, highlight_bounds, color
-        )
-
-        # Render the highlighted line using surface
-        surface.write(bounds, terminal_row, line_start_col, highlighted_text)
-
-        # Track segments for cleanup when selection disappears
-        b_start = highlight_bounds[:start]
-        b_end = highlight_bounds[:end]
-        seg_start = line_start_col + b_start
-        seg_len = b_end - b_start + 1
-        original_text = line_text[b_start..b_end]
-        @last_selection_segments << { row: terminal_row, col: seg_start, len: seg_len,
-                                      text: original_text }
       end
 
-      def calculate_line_highlight_bounds(line_text, line_start_col, current_y, start_pos, end_pos)
-        max_index = line_text.length - 1
-        return nil if max_index.negative?
+      def build_geometry_index(rendered_lines)
+        rendered_lines.each_with_object({}) do |(key, info), acc|
+          geometry = info[:geometry]
+          next unless geometry
 
-        # Calculate start and end indices within this line
-        start_idx_raw = (current_y == start_pos[:y] ? start_pos[:x] - line_start_col : 0)
-        end_idx_raw = (current_y == end_pos[:y] ? end_pos[:x] - line_start_col : max_index)
-
-        # Clamp to valid boundaries
-        start_idx = start_idx_raw.clamp(0, max_index)
-        end_idx = end_idx_raw.clamp(0, max_index)
-
-        return nil if end_idx < start_idx
-
-        { start: start_idx, end: end_idx }
+          acc[key] = geometry
+        end
       end
 
-      def build_highlighted_text(line_text, bounds, color)
-        result = ''
-        reset = Terminal::ANSI::RESET
+      def order_geometry(geometries)
+        geometries.sort_by do |geo|
+          [geo.page_id || 0, geo.line_offset || 0, geo.column_id || 0, geo.row || 0, geo.column_origin || 0]
+        end
+      end
 
-        # Add text before highlight
-        s = bounds[:start]
-        e = bounds[:end]
-        result += line_text[0...s] if s.positive?
-
-        # Add highlighted portion
-        highlighted_part = line_text[s..e]
-        result += "#{color}#{COLOR_TEXT_PRIMARY}#{highlighted_part}#{reset}"
-
-        # Add text after highlight
-        result += line_text[(e + 1)..] if e < line_text.length - 1
-
-        result
+      def record_selection_segment(row, col, text)
+        @last_selection_segments << {
+          row: row,
+          col: col,
+          text: text,
+        }
       end
 
       # If selection was present on previous frame but not this one, explicitly repaint

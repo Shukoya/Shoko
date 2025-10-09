@@ -2,6 +2,7 @@
 
 require_relative 'base_service'
 require_relative 'internal/chapter_cache'
+require_relative '../../helpers/text_metrics'
 
 module EbookReader
   module Domain
@@ -72,19 +73,8 @@ module EbookReader
               next
             end
 
-            # incremental wrap
-            current = ''
-            line.split(/\s+/).each do |word|
-              if current.empty?
-                current = word
-              elsif current.length + 1 + word.length <= width_i
-                current = "#{current} #{word}"
-              else
-                wrapped << current
-                current = word
-              end
-            end
-            wrapped << current unless current.empty?
+            segments = EbookReader::Helpers::TextMetrics.wrap_plain_text(line, width_i)
+            wrapped.concat(segments)
           end
 
           start_index = [start_i, 0].max

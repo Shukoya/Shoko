@@ -153,7 +153,8 @@ module EbookReader
         navigation&.jump_to_chapter(normalized[:chapter_index]) if normalized[:chapter_index]
 
         if normalized[:range]
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(normalized[:range]))
+          selection = normalize_selection_for_state(normalized[:range])
+          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection)) if selection
         end
 
         @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
@@ -198,6 +199,35 @@ module EbookReader
 
       def canonical_path_for_doc
         @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
+      end
+
+      def normalize_selection_for_state(range)
+        return nil unless range
+
+        return range if anchor_range?(range)
+
+        coord = resolve_coordinate_service
+        return nil unless coord
+
+        rendered = @state.get(%i[reader rendered_lines]) || {}
+        coord.normalize_selection_range(range, rendered)
+      rescue StandardError
+        nil
+      end
+
+      def anchor_range?(range)
+        return false unless range.is_a?(Hash)
+
+        start_anchor = range[:start] || range['start']
+        start_anchor.is_a?(Hash) && (start_anchor.key?(:geometry_key) || start_anchor.key?('geometry_key'))
+      end
+
+      def resolve_coordinate_service
+        return nil unless @dependencies.respond_to?(:resolve)
+
+        @dependencies.resolve(:coordinate_service)
+      rescue StandardError
+        nil
       end
 
       def bookmarks_list

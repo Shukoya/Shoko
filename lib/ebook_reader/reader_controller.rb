@@ -492,7 +492,10 @@ module EbookReader
             # best-effort
           end
         end
-        @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection_range)) if selection_range
+        if selection_range
+          normalized = normalize_selection_for_state(selection_range)
+          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(normalized)) if normalized
+        end
         if edit_flag && ann
           ann_text = ann[:text] || ann['text']
           ann_range = ann[:range] || ann['range']
@@ -560,6 +563,33 @@ module EbookReader
       end
     rescue StandardError
       { type: :single, current: 0, total: 0 }
+    end
+
+    def normalize_selection_for_state(range)
+      return nil unless range
+
+      return range if anchor_range?(range)
+
+      coord = resolve_coordinate_service
+      return nil unless coord
+
+      rendered = @state.get(%i[reader rendered_lines]) || {}
+      coord.normalize_selection_range(range, rendered)
+    rescue StandardError
+      nil
+    end
+
+    def anchor_range?(range)
+      return false unless range.is_a?(Hash)
+
+      start_anchor = range[:start] || range['start']
+      start_anchor.is_a?(Hash) && (start_anchor.key?(:geometry_key) || start_anchor.key?('geometry_key'))
+    end
+
+    def resolve_coordinate_service
+      @resolved_coordinate_service ||= @dependencies.resolve(:coordinate_service)
+    rescue StandardError
+      nil
     end
 
     def initialize_page_calculations
@@ -717,9 +747,9 @@ module EbookReader
     end
 
     def activate_annotation_editor_overlay_session
-      @activate_annotation_editor_overlay_session ||= EbookReader::Application::AnnotationEditorOverlaySession.new(@state,
-                                                                                                                   @dependencies,
-                                                                                                                   @ui_controller)
+      @overlay_session ||= EbookReader::Application::AnnotationEditorOverlaySession.new(@state,
+                                                                                        @dependencies,
+                                                                                        @ui_controller)
     end
 
     def deactivate_annotation_editor_overlay_session

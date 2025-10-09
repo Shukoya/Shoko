@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_service'
+require_relative '../../models/selection_anchor'
 
 module EbookReader
   module Domain
@@ -26,50 +27,35 @@ module EbookReader
           return '' unless selection_range && rendered_lines && !rendered_lines.empty?
 
           coordinate_service = resolve(:coordinate_service)
-          normalized = coordinate_service.normalize_selection_range(selection_range)
+          normalized = coordinate_service.normalize_selection_range(selection_range, rendered_lines)
           return '' unless normalized
 
-          start_pos = normalized[:start]
-          end_pos = normalized[:end]
-          sy = start_pos[:y]
-          ey = end_pos[:y]
+          start_anchor = EbookReader::Models::SelectionAnchor.from(normalized[:start])
+          end_anchor = EbookReader::Models::SelectionAnchor.from(normalized[:end])
+          return '' unless start_anchor && end_anchor
 
-          column_bounds = coordinate_service.column_bounds_for(start_pos, rendered_lines)
-          return '' unless column_bounds
+          geometry_index = build_geometry_index(rendered_lines)
+          return '' if geometry_index.empty?
+
+          ordered = order_geometry(geometry_index.values)
+          start_idx = ordered.find_index { |geo| geo.key == start_anchor.geometry_key }
+          end_idx = ordered.find_index { |geo| geo.key == end_anchor.geometry_key }
+          return '' unless start_idx && end_idx
 
           text_lines = []
 
-          (sy..ey).each do |y|
-            terminal_row = y + 1
+          ordered[start_idx..end_idx].each do |geometry|
+            start_cell = geometry.key == start_anchor.geometry_key ? start_anchor.cell_index : 0
+            end_cell = geometry.key == end_anchor.geometry_key ? end_anchor.cell_index : geometry.cells.length
 
-            parts = []
-            rendered_lines.each_value do |line_info|
-              next unless line_info[:row] == terminal_row
+            next if end_cell < start_cell
 
-              line_start = line_info[:col]
-              line_end = line_info[:col_end] || (line_start + line_info[:width] - 1)
+            start_char = char_index_for_cell(geometry, start_cell)
+            end_char = char_index_for_cell(geometry, end_cell)
+            segment = geometry.plain_text[start_char...end_char]
+            next if segment.nil?
 
-              next unless coordinate_service.column_overlaps?(line_start, line_end, column_bounds)
-
-              line_text = line_info[:text]
-              row_start_x = y == sy ? start_pos[:x] : column_bounds[:start]
-              row_end_x   = y == ey ? end_pos[:x]   : column_bounds[:end]
-
-              next if row_end_x < line_start || row_start_x > line_end
-
-              start_idx = [row_start_x - line_start, 0].max
-              len = line_text.length
-              end_idx = [row_end_x - line_start, len - 1].min
-
-              next unless end_idx >= start_idx && start_idx < len
-
-              parts << { col: line_start, text: line_text[start_idx..end_idx] }
-            end
-
-            unless parts.empty?
-              sorted = parts.sort_by { |p| p[:col] }
-              text_lines << sorted.map { |p| p[:text] }.join(' ')
-            end
+            text_lines << segment
           end
 
           text_lines.join("\n")
@@ -79,6 +65,36 @@ module EbookReader
 
         def required_dependencies
           [:coordinate_service]
+        end
+
+        private
+
+        def build_geometry_index(rendered_lines)
+          rendered_lines.each_with_object({}) do |(_key, info), acc|
+            geometry = info[:geometry]
+            next unless geometry
+
+            acc[geometry.key] = geometry
+          end
+        end
+
+        def order_geometry(geometries)
+          geometries.sort_by do |geo|
+            [geo.page_id || 0, geo.line_offset || 0, geo.column_id || 0, geo.row || 0, geo.column_origin || 0]
+          end
+        end
+
+        def char_index_for_cell(geometry, cell_index)
+          cells = geometry.cells
+          return 0 if cells.empty?
+
+          if cell_index <= 0
+            0
+          elsif cell_index >= cells.length
+            geometry.plain_text.length
+          else
+            cells[cell_index].char_start
+          end
         end
       end
     end

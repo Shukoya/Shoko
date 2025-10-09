@@ -73,7 +73,7 @@ module EbookReader
       case result[:type]
       when :selection_drag
         # Keep selection in state while dragging so overlay can render purely from state
-        @state.dispatch(Domain::Actions::UpdateSelectionAction.new(@mouse_handler.selection_range))
+        update_state_selection(@mouse_handler.selection_range)
         refresh_highlighting
       when :selection_end
         handle_selection_end
@@ -120,7 +120,7 @@ module EbookReader
     end
 
     def handle_selection_end
-      @state.dispatch(Domain::Actions::UpdateSelectionAction.new(@mouse_handler.selection_range))
+      update_state_selection(@mouse_handler.selection_range)
       sel = @state.get(%i[reader selection])
       return unless sel
 
@@ -139,8 +139,9 @@ module EbookReader
       return unless selection
 
       # Use enhanced popup menu with coordinate service
+      rendered = @state.get(%i[reader rendered_lines]) || {}
       popup_menu = Components::EnhancedPopupMenu.new(selection, nil, @coordinate_service,
-                                                     @clipboard_service)
+                                                     @clipboard_service, rendered)
       @state.dispatch(Domain::Actions::UpdatePopupMenuAction.new(popup_menu))
       return unless popup_menu&.visible # Only proceed if menu was created successfully
 
@@ -179,6 +180,30 @@ module EbookReader
         rendered = @state.get(%i[reader rendered_lines]) || {}
         selection_service.extract_text(range, rendered)
       end
+    end
+
+    def update_state_selection(mouse_range)
+      anchor_range = anchor_range_from_mouse(mouse_range)
+      if anchor_range
+        @state.dispatch(Domain::Actions::UpdateSelectionAction.new(anchor_range))
+      else
+        @state.dispatch(Domain::Actions::ClearSelectionAction.new)
+      end
+    end
+
+    def anchor_range_from_mouse(mouse_range)
+      return nil unless mouse_range
+
+      rendered = @state.get(%i[reader rendered_lines]) || {}
+      return nil if rendered.empty?
+
+      start_anchor = @coordinate_service.anchor_from_point(mouse_range[:start], rendered, bias: :leading)
+      end_anchor = @coordinate_service.anchor_from_point(mouse_range[:end], rendered, bias: :trailing)
+      return nil unless start_anchor && end_anchor
+
+      @coordinate_service.normalize_selection_range(
+        { start: start_anchor.to_h, end: end_anchor.to_h }, rendered
+      )
     end
 
     def copy_to_clipboard(text)

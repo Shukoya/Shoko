@@ -42,7 +42,10 @@ module EbookReader
             dyn_lines = pd[:lines]
             start_row = calculate_center_start_row(content_height, dyn_lines.size, spacing)
             params = Models::RenderParams.new(start_row: start_row, col_start: col_start,
-                                              col_width: col_width, context: context)
+                                              col_width: col_width, context: context,
+                                              line_offset: pd[:start_line].to_i,
+                                              page_id: context.current_page_index,
+                                              column_id: 0)
             render_dynamic_lines(surface, bounds, dyn_lines, params)
             return
           end
@@ -55,7 +58,10 @@ module EbookReader
                                       displayable)
           start_row = calculate_center_start_row(content_height, lines.size, spacing)
           params = Models::RenderParams.new(start_row: start_row, col_start: col_start,
-                                            col_width: col_width, context: context)
+                                            col_width: col_width, context: context,
+                                            line_offset: offset,
+                                            page_id: context.current_page_index,
+                                            column_id: 0)
           render_dynamic_lines(surface, bounds, lines, params)
         end
 
@@ -77,7 +83,10 @@ module EbookReader
           start_row = calculate_center_start_row(content_height, lines.size, spacing)
 
           params = Models::RenderParams.new(start_row: start_row, col_start: col_start,
-                                            col_width: col_width, context: context)
+                                            col_width: col_width, context: context,
+                                            line_offset: offset,
+                                            page_id: context.current_page_index,
+                                            column_id: 0)
           render_absolute_lines(surface, bounds, lines, params)
         end
 

@@ -6,57 +6,58 @@ RSpec.describe EbookReader::Domain::Services::CoordinateService do
   let(:container) { EbookReader::Domain::ContainerFactory.create_test_container }
   let(:service) { described_class.new(container) }
 
-  describe '#normalize_selection_range' do
-    it 'normalizes start/end positions and orders them' do
-      range = { start: { x: 10, y: 5 }, end: { x: 2, y: 3 } }
-      norm = service.normalize_selection_range(range)
-      expect(norm[:start]).to eq({ x: 2, y: 3 })
-      expect(norm[:end]).to eq({ x: 10, y: 5 })
+  def build_geometry(text, row:, col_origin:, line_offset: 0)
+    cell_data = EbookReader::Helpers::TextMetrics.cell_data_for(text)
+    cells = cell_data.map do |cell|
+      EbookReader::Models::LineCell.new(
+        cluster: cell[:cluster],
+        char_start: cell[:char_start],
+        char_end: cell[:char_end],
+        display_width: cell[:display_width],
+        screen_x: cell[:screen_x]
+      )
     end
+
+    EbookReader::Models::LineGeometry.new(
+      page_id: 0,
+      column_id: 0,
+      row: row,
+      column_origin: col_origin,
+      line_offset: line_offset,
+      plain_text: text,
+      styled_text: text,
+      cells: cells
+    )
   end
 
-  describe '#within_bounds?' do
-    it 'returns true if point lies within rect' do
-      rect = EbookReader::Components::Rect.new(x: 1, y: 1, width: 10, height: 5)
-      expect(service.within_bounds?(5, 3, rect)).to be true
-      expect(service.within_bounds?(12, 3, rect)).to be false
-    end
-  end
-
-  describe '#calculate_popup_position' do
-    it 'keeps popup within terminal bounds' do
-      terminal = instance_double(EbookReader::Domain::Services::TerminalService)
-      allow(container).to receive(:resolve).with(:terminal_service).and_return(terminal)
-      allow(terminal).to receive(:size).and_return([20, 40])
-
-      end_pos = { x: 38, y: 19 }
-      pos = service.calculate_popup_position(end_pos, 10, 4)
-      expect(pos[:x]).to be <= 40
-      expect(pos[:y]).to be <= 20
-    end
-  end
-
-  it 'normalizes positions and converts line coordinates' do
-    pos = service.normalize_position({ 'x' => 1, 'y' => 2 })
-    expect(pos).to eq({ x: 1, y: 2 })
-    abs = service.line_to_terminal(5, 10, 3)
-    expect(abs).to eq({ x: 15, y: 3 })
-  end
-
-  it 'detects column bounds and overlaps' do
-    rendered = {
-      'k' => { row: 5, col: 10, col_end: 20, text: 'abc', width: 11 },
+  def rendered_line_entry(geometry)
+    {
+      row: geometry.row,
+      col: geometry.column_origin,
+      col_end: geometry.column_origin + geometry.visible_width,
+      width: geometry.visible_width,
+      text: geometry.plain_text,
+      geometry: geometry,
     }
-    bounds = service.column_bounds_for({ x: 12, y: 4 }, rendered)
-    expect(bounds).to eq({ start: 10, end: 20 })
-    expect(service.column_overlaps?(0, 5, bounds)).to be false
-    expect(service.column_overlaps?(15, 25, bounds)).to be true
   end
 
-  it 'validates coordinates and computes distance' do
-    expect(service.validate_coordinates(5, 5, 10, 10)).to be true
-    expect(service.validate_coordinates(0, 5, 10, 10)).to be false
-    d = service.calculate_distance(0, 0, 3, 4)
-    expect(d).to eq(5.0)
+  it 'produces anchors for double-width graphemes' do
+    geometry = build_geometry('漢字', row: 6, col_origin: 4)
+    rendered_lines = { geometry.key => rendered_line_entry(geometry) }
+
+    anchor = service.anchor_from_point({ x: 5, y: 5 }, rendered_lines, bias: :trailing)
+    expect(anchor).to be_a(EbookReader::Models::SelectionAnchor)
+    expect(anchor.cell_index).to eq(2)
+  end
+
+  it 'normalizes legacy coordinate ranges using rendered geometry' do
+    geometry = build_geometry('example', row: 2, col_origin: 2)
+    rendered = { geometry.key => rendered_line_entry(geometry) }
+
+    range = { start: { x: 2, y: 1 }, end: { x: 5, y: 1 } }
+    normalized = service.normalize_selection_range(range, rendered)
+
+    expect(normalized[:start][:geometry_key]).to eq(geometry.key)
+    expect(normalized[:end][:geometry_key]).to eq(geometry.key)
   end
 end

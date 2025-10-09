@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_service'
+require_relative '../../models/selection_anchor'
 
 module EbookReader
   module Domain
@@ -24,19 +25,27 @@ module EbookReader
           }
         end
 
-        # Normalize selection range ensuring start <= end
-        def normalize_selection_range(selection_range)
-          end_pos = selection_range&.dig(:end)
-          return nil unless selection_range&.dig(:start) && end_pos
+        # Normalize selection range ensuring start <= end. Accepts either
+        # geometry-based anchors or legacy screen coordinate hashes.
+        #
+        # @param selection_range [Hash]
+        # @param rendered_lines [Hash]
+        # @return [Hash,nil]
+        def normalize_selection_range(selection_range, rendered_lines = nil)
+          return nil unless selection_range
 
-          start_pos = selection_range[:start]
+          start_anchor = normalize_anchor(selection_range[:start], rendered_lines)
+          end_anchor = normalize_anchor(selection_range[:end], rendered_lines)
+          return nil unless start_anchor && end_anchor
 
-          sy = start_pos[:y]
-          ey = end_pos[:y]
-          # Swap if end comes before start
-          start_pos, end_pos = end_pos, start_pos if ey < sy || (ey == sy && end_pos[:x] < start_pos[:x])
+          if (start_anchor <=> end_anchor)&.positive?
+            start_anchor, end_anchor = end_anchor, start_anchor
+          end
 
-          { start: start_pos, end: end_pos }
+          {
+            start: start_anchor.to_h,
+            end: end_anchor.to_h,
+          }
         end
 
         # Validate coordinate bounds
@@ -101,44 +110,146 @@ module EbookReader
         end
 
         # Determine the column bounds (start..end) for a given click/selection position
-        # by inspecting rendered_lines entries on the same terminal row.
-        #
-        # @param click_pos [Hash] selection or click position with 0-based {:x,:y}
-        # @param rendered_lines [Hash] map of line_id => {row:, col:, col_end:, width:, text:}
-        # @return [Hash, nil] {start:, end:} or nil if none found
+        # by inspecting rendered geometry. Maintained for compatibility with
+        # consumers that still reason about legacy coordinate ranges.
         def column_bounds_for(click_pos, rendered_lines)
-          return nil unless click_pos && rendered_lines && !rendered_lines.empty?
-
           pos = normalize_position(click_pos)
           return nil unless pos
 
-          terminal_row = pos[:y] + 1
-          rendered_lines.each_value do |line_info|
-            next unless line_info[:row] == terminal_row
+          anchor_geometry = locate_geometry(rendered_lines, pos[:x], pos[:y])
+          return nil unless anchor_geometry
 
-            line_start_col = line_info[:col]
-            line_end_col = line_info[:col_end] || (line_start_col + line_info[:width] - 1)
-            return { start: line_start_col, end: line_end_col } if pos[:x].between?(line_start_col,
-                                                                                    line_end_col)
-          end
-          nil
+          start_col = anchor_geometry.column_origin
+          {
+            start: start_col,
+            end: start_col + anchor_geometry.visible_width,
+          }
         end
 
-        # Whether a line segment [line_start..line_end] overlaps the target column bounds
-        # @param line_start [Integer]
-        # @param line_end [Integer]
-        # @param bounds [Hash] {start:, end:}
-        # @return [Boolean]
         def column_overlaps?(line_start, line_end, bounds)
           return false unless bounds
 
           !(line_end < bounds[:start] || line_start > bounds[:end])
         end
 
+        # Build an anchor from screen coordinates (0-based) using rendered geometry.
+        def anchor_from_point(point, rendered_lines, bias: :nearest)
+          pos = normalize_position(point)
+          return nil unless pos
+
+          geometry = locate_geometry(rendered_lines, pos[:x], pos[:y])
+          return nil unless geometry
+
+          cell_index = cell_index_for_geometry(geometry, pos[:x], bias)
+
+          EbookReader::Models::SelectionAnchor.new(
+            page_id: geometry.page_id,
+            column_id: geometry.column_id,
+            geometry_key: geometry.key,
+            line_offset: geometry.line_offset,
+            cell_index: cell_index,
+            row: geometry.row,
+            column_origin: geometry.column_origin
+          )
+        end
+
+        # Convenience helper for highlight logic: find the rendered line geometry
+        # that covers the provided terminal row.
+        def geometry_for_row(rendered_lines, row)
+          return nil unless rendered_lines
+
+          rendered_lines.each_value do |line_info|
+            geometry = line_info[:geometry]
+            next unless geometry && geometry.row == row
+
+            return geometry
+          end
+          nil
+        end
+
         protected
 
         def required_dependencies
           [] # No dependencies required for coordinate operations
+        end
+
+        private
+
+        def normalize_anchor(anchor, rendered_lines)
+          return nil unless anchor
+
+          selection_anchor = EbookReader::Models::SelectionAnchor.from(anchor)
+          return selection_anchor if selection_anchor&.geometry_key
+
+          return nil unless rendered_lines
+
+          anchor_from_point(anchor, rendered_lines)
+        end
+
+        def locate_geometry(rendered_lines, mouse_x, mouse_y)
+          return nil unless rendered_lines
+
+          row = mouse_y.to_i + 1
+          col = mouse_x.to_i + 1
+
+          rendered_lines.each_value do |line_info|
+            geometry = line_info[:geometry]
+            next unless geometry && geometry.row == row
+
+            line_start = geometry.column_origin
+            line_end = line_start + geometry.visible_width
+
+            if col < line_start
+              return geometry if geometry.visible_width.zero?
+              next
+            end
+
+            return geometry if col <= line_end || geometry.visible_width.zero?
+          end
+
+          # No direct hit; try closest line on same row (for trailing whitespace selections)
+          rendered_lines.each_value do |line_info|
+            geometry = line_info[:geometry]
+            next unless geometry
+            return geometry if geometry.row == row
+          end
+
+          nil
+        end
+
+        def cell_index_for_geometry(geometry, mouse_x, bias)
+          cells = geometry.cells
+          return 0 if cells.empty?
+
+          target_col = mouse_x.to_i + 1
+          relative = target_col - geometry.column_origin
+          relative = 0 if relative.negative?
+
+          cells.each_with_index do |cell, index|
+            cell_start = cell.screen_x
+            cell_end = cell_start + cell.display_width
+
+            if relative < cell_start
+              return clamp_cell_index(index, cells.length, bias)
+            elsif relative < cell_end
+              return bias == :trailing ? [index + 1, cells.length].min : index
+            end
+          end
+
+          return cells.length if bias == :trailing
+
+          [cells.length - 1, 0].max
+        end
+
+        def clamp_cell_index(index, cell_count, bias)
+          case bias
+          when :trailing
+            [[index, cell_count].min, 0].max
+          when :leading
+            [[index, cell_count - 1].min, 0].max
+          else
+            index
+          end
         end
       end
     end

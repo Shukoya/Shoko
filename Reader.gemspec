@@ -31,8 +31,8 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Runtime dependencies
-  spec.add_dependency 'nokogiri', '>= 1.15'
   spec.add_dependency 'rexml', '~> 3.2'
+  spec.add_dependency 'unicode-display_width', '>= 2.4', '< 4.0'
 
   # Development dependencies are managed in the Gemfile
   spec.metadata['rubygems_mfa_required'] = 'true'

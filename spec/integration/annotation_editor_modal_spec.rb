@@ -46,7 +46,24 @@ RSpec.describe 'Annotation editor modal integration' do
   let(:input) { reader.instance_variable_get(:@input_controller) }
   let(:dispatcher) { input.instance_variable_get(:@dispatcher) }
 
-  let(:selection_range) { { start: { x: 0, y: 0 }, end: { x: 5, y: 0 } } }
+  def selection_range
+    @selection_range ||= begin
+      ensure_geometry!
+      rendered = state.get(%i[reader rendered_lines]) || {}
+      geometry = rendered.values.first[:geometry]
+      start_anchor = EbookReader::Models::SelectionAnchor.new(
+        page_id: geometry.page_id,
+        column_id: geometry.column_id,
+        geometry_key: geometry.key,
+        line_offset: geometry.line_offset,
+        cell_index: 0,
+        row: geometry.row,
+        column_origin: geometry.column_origin
+      )
+      end_anchor = start_anchor.with_cell_index([geometry.cells.length, 5].min)
+      { start: start_anchor.to_h, end: end_anchor.to_h }
+    end
+  end
 
   after do
     reader.send(:background_worker)&.shutdown
@@ -54,6 +71,13 @@ RSpec.describe 'Annotation editor modal integration' do
 
   def open_editor
     ui.open_annotation_editor_overlay(text: 'Highlighted text', range: selection_range, chapter_index: 0)
+  end
+
+  def ensure_geometry!
+    rendered = state.get(%i[reader rendered_lines]) || {}
+    return unless rendered.empty?
+
+    reader.draw_screen
   end
 
   it 'pushes modal mode and routes keys to the overlay session' do

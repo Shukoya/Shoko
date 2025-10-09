@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative 'base_component'
+require_relative '../helpers/text_metrics'
+require_relative '../models/selection_anchor'
 
 module EbookReader
   module Components
@@ -12,12 +14,13 @@ module EbookReader
       attr_reader :visible, :selected_index, :x, :y, :width, :height
 
       def initialize(selection_range, available_actions = nil, coordinate_service = nil,
-                     clipboard_service = nil)
+                     clipboard_service = nil, rendered_lines = nil)
         super()
         @coordinate_service = coordinate_service
         @clipboard_service = clipboard_service
+        @rendered_lines = rendered_lines || {}
 
-        @selection_range = @coordinate_service.normalize_selection_range(selection_range)
+        @selection_range = @coordinate_service.normalize_selection_range(selection_range, @rendered_lines)
 
         unless @selection_range
           @visible = false
@@ -38,8 +41,7 @@ module EbookReader
         end
 
         # Calculate optimal position using coordinate service
-        position = @coordinate_service.calculate_popup_position(@selection_range[:end], @width,
-                                                                @height)
+        position = popup_anchor_position(@selection_range[:end])
         @x = position[:x]
         @y = position[:y]
       end
@@ -117,7 +119,7 @@ module EbookReader
       end
 
       def calculate_width
-        max_label_width = @items.map(&:length).max || 0
+        max_label_width = @items.map { |item| EbookReader::Helpers::TextMetrics.visible_length(item) }.max || 0
         max_label_width + 6 # Padding for icon and spacing
       end
 
@@ -139,6 +141,31 @@ module EbookReader
             action_config: action,
           },
         }
+      end
+
+      def popup_anchor_position(anchor_hash)
+        anchor = EbookReader::Models::SelectionAnchor.from(anchor_hash)
+        geometry = geometry_for_anchor(anchor)
+        return { x: 1, y: 1 } unless geometry
+
+        x = if anchor.cell_index >= geometry.cells.length
+              geometry.column_origin + geometry.visible_width
+            else
+              cell = geometry.cells[anchor.cell_index]
+              geometry.column_origin + cell.screen_x
+            end
+        y = geometry.row
+
+        @coordinate_service.calculate_popup_position({ x:, y: }, @width, @height)
+      end
+
+      def geometry_for_anchor(anchor)
+        return nil unless anchor
+
+        return nil unless @rendered_lines
+
+        entry = @rendered_lines[anchor.geometry_key]
+        (entry && entry[:geometry]) || nil
       end
 
       def render_menu_item(surface, bounds, item, index)

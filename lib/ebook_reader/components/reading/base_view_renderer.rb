@@ -3,6 +3,7 @@
 require_relative '../base_component'
 require_relative '../../models/rendering_context'
 require_relative '../../models/render_params'
+require_relative '../../models/line_geometry'
 require_relative '../../helpers/text_metrics'
 require_relative '../render_style'
 
@@ -116,8 +117,15 @@ module EbookReader
             row = params.start_row + (spacing == :relaxed ? idx * 2 : idx)
             break if row > bounds.height - 1
 
-            draw_line(surface, bounds, line: line, row: row, col: params.col_start, width: params.col_width,
-                                       context: ctx)
+            draw_line(surface, bounds,
+                      line: line,
+                      row: row,
+                      col: params.col_start,
+                      width: params.col_width,
+                      context: ctx,
+                      column_id: params.column_id,
+                      line_offset: params.line_offset + idx,
+                      page_id: params.page_id)
           end
         end
 
@@ -134,11 +142,13 @@ module EbookReader
           )
         end
 
-        def draw_line(surface, bounds, line:, row:, col:, width:, context:)
+        def draw_line(surface, bounds, line:, row:, col:, width:, context:, column_id:, line_offset:,
+                      page_id:)
           plain_text, styled_text = renderable_line_content(line, width, context)
           abs_row, abs_col = absolute_cell(bounds, row, col)
-          display_width = EbookReader::Helpers::TextMetrics.visible_length(plain_text)
-          record_rendered_line(abs_row, abs_col, display_width, plain_text)
+          geometry = build_line_geometry(page_id, column_id, abs_row, abs_col, line_offset,
+                                         plain_text, styled_text)
+          record_rendered_line(geometry)
           surface.write(bounds, row, col, styled_text)
         end
 
@@ -161,20 +171,24 @@ module EbookReader
           [bounds.y + row - 1, bounds.x + col - 1]
         end
 
-        def record_rendered_line(abs_row, abs_col, width, text)
+        def record_rendered_line(geometry)
           return unless @rendered_lines_buffer.is_a?(Hash)
 
-          return if width <= 0
+          width = geometry.visible_width
+          return if width <= 0 && geometry.plain_text.empty?
 
-          end_col = abs_col + width - 1
-          line_key = "#{abs_row}_#{abs_col}_#{end_col}"
+          end_col = geometry.column_origin + width - 1
+          line_key = geometry.key
           @rendered_lines_buffer[line_key] = {
-            row: abs_row,
-            col: abs_col,
+            row: geometry.row,
+            col: geometry.column_origin,
             col_end: end_col,
-            text: text,
+            text: geometry.plain_text,
             width: width,
+            geometry: geometry,
           }
+
+          dump_geometry(geometry) if geometry_debug_enabled?
         end
 
         def highlight_keywords(line)
@@ -257,3 +271,44 @@ module EbookReader
     end
   end
 end
+        def build_line_geometry(page_id, column_id, abs_row, abs_col, line_offset, plain_text, styled_text)
+          cell_data = EbookReader::Helpers::TextMetrics.cell_data_for(plain_text)
+          cells = cell_data.map do |cell|
+            EbookReader::Models::LineCell.new(
+              cluster: cell[:cluster],
+              char_start: cell[:char_start],
+              char_end: cell[:char_end],
+              display_width: cell[:display_width],
+              screen_x: cell[:screen_x]
+            )
+          end
+
+          EbookReader::Models::LineGeometry.new(
+            page_id: page_id,
+            column_id: column_id,
+            row: abs_row,
+            column_origin: abs_col,
+            line_offset: line_offset,
+            plain_text: plain_text,
+            styled_text: styled_text,
+            cells: cells
+          )
+        end
+
+        def geometry_debug_enabled?
+          ENV['READER_DEBUG_GEOMETRY']&.to_s == '1'
+        end
+
+        def dump_geometry(geometry)
+          logger = begin
+            @dependencies.resolve(:logger)
+          rescue StandardError
+            nil
+          end
+          payload = geometry.to_h
+          if logger
+            logger.debug('geometry.line', payload)
+          else
+            warn("[geometry] #{payload}")
+          end
+        end

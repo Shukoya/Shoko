@@ -39,6 +39,8 @@ require_relative 'ebook_reader/models/drawing_context'
 require_relative 'ebook_reader/models/scanner_context'
 require_relative 'ebook_reader/models/page_rendering_context'
 require_relative 'ebook_reader/models/rendering_context'
+require_relative 'ebook_reader/models/line_geometry'
+require_relative 'ebook_reader/models/selection_anchor'
 require_relative 'ebook_reader/builders/page_setup_builder'
 
 # Core components

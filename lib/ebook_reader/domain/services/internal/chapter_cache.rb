@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../../helpers/text_metrics'
+
 module EbookReader
   module Domain
     module Services
@@ -41,7 +43,7 @@ module EbookReader
           end
 
           def wrap_lines_internal(lines, width)
-            return [] if lines.nil? || width < 10
+            return [] if lines.nil? || width < 1
 
             wrapped = []
             lines.each do |line|
@@ -50,32 +52,11 @@ module EbookReader
               if line.strip.empty?
                 wrapped << ''
               else
-                wrap_line(line, width, wrapped)
+                segments = EbookReader::Helpers::TextMetrics.wrap_plain_text(line, width)
+                wrapped.concat(segments)
               end
             end
             wrapped
-          end
-
-          def wrap_line(line, width, wrapped)
-            words = line.split(/\s+/)
-            current = ''
-            words.each do |word|
-              next if word.nil?
-
-              if current.empty?
-                current = word
-              elsif current.length + 1 + word.length <= width
-                current = "#{current} #{word}"
-              else
-                append_current!(wrapped, current)
-                current = word
-              end
-            end
-            append_current!(wrapped, current)
-          end
-
-          def append_current!(buffer, current)
-            buffer << current unless current.empty?
           end
         end
       end

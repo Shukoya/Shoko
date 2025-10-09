@@ -6,6 +6,7 @@ require_relative 'internal/dynamic_page_map_builder'
 require_relative 'internal/page_hydrator'
 require_relative 'internal/pagination_workflow'
 require_relative 'internal/layout_metrics_calculator'
+require_relative '../../helpers/text_metrics'
 
 module EbookReader
   module Domain
@@ -472,35 +473,16 @@ module EbookReader
 
           wrapped = []
           lines.each do |line|
-            if line.length <= column_width
-              wrapped << line
+            next if line.nil?
+
+            if line.strip.empty?
+              wrapped << ''
             else
-              wrapped.concat(wrap_long_line(line, column_width))
+              segments = EbookReader::Helpers::TextMetrics.wrap_plain_text(line, column_width)
+              wrapped.concat(segments)
             end
           end
           wrapped
-        end
-
-        private
-
-        def wrap_long_line(line, width)
-          words = line.split(/\s+/)
-          wrapped_lines = []
-          current_line = ''
-
-          words.each do |word|
-            if current_line.empty?
-              current_line = word
-            elsif "#{current_line} #{word}".length <= width
-              current_line += " #{word}"
-            else
-              wrapped_lines << current_line
-              current_line = word
-            end
-          end
-
-          wrapped_lines << current_line unless current_line.empty?
-          wrapped_lines
         end
       end
     end
