@@ -2,6 +2,7 @@
 
 require_relative '../../mouseable_reader'
 require_relative '../../main_menu/menu_progress_presenter'
+require_relative '../../infrastructure/background_worker'
 
 module EbookReader
   module Controllers
@@ -104,16 +105,13 @@ module EbookReader
                                        backtrace: Array(error.backtrace).join("\n"))
         end
 
-        def valid_cache_directory?(dir)
-          return false unless dir && File.directory?(dir)
+        def valid_cache_path?(path)
+          return false unless path && File.file?(path)
+          return false unless EbookReader::Infrastructure::EpubCache.cache_file?(path)
 
-          manifest_json = File.join(dir, 'manifest.json')
-          manifest_msgpack = File.join(dir, 'manifest.msgpack')
-          has_manifest = File.exist?(manifest_json) || File.exist?(manifest_msgpack)
-          return false unless has_manifest
-
-          File.exist?(File.join(dir, 'META-INF', 'container.xml'))
-        rescue StandardError
+          cache = EbookReader::Infrastructure::EpubCache.new(path)
+          !!cache.read_cache(strict: true)
+        rescue EbookReader::Error, StandardError
           false
         end
 
@@ -130,13 +128,19 @@ module EbookReader
         end
 
         def handle_file_path(path)
-          if File.exist?(path) && path.downcase.end_with?('.epub')
+          return invalid_file_path unless File.exist?(path)
+
+          if path.downcase.end_with?('.epub') || EbookReader::Infrastructure::EpubCache.cache_file?(path)
             recent_repository&.add(path)
             run_reader(path)
           else
-            catalog.scan_message = 'Invalid file path'
-            catalog.scan_status = :error
+            invalid_file_path
           end
+        end
+
+        def invalid_file_path
+          catalog.scan_message = 'Invalid file path'
+          catalog.scan_status = :error
         end
 
         def refresh_scan(force: false)
@@ -232,6 +236,7 @@ module EbookReader
           dependencies.resolve(:layout_service)
           dependencies.resolve(:wrapping_service) if dependencies.registered?(:wrapping_service)
           dependencies.resolve(:page_calculator)
+          ensure_background_worker
         end
 
         def load_document_for(path)
@@ -240,7 +245,7 @@ module EbookReader
         end
 
         def ensure_reader_document_for(path)
-          return true unless valid_cache_directory?(path)
+          return true unless valid_cache_path?(path)
 
           document = load_document_for(path)
           register_document(document)
@@ -262,6 +267,15 @@ module EbookReader
         def update_total_chapters(document)
           total = document&.chapter_count || 0
           state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(total_chapters: total))
+        end
+
+        def ensure_background_worker
+          return if dependencies.registered?(:background_worker)
+
+          worker = EbookReader::Infrastructure::BackgroundWorker.new(name: 'document-preload')
+          dependencies.register(:background_worker, worker)
+        rescue StandardError
+          nil
         end
 
         def build_pagination(document, width, height, presenter)

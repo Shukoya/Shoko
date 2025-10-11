@@ -2,26 +2,34 @@
 
 require 'spec_helper'
 
-RSpec.describe 'Library reopening cached books respects selection', :fakefs do
-  let(:home) { '/home/test' }
+RSpec.describe 'Library reopening cached books respects selection' do
+  let(:tmp_dir) { Dir.mktmpdir }
+  let(:home) { tmp_dir }
   let(:xdg_cache) { File.join(home, '.cache') }
   let(:reader_cache_root) { File.join(xdg_cache, 'reader') }
-  let(:book_a_dir) { File.join(reader_cache_root, 'booksha1') }
-  let(:book_b_dir) { File.join(reader_cache_root, 'booksha2') }
   let(:book_a_epub) { File.join(home, 'book_a.epub') }
   let(:book_b_epub) { File.join(home, 'book_b.epub') }
 
   before do
+    @old_home = ENV['HOME']
+    @old_cache = ENV['XDG_CACHE_HOME']
     ENV['HOME'] = home
     ENV['XDG_CACHE_HOME'] = xdg_cache
+    allow(EbookReader::Infrastructure::CachePaths).to receive(:reader_root).and_return(reader_cache_root)
     FileUtils.mkdir_p(reader_cache_root)
 
-    build_cached_book(book_a_dir, book_a_epub, title: 'Cached One', author: 'Author A')
-    build_cached_book(book_b_dir, book_b_epub, title: 'Cached Two', author: 'Author B')
+    @book_a_cache = build_cached_book(book_a_epub, title: 'Cached One', author: 'Author A')
+    @book_b_cache = build_cached_book(book_b_epub, title: 'Cached Two', author: 'Author B')
 
     allow(EbookReader::RecentFiles).to receive(:add)
     allow(EbookReader::RecentFiles).to receive(:load).and_return([])
     allow(EbookReader::RecentFiles).to receive(:clear)
+  end
+
+  after do
+    ENV['HOME'] = @old_home
+    ENV['XDG_CACHE_HOME'] = @old_cache
+    FileUtils.rm_rf(tmp_dir)
   end
 
   it 'opens the newly selected book after quitting the first reader session' do
@@ -41,22 +49,30 @@ RSpec.describe 'Library reopening cached books respects selection', :fakefs do
     expect(document.canonical_path).to eq(book_b_epub)
   end
 
-  def build_cached_book(dir, epub_path, title:, author:)
-    FileUtils.mkdir_p(File.join(dir, 'META-INF'))
-    FileUtils.mkdir_p(File.join(dir, 'OEBPS'))
-
-    manifest = {
-      'title' => title,
-      'author' => author,
-      'authors' => [author],
-      'opf_path' => 'OEBPS/content.opf',
-      'spine' => ['OEBPS/ch1.xhtml'],
-      'epub_path' => epub_path,
-    }
-    File.write(File.join(dir, 'manifest.json'), JSON.generate(manifest))
-    File.write(File.join(dir, 'META-INF', 'container.xml'), '<c/>')
-    File.write(File.join(dir, 'OEBPS', 'content.opf'), '<opf/>')
-    File.write(File.join(dir, 'OEBPS', 'ch1.xhtml'), '<html><body><p>Hi</p></body></html>')
+  def build_cached_book(epub_path, title:, author:)
+    FileUtils.mkdir_p(File.dirname(epub_path))
     File.write(epub_path, 'epub payload')
+
+    book = EbookReader::Infrastructure::EpubCache::BookData.new(
+      title: title,
+      language: 'en_US',
+      authors: [author],
+      chapters: [EbookReader::Domain::Models::Chapter.new(number: '1', title:, lines: ['Hi'], metadata: nil, blocks: nil, raw_content: '<p>Hi</p>')],
+      toc_entries: [],
+      opf_path: 'OEBPS/content.opf',
+      spine: ['OEBPS/ch1.xhtml'],
+      chapter_hrefs: ['OEBPS/ch1.xhtml'],
+      resources: {
+        'META-INF/container.xml' => '<c/>',
+        'OEBPS/content.opf' => '<opf/>',
+        'OEBPS/ch1.xhtml' => '<html><body><p>Hi</p></body></html>',
+      },
+      metadata: {},
+      container_path: 'META-INF/container.xml',
+      container_xml: '<c/>'
+    )
+    cache = EbookReader::Infrastructure::EpubCache.new(epub_path)
+    cache.write_book!(book)
+    cache
   end
 end

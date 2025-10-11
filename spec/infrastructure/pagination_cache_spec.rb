@@ -3,17 +3,42 @@
 require 'spec_helper'
 
 RSpec.describe EbookReader::Infrastructure::PaginationCache do
-  include FakeFS::SpecHelpers
-
-  let(:cache_root) { '/home/test/.cache/reader' }
-  let(:book_dir) { File.join(cache_root, 'abcd1234') }
-  let(:doc) { Struct.new(:cache_dir, :canonical_path).new(book_dir, nil) }
+  let(:tmp_dir) { Dir.mktmpdir }
+  let(:cache_root) { File.join(tmp_dir, '.cache', 'reader') }
+  let(:epub_path) { File.join(tmp_dir, 'demo.epub') }
+  let(:cache) { EbookReader::Infrastructure::EpubCache.new(epub_path) }
+  let(:doc) { Struct.new(:cache_path, :canonical_path).new(cache.cache_path, epub_path) }
   let(:key) { described_class.layout_key(80, 24, :single, :normal) }
 
   before do
-    ENV['HOME'] = '/home/test'
-    ENV['XDG_CACHE_HOME'] = File.join('/home/test', '.cache')
-    FileUtils.mkdir_p(book_dir)
+    @old_home = ENV['HOME']
+    @old_cache = ENV['XDG_CACHE_HOME']
+    ENV['HOME'] = tmp_dir
+    ENV['XDG_CACHE_HOME'] = File.join(tmp_dir, '.cache')
+    allow(EbookReader::Infrastructure::CachePaths).to receive(:reader_root).and_return(cache_root)
+    FileUtils.mkdir_p(File.dirname(epub_path))
+    File.write(epub_path, 'epub-data')
+    book = EbookReader::Infrastructure::EpubCache::BookData.new(
+      title: 'Demo',
+      language: 'en_US',
+      authors: ['Author'],
+      chapters: [EbookReader::Domain::Models::Chapter.new(number: '1', title: 'Demo', lines: ['one'], metadata: nil, blocks: nil, raw_content: '<p>one</p>')],
+      toc_entries: [],
+      opf_path: 'OPS/content.opf',
+      spine: ['xhtml/1.xhtml'],
+      chapter_hrefs: ['xhtml/1.xhtml'],
+      resources: { 'META-INF/container.xml' => '<xml/>' },
+      metadata: {},
+      container_path: 'META-INF/container.xml',
+      container_xml: '<xml/>'
+    )
+    cache.write_book!(book)
+  end
+
+  after do
+    ENV['HOME'] = @old_home
+    ENV['XDG_CACHE_HOME'] = @old_cache
+    FileUtils.rm_rf(tmp_dir)
   end
 
   it 'saves and loads compact pagination entries for a layout' do

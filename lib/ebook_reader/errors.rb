@@ -93,4 +93,13 @@ module EbookReader
       @source = source
     end
   end
+
+  class CacheLoadError < Error
+    attr_reader :path
+
+    def initialize(path, message = 'Cache is corrupt or incompatible')
+      super("Cache load failed for #{path}: #{message}")
+      @path = path
+    end
+  end
 end

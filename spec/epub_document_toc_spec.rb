@@ -10,12 +10,13 @@ RSpec.describe EbookReader::EPUBDocument do
       doc = described_class.allocate
       doc.instance_variable_set(:@opf_path, 'OPS/content.opf')
       chapter_refs = [
-        EbookReader::EPUBDocument::ChapterRef.new(file_path: 'OPS/text/part1.xhtml', number: 1,
-                                                  title: 'Part One', href: 'OPS/text/part1.xhtml'),
-        EbookReader::EPUBDocument::ChapterRef.new(file_path: 'OPS/text/chapter1.xhtml', number: 2,
-                                                  title: 'Chapter One', href: 'OPS/text/chapter1.xhtml'),
+        EbookReader::Domain::Models::Chapter.new(number: '1', title: 'Part One', lines: [], metadata: nil,
+                                                 blocks: nil, raw_content: '<html/>'),
+        EbookReader::Domain::Models::Chapter.new(number: '2', title: 'Chapter One', lines: [], metadata: nil,
+                                                 blocks: nil, raw_content: '<html/>'),
       ]
       doc.instance_variable_set(:@chapters, chapter_refs)
+      doc.instance_variable_set(:@chapter_hrefs, ['OPS/text/part1.xhtml', 'OPS/text/chapter1.xhtml'])
       doc.instance_variable_set(:@toc_entries, [])
 
       entries = [

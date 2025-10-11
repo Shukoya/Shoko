@@ -2,175 +2,283 @@
 
 require 'digest'
 require 'fileutils'
-require 'json'
-require 'pathname'
+require 'time'
+
 require_relative 'cache_paths'
 require_relative 'atomic_file_writer'
-require_relative '../serializers'
+require_relative 'logger'
 
 module EbookReader
   module Infrastructure
-    # EpubCache handles hashing, cache directory management, file copying, and
-    # manifest read/write for EPUB caching.
+    # EpubCache manages reading and writing Marshal-based cache files that contain
+    # the complete representation of an imported book plus any derived data
+    # (pagination layouts, etc). Each EPUB is stored as a single file located at
+    # `${XDG_CACHE_HOME:-~/.cache}/reader/<sha256>.cache`.
     class EpubCache
-      MANIFEST_VERSION = 1
-      Manifest = Struct.new(:title, :author_str, :authors, :opf_path, :spine, :epub_path,
-                            keyword_init: true)
+      CACHE_VERSION   = 2
+      CACHE_EXTENSION = '.cache'
 
-      def initialize(epub_path)
-        @epub_path = epub_path
-        @sha = Digest::SHA256.file(epub_path).hexdigest
-        @cache_dir = File.join(CachePaths.reader_root, @sha)
+      CachePayload = Struct.new(
+        :version,
+        :source_sha256,
+        :source_path,
+        :source_mtime,
+        :generated_at,
+        :book,
+        :layouts,
+        keyword_init: true
+      )
+
+      BookData = Struct.new(
+        :title,
+        :language,
+        :authors,
+        :chapters,
+        :toc_entries,
+        :opf_path,
+        :spine,
+        :chapter_hrefs,
+        :resources,
+        :metadata,
+        :container_path,
+        :container_xml,
+        keyword_init: true
+      )
+
+      CacheLoad = Struct.new(
+        :payload,
+        :cache_path,
+        :source_path,
+        :loaded_from_cache,
+        keyword_init: true
+      )
+
+      class << self
+        def cache_extension = CACHE_EXTENSION
+
+        def cache_file?(path)
+          File.file?(path) && File.extname(path).casecmp(CACHE_EXTENSION).zero?
+        end
+
+        def cache_path_for_sha(sha, cache_root: CachePaths.reader_root)
+          File.join(cache_root, "#{sha}#{CACHE_EXTENSION}")
+        end
       end
 
-      attr_reader :cache_dir, :sha
+      attr_reader :cache_path, :source_path
 
-      # Load manifest if present (msgpack preferred if available)
-      # Returns Manifest or nil.
-      def load_manifest
-        path, serializer = locate_manifest
-        return nil unless path
+      def initialize(path, cache_root: CachePaths.reader_root)
+        @cache_root = cache_root
+        @raw_path   = path
+        @source_path = File.expand_path(path)
+        @payload_cache = nil
+        @payload_signature = nil
+        @payload_signature = nil
 
-        data = serializer.load_file(path)
-        return nil unless valid_manifest_data?(data)
-        return nil unless validate_files_present(data)
+        if self.class.cache_file?(@source_path)
+          @cache_path = @source_path
+          @source_type = :cache_file
+          @source_sha = nil
+        else
+          raise EbookReader::FileNotFoundError, @source_path unless File.file?(@source_path)
 
-        to_manifest(data)
-      rescue StandardError => e
-        EbookReader::Infrastructure::Logger.debug('EpubCache: failed to load manifest',
-                                                  error: e.message)
+          @source_type = :epub
+          @source_sha = Digest::SHA256.file(@source_path).hexdigest
+          @cache_path = self.class.cache_path_for_sha(@source_sha, cache_root: @cache_root)
+        end
+      end
+
+      # Load the cache payload without applying source validation. Intended for
+      # direct cache-file access (opening `.cache` files from the library).
+      def read_cache(strict: false)
+        payload = load_payload_from_disk
+        return nil unless payload
+
+        return payload if strict == false || payload_valid?(payload)
+
+        invalidate!
         nil
       end
 
-      # Write manifest atomically (msgpack preferred when available)
-      def write_manifest!(meta)
-        serializer = select_serializer
-        final = File.join(@cache_dir, serializer.manifest_filename)
-        AtomicFileWriter.write_using(final, binary: serializer.binary?) do |io|
-          serializer.dump_to_io(io, manifest_to_h(meta))
-        end
+      # Load and validate the payload for the associated EPUB source. Returns nil
+      # when the cache is missing, corrupt, or outdated.
+      def load_for_source(strict: false)
+        payload = load_payload_from_disk
+        return nil unless payload
+        return payload if payload_valid?(payload) && payload_matches_source?(payload, strict: strict)
+
+        invalidate!
+        nil
+      end
+
+      # Writes the provided book data to disk, producing a fresh payload.
+      def write_book!(book_data)
+        ensure_sha!
+        payload = CachePayload.new(
+          version: CACHE_VERSION,
+          source_sha256: @source_sha,
+          source_path: @source_path,
+          source_mtime: safe_mtime(@source_path),
+          generated_at: Time.now.utc,
+          book: book_data,
+          layouts: {}
+        )
+        write_payload(payload)
+        payload
       rescue StandardError => e
-        EbookReader::Infrastructure::Logger.debug('EpubCache: failed to write manifest',
-                                                  error: e.message)
+        Logger.debug('EpubCache: failed to write cache', path: @cache_path, error: e.message)
+        nil
       end
 
-      # Populate cache from the original EPUB using a provided Zip::File instance
-      # for performance. Copies container.xml, OPF, and spine XHTML files.
-      def populate!(zip, opf_path, spine_paths)
-        FileUtils.mkdir_p(@cache_dir)
-        copy_zip_entry(zip, 'META-INF/container.xml')
-        copy_zip_entry(zip, opf_path)
-        spine_paths.each { |p| copy_zip_entry(zip, p) }
+      # Returns a deep copy of the layout entry associated with the provided key,
+      # or nil when not present/invalid.
+      def load_layout(key)
+        payload = load_payload_from_disk
+        return nil unless payload
+
+        layouts = payload.layouts || {}
+        entry = layouts[key] || layouts[key.to_s] || layouts[key.to_sym]
+        return nil unless entry
+
+        deep_dup(entry)
+      rescue StandardError
+        nil
       end
 
-      # Convert relative path within the EPUB to the cache absolute path
-      def cache_abs_path(rel)
-        safe_cache_path(rel)
+      # Persistently mutates the layout map. The provided block receives the
+      # mutable layout hash and is expected to set or delete entries as needed.
+      def mutate_layouts!
+        payload = load_payload_from_disk
+        return false unless payload
+
+        payload.layouts ||= {}
+        yield(payload.layouts)
+        write_payload(payload)
+        true
+      rescue StandardError => e
+        Logger.debug('EpubCache: failed to update layouts', path: @cache_path, error: e.message)
+        false
+      end
+
+      def invalidate!
+        FileUtils.rm_f(@cache_path)
+        @payload_cache = nil
+        @payload_signature = nil
+      rescue StandardError
+        nil
+      end
+
+      def cache_file?
+        @source_type == :cache_file
+      end
+
+      def sha256
+        ensure_sha!
+        @source_sha
       end
 
       private
 
-      def valid_manifest_data?(h)
-        return false unless h.is_a?(Hash)
+      def ensure_sha!
+        return if @source_sha
 
-        # Accept both versioned and legacy manifests; prefer versioned
-        ver = h['version']
-        ver.nil? || ver.to_i <= MANIFEST_VERSION
+        @source_sha = Digest::SHA256.file(@source_path).hexdigest if @source_type == :epub
       end
 
-      def validate_files_present(h)
-        # Basic validation: ensure container.xml, OPF and spine files exist
-        opf = h['opf_path'].to_s
-        spine = Array(h['spine']).map(&:to_s)
-        return false if opf.empty? || spine.empty?
-
-        container_path = safe_cache_path('META-INF/container.xml')
-        return false unless container_path && File.exist?(container_path)
-
-        opf_path = safe_cache_path(opf)
-        return false unless opf_path && File.exist?(opf_path)
-
-        spine.all? do |rel|
-          path = safe_cache_path(rel)
-          path && File.exist?(path)
+      def load_payload_from_disk
+        if @payload_cache && File.exist?(@cache_path)
+          current_sig = file_signature(@cache_path)
+          return @payload_cache if @payload_signature && current_sig && current_sig == @payload_signature
         end
-      rescue StandardError
-        false
-      end
+        return nil unless File.exist?(@cache_path)
 
-      def copy_zip_entry(zip, rel_path)
-        dest = safe_cache_path(rel_path)
-        unless dest
-          EbookReader::Infrastructure::Logger.debug('EpubCache: rejected entry outside cache',
-                                                    entry: rel_path)
-          return
-        end
+        raw = File.binread(@cache_path)
+        obj = Marshal.load(raw)
+        payload = coerce_payload(obj)
+        return nil unless payload
 
-        FileUtils.mkdir_p(File.dirname(dest))
-        File.binwrite(dest, zip.read(rel_path))
+        payload.layouts ||= {}
+        @payload_cache = payload
+        @payload_signature = file_signature(@cache_path)
+        payload
       rescue StandardError => e
-        EbookReader::Infrastructure::Logger.debug('EpubCache: copy failed', entry: rel_path,
-                                                                            error: e.message)
+        Logger.debug('EpubCache: failed to load cache', path: @cache_path, error: e.message)
+        invalidate!
+        nil
       end
 
-      def locate_manifest
-        mp = File.join(@cache_dir, 'manifest.msgpack')
-        js = File.join(@cache_dir, 'manifest.json')
-        if File.exist?(mp) && EbookReader::Infrastructure::SerializerSupport.msgpack_available?
-          [mp, EbookReader::Infrastructure::MessagePackSerializer.new]
-        elsif File.exist?(js)
-          [js, EbookReader::Infrastructure::JSONSerializer.new]
+      def write_payload(payload)
+        AtomicFileWriter.write_using(@cache_path, binary: true) do |io|
+          io.write(Marshal.dump(payload))
+        end
+        @payload_cache = payload
+        @payload_signature = file_signature(@cache_path)
+      end
+
+      def coerce_payload(obj)
+        case obj
+        when CachePayload
+          obj
+        when Hash
+          book = obj[:book] || obj['book']
+          unless book.is_a?(BookData)
+            Logger.debug('EpubCache: invalid book payload type', type: book.class.name)
+            return nil
+          end
+
+          CachePayload.new(
+            version: obj[:version] || obj['version'],
+            source_sha256: obj[:source_sha256] || obj['source_sha256'],
+            source_path: obj[:source_path] || obj['source_path'],
+            source_mtime: obj[:source_mtime] || obj['source_mtime'],
+            generated_at: obj[:generated_at] || obj['generated_at'],
+            book: book,
+            layouts: obj[:layouts] || obj['layouts'] || {}
+          )
         else
-          [nil, nil]
+          Logger.debug('EpubCache: unexpected payload object', klass: obj.class.name)
+          nil
         end
       end
 
-      def select_serializer
-        EbookReader::Infrastructure::SerializerSupport.msgpack_available? ? EbookReader::Infrastructure::MessagePackSerializer.new : EbookReader::Infrastructure::JSONSerializer.new
+      def payload_valid?(payload)
+        payload.is_a?(CachePayload) &&
+          payload.version.to_i == CACHE_VERSION &&
+          payload.book.is_a?(BookData)
       end
 
-      def to_manifest(h)
-        return nil unless h.is_a?(Hash)
+      def payload_matches_source?(payload, strict:)
+        return true if cache_file?
 
-        Manifest.new(
-          title: h['title'].to_s,
-          author_str: h['author'].to_s,
-          authors: Array(h['authors']).map(&:to_s),
-          opf_path: h['opf_path'].to_s,
-          spine: Array(h['spine']).map(&:to_s),
-          epub_path: h['epub_path'].to_s
-        )
+        ensure_sha!
+
+        return false unless payload.source_sha256 == @source_sha
+
+        source_mtime = safe_mtime(@source_path)
+        payload_mtime = payload.source_mtime
+        return true unless source_mtime && payload_mtime
+
+        tolerance = strict ? 1e-3 : 1.0
+        (source_mtime - payload_mtime).abs <= tolerance
       end
 
-      def manifest_to_h(m)
-        {
-          'version' => MANIFEST_VERSION,
-          'title' => m.title.to_s,
-          'author' => m.author_str.to_s,
-          'authors' => Array(m.authors).map(&:to_s),
-          'opf_path' => m.opf_path.to_s,
-          'spine' => Array(m.spine).map(&:to_s),
-          'epub_path' => m.epub_path.to_s,
-        }
-      end
-
-      def safe_cache_path(rel)
-        return nil if rel.nil?
-
-        cleaned = Pathname.new(rel.to_s).cleanpath.to_s
-        return nil if cleaned.empty?
-
-        dest = File.expand_path(cleaned, @cache_dir)
-        prefix = @cache_dir.end_with?(File::SEPARATOR) ? @cache_dir : (@cache_dir + File::SEPARATOR)
-        return dest if dest == @cache_dir
-        return nil unless dest.start_with?(prefix)
-
-        dest
+      def safe_mtime(path)
+        File.mtime(path)&.utc
       rescue StandardError
         nil
       end
-    end
 
-    # Serializers moved to lib/ebook_reader/serializers.rb (outside infra path)
+      def file_signature(path)
+        return nil unless File.exist?(path)
+
+        [safe_mtime(path)&.to_f, File.size?(path)]
+      rescue StandardError
+        nil
+      end
+
+      def deep_dup(obj)
+        Marshal.load(Marshal.dump(obj))
+      end
+    end
   end
 end

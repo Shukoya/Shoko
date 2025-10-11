@@ -3,54 +3,43 @@
 require 'spec_helper'
 
 RSpec.describe 'Library navigation and open via keys' do
-  include FakeFS::SpecHelpers
-
-  let(:home) { '/home/test' }
+  let(:tmp_dir) { Dir.mktmpdir }
+  let(:home) { tmp_dir }
   let(:xdg_cache) { File.join(home, '.cache') }
   let(:reader_cache_root) { File.join(xdg_cache, 'reader') }
-  let(:book1_dir) { File.join(reader_cache_root, 'booksha1') }
-  let(:book2_dir) { File.join(reader_cache_root, 'booksha2') }
+  let(:book1_epub) { File.join(home, 'books', 'book1.epub') }
+  let(:book2_epub) { File.join(home, 'books', 'book2.epub') }
 
   before do
+    @old_home = ENV['HOME']
+    @old_cache = ENV['XDG_CACHE_HOME']
     ENV['HOME'] = home
     ENV['XDG_CACHE_HOME'] = xdg_cache
-    # Book 1
-    FileUtils.mkdir_p(File.join(book1_dir, 'META-INF'))
-    FileUtils.mkdir_p(File.join(book1_dir, 'OEBPS'))
-    File.write(File.join(book1_dir, 'manifest.json'), JSON.generate({
-                                                                      'title' => 'Cached One',
-                                                                      'author' => 'Author A',
-                                                                      'authors' => ['Author A'],
-                                                                      'opf_path' => 'OEBPS/content.opf',
-                                                                      'spine' => ['OEBPS/ch1.xhtml'],
-                                                                    }))
-    File.write(File.join(book1_dir, 'META-INF', 'container.xml'), '<c/>')
-    File.write(File.join(book1_dir, 'OEBPS', 'content.opf'), '<opf/>')
-    File.write(File.join(book1_dir, 'OEBPS', 'ch1.xhtml'), '<html><body><p>Hi</p></body></html>')
-    # Book 2
-    FileUtils.mkdir_p(File.join(book2_dir, 'META-INF'))
-    FileUtils.mkdir_p(File.join(book2_dir, 'OEBPS'))
-    File.write(File.join(book2_dir, 'manifest.json'), JSON.generate({
-                                                                      'title' => 'Cached Two',
-                                                                      'author' => 'Author B',
-                                                                      'authors' => ['Author B'],
-                                                                      'opf_path' => 'OEBPS/content.opf',
-                                                                      'spine' => ['OEBPS/ch1.xhtml'],
-                                                                    }))
-    File.write(File.join(book2_dir, 'META-INF', 'container.xml'), '<c/>')
-    File.write(File.join(book2_dir, 'OEBPS', 'content.opf'), '<opf/>')
-    File.write(File.join(book2_dir, 'OEBPS', 'ch1.xhtml'), '<html><body><p>Yo</p></body></html>')
+    allow(EbookReader::Infrastructure::CachePaths).to receive(:reader_root).and_return(reader_cache_root)
+    FileUtils.mkdir_p(File.dirname(book1_epub))
+    File.write(book1_epub, 'book1')
+    File.write(book2_epub, 'book2')
+
+    @book1_cache = build_cache(book1_epub, title: 'Cached One', author: 'Author A', body: 'Hi')
+    @book2_cache = build_cache(book2_epub, title: 'Cached Two', author: 'Author B', body: 'Yo')
+  end
+
+  after do
+    ENV['HOME'] = @old_home
+    ENV['XDG_CACHE_HOME'] = @old_cache
+    FileUtils.rm_rf(tmp_dir)
   end
 
   it 'navigates with arrow keys and opens selected with Enter' do
     # Stub MouseableReader to capture open path without launching terminal
     reader = class_double('EbookReader::MouseableReader').as_stubbed_const
-    # Expect open of book 2 after navigating down
-    expect(reader).to receive(:new).with(book2_dir, anything, anything).and_return(double(run: true))
 
     mm = EbookReader::MainMenu.new
     mm.switch_to_mode(:library)
     expect(mm.main_menu_component.current_screen.items.length).to eq(2)
+    items = mm.main_menu_component.current_screen.items
+    target_path = items[1][:open_path]
+    expect(reader).to receive(:new).with(target_path, anything, anything).and_return(double(run: true))
     dispatcher = mm.instance_variable_get(:@dispatcher)
 
     # Down (vi key) to second item
@@ -85,5 +74,29 @@ RSpec.describe 'Library navigation and open via keys' do
     # Move up stays at 0 (no negative)
     dispatcher.handle_key('k')
     expect(EbookReader::Domain::Selectors::MenuSelectors.browse_selected(state)).to eq(0)
+  end
+
+  def build_cache(epub_path, title:, author:, body:)
+    cache = EbookReader::Infrastructure::EpubCache.new(epub_path)
+    book = EbookReader::Infrastructure::EpubCache::BookData.new(
+      title: title,
+      language: 'en_US',
+      authors: [author],
+      chapters: [EbookReader::Domain::Models::Chapter.new(number: '1', title: title, lines: [body], metadata: nil, blocks: nil, raw_content: "<p>#{body}</p>")],
+      toc_entries: [],
+      opf_path: 'OEBPS/content.opf',
+      spine: ['OEBPS/ch1.xhtml'],
+      chapter_hrefs: ['OEBPS/ch1.xhtml'],
+      resources: {
+        'META-INF/container.xml' => '<c/>',
+        'OEBPS/content.opf' => '<opf/>',
+        'OEBPS/ch1.xhtml' => "<html><body><p>#{body}</p></body></html>",
+      },
+      metadata: {},
+      container_path: 'META-INF/container.xml',
+      container_xml: '<c/>'
+    )
+    cache.write_book!(book)
+    cache
   end
 end

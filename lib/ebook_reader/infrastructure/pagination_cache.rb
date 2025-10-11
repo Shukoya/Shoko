@@ -1,15 +1,11 @@
 # frozen_string_literal: true
 
-require 'json'
-require_relative '../serializers'
-require_relative 'atomic_file_writer'
+require_relative 'epub_cache'
 require_relative 'perf_tracer'
 
 module EbookReader
   module Infrastructure
-    # Persists dynamic pagination (per-layout) into the book's cache directory.
-    # Stores compact page entries (no text): chapter_index, page_in_chapter,
-    # total_pages_in_chapter, start_line, end_line.
+    # Persists dynamic pagination layouts inside the Marshal cache file for a book.
     module PaginationCache
       module_function
 
@@ -20,123 +16,91 @@ module EbookReader
       end
 
       def load_for_document(doc, key)
-        dir = resolve_cache_dir(doc)
-        return nil unless dir
+        cache = cache_for(doc)
+        return nil unless cache
 
-        path, serializer = locate(dir, key)
-        return nil unless path
-
-        data = Infrastructure::PerfTracer.measure('cache.lookup') { serializer.load_file(path) }
-        pages = extract_pages(data)
-        return nil unless pages
-
-        pages.map do |h|
-          {
-            chapter_index: h['chapter_index'] || h[:chapter_index],
-            page_in_chapter: h['page_in_chapter'] || h[:page_in_chapter],
-            total_pages_in_chapter: h['total_pages_in_chapter'] || h[:total_pages_in_chapter],
-            start_line: h['start_line'] || h[:start_line],
-            end_line: h['end_line'] || h[:end_line],
-          }
-        end
+        data = Infrastructure::PerfTracer.measure('cache.lookup') { cache.load_layout(key) }
+        extract_pages(data)
       rescue StandardError
         nil
       end
 
       def save_for_document(doc, key, pages_compact)
-        dir = resolve_cache_dir(doc)
-        return false unless dir
+        cache = cache_for(doc)
+        return false unless cache
 
-        serializer = select_serializer
-        final = File.join(dir, 'pagination', "#{key}.#{serializer.ext}")
         payload = {
           'version' => SCHEMA_VERSION,
           'pages' => pages_compact,
         }
-        AtomicFileWriter.write_using(final, binary: serializer.binary?) do |io|
-          serializer.dump_to_io(io, payload)
-        end
-        true
-      rescue StandardError
-        false
+        cache.mutate_layouts! { |layouts| layouts[key] = payload }
       end
 
-      def resolve_cache_dir(doc)
-        # Prefer cache_dir if document exposes it (cached open)
-        return doc.cache_dir if doc.respond_to?(:cache_dir) && doc.cache_dir && !doc.cache_dir.to_s.empty?
+      def delete_for_document(doc, key)
+        cache = cache_for(doc)
+        return false unless cache
 
-        # Fallback: compute cache dir from epub path via EpubCache
-        if doc.respond_to?(:canonical_path) && doc.canonical_path && File.exist?(doc.canonical_path)
-          cache = EbookReader::Infrastructure::EpubCache.new(doc.canonical_path)
-          return cache.cache_dir
-        end
-        nil
-      rescue StandardError
-        nil
-      end
-
-      def locate(dir, key)
-        mp = File.join(dir, 'pagination', "#{key}.msgpack")
-        js = File.join(dir, 'pagination', "#{key}.json")
-        if File.exist?(mp) && SerializerSupport.msgpack_available?
-          [mp, MessagePackSerializer.new]
-        elsif File.exist?(js)
-          [js, JSONSerializer.new]
-        else
-          [nil, nil]
-        end
+        cache.mutate_layouts! { |layouts| layouts.delete(key) }
       end
 
       def exists_for_document?(doc, key)
-        dir = resolve_cache_dir(doc)
-        return false unless dir
+        cache = cache_for(doc)
+        return false unless cache
 
-        base = File.join(dir, 'pagination', key)
-        mp = "#{base}.msgpack"
-        js = "#{base}.json"
-        File.exist?(mp) || File.exist?(js)
-      rescue StandardError
-        false
-      end
-
-      def select_serializer
-        SerializerSupport.msgpack_available? ? MessagePackSerializer.new : JSONSerializer.new
-      end
-
-      # Serializers are defined in lib/ebook_reader/serializers.rb (outside infra path for test coverage isolation)
-
-      def delete_for_document(doc, key)
-        dir = resolve_cache_dir(doc)
-        return false unless dir
-
-        base = File.join(dir, 'pagination', key)
-        mp = "#{base}.msgpack"
-        js = "#{base}.json"
-        removed = false
-        [mp, js].each do |p|
-          next unless File.exist?(p)
-
-          File.delete(p)
-          removed = true
-        end
-        removed
+        !!cache.load_layout(key)
       rescue StandardError
         false
       end
 
       def extract_pages(data)
-        case data
-        when Hash
-          version = data['version'] || data[:version]
-          pages = data['pages'] || data[:pages]
-          return nil unless version.nil? || version.to_i <= SCHEMA_VERSION
-          return nil unless pages.is_a?(Array)
+        return nil unless data.is_a?(Hash)
 
-          pages
-        when Array
-          data
+        version = data['version'] || data[:version]
+        pages = data['pages'] || data[:pages]
+        return nil unless pages.is_a?(Array)
+        return nil if version && version.to_i > SCHEMA_VERSION
+
+        pages.map do |entry|
+          {
+            chapter_index: entry[:chapter_index] || entry['chapter_index'],
+            page_in_chapter: entry[:page_in_chapter] || entry['page_in_chapter'],
+            total_pages_in_chapter: entry[:total_pages_in_chapter] || entry['total_pages_in_chapter'],
+            start_line: entry[:start_line] || entry['start_line'],
+            end_line: entry[:end_line] || entry['end_line'],
+          }
         end
       end
+
+      def cache_for(doc)
+        path = resolve_cache_path(doc)
+        return nil unless path && File.exist?(path)
+
+        EbookReader::Infrastructure::EpubCache.new(path)
+      rescue EbookReader::Error, StandardError
+        nil
+      end
+      private_class_method :cache_for
+
+      def resolve_cache_path(doc)
+        if doc.respond_to?(:cache_path) && doc.cache_path && !doc.cache_path.to_s.empty?
+          return doc.cache_path
+        end
+
+        if doc.respond_to?(:cache_dir) && doc.cache_dir && !doc.cache_dir.to_s.empty?
+          legacy = Dir.children(doc.cache_dir).find { |name| name.end_with?(EpubCache.cache_extension) }
+          return File.join(doc.cache_dir, legacy) if legacy
+        end
+
+        if doc.respond_to?(:canonical_path) && doc.canonical_path && File.exist?(doc.canonical_path)
+          cache = EbookReader::Infrastructure::EpubCache.new(doc.canonical_path)
+          return cache.cache_path if File.exist?(cache.cache_path)
+        end
+
+        nil
+      rescue EbookReader::Error, StandardError
+        nil
+      end
+      private_class_method :resolve_cache_path
     end
   end
 end

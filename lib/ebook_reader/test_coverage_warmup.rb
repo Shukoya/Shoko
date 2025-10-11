@@ -78,29 +78,45 @@ module EbookReader
       end
 
       begin
-        # Exercise EpubCache manifest write/read paths
         fake_epub = File.join(Dir.pwd, 'tmp_coverage.epub')
         File.write(fake_epub, 'epub-bytes') unless File.exist?(fake_epub)
         cache = Infrastructure::EpubCache.new(fake_epub)
-        FileUtils.mkdir_p(File.join(cache.cache_dir, 'META-INF'))
-        FileUtils.mkdir_p(File.join(cache.cache_dir, 'OPS'))
-        FileUtils.mkdir_p(File.join(cache.cache_dir, 'xhtml'))
-        File.write(File.join(cache.cache_dir, 'META-INF', 'container.xml'), '<xml/>')
-        File.write(File.join(cache.cache_dir, 'OPS', 'content.opf'), '<xml/>')
-        File.write(File.join(cache.cache_dir, 'xhtml', '1.xhtml'), '<html/>')
-        manifest = Infrastructure::EpubCache::Manifest.new(
-          title: 'Warmup', author_str: 'A', authors: ['A'],
-          opf_path: 'OPS/content.opf', spine: ['xhtml/1.xhtml'], epub_path: fake_epub
+        chapter = EbookReader::Domain::Models::Chapter.new(
+          number: '1',
+          title: 'Warmup',
+          lines: ['Warmup'],
+          metadata: nil,
+          blocks: nil,
+          raw_content: '<html><body>Warmup</body></html>'
         )
-        cache.write_manifest!(manifest)
-        cache.load_manifest
+        book = Infrastructure::EpubCache::BookData.new(
+          title: 'Warmup',
+          language: 'en_US',
+          authors: ['Author'],
+          chapters: [chapter],
+          toc_entries: [],
+          opf_path: 'OPS/content.opf',
+          spine: ['xhtml/1.xhtml'],
+          chapter_hrefs: ['xhtml/1.xhtml'],
+          resources: {
+            'META-INF/container.xml' => '<xml/>',
+            'OPS/content.opf' => '<xml/>',
+            'xhtml/1.xhtml' => '<html/>',
+          },
+          metadata: { year: '2024' },
+          container_path: 'META-INF/container.xml',
+          container_xml: '<xml/>'
+        )
+        cache.write_book!(book)
+        cache.load_for_source
+        cache.mutate_layouts! { |layouts| layouts['warmup'] = { 'version' => 1, 'pages' => [] } }
+        Infrastructure::BookCachePipeline.new.load(fake_epub)
       rescue StandardError
       end
     ensure
       begin
         FileUtils.rm_f(fake_epub) if defined?(fake_epub)
-        dir = cache&.cache_dir if defined?(cache)
-        FileUtils.rm_rf(dir) if dir
+        FileUtils.rm_f(cache.cache_path) if defined?(cache) && cache&.cache_path
       rescue StandardError
       end
     end

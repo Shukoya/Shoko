@@ -19,9 +19,11 @@ module EbookReader
       def add(path)
         recent_files = load.reject { |file| file['path'] == path }
 
+        label = File.basename(path, File.extname(path)).tr('_-', ' ')
+
         new_entry = {
           'path' => path,
-          'name' => File.basename(path, '.epub').tr('_-', ' '),
+          'name' => label,
           'accessed' => Time.now.iso8601,
         }
 

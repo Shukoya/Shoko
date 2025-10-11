@@ -161,10 +161,10 @@ Goal: Instant subsequent opens by avoiding ZIP inflation and OPF parsing; cache-
 - [x] Wipe cache removes disk cache, scan cache, and recent files
 
 ### 5.5 Follow-ups 🔶 OPEN
-- [ ] Manifest schema version for future upgrades; bump to invalidate old schemas
-- [ ] Cache validation helper (`EpubCache.validate!(dir)`) to detect missing/corrupt files and fall back safely
-- [ ] Test coverage for MessagePack manifest path (write+read) and corrupt JSON/MessagePack fallbacks
-- [ ] Documentation note in ARCHITECTURE.md referencing `CachePaths`
+- [ ] Cache payload schema roadmap for forward compatibility (bump Marshal version when structure changes)
+- [ ] Cache validation helper to surface stale `.cache` files beyond digest/mtime mismatches
+- [ ] Additional diagnostics around pagination layout corruption (log + fallback)
+- [x] Documentation note in ARCHITECTURE.md referencing cache pipeline
 
 ### 5.6 Instant-Open Runtime Optimizations ✅ COMPLETE
 - [x] Windowed wrapping for first paint (`WrappingService#wrap_window`) to avoid full chapter wrapping
@@ -404,7 +404,7 @@ Conclusion: the previously listed dynamic navigation bug is resolved in code; ke
    - Introduced `Infrastructure::CachePaths.reader_root` and adopted it in EpubCache, Library screen, and cache wipe.
  
 13) Canonicalize book identity — COMPLETE
-   - Introduced `EPUBDocument#source_path` (canonical path) sourced from cache manifest `epub_path` or original `.epub` file path.
+   - Introduced `EPUBDocument#source_path` (canonical path) sourced from cache payload `source_path` or original `.epub` file path.
   - `StateController` now uses the canonical path via repositories, ensuring restore consistency across open modes (original file vs cache dir).
    - After initial dynamic page-map build, pending progress is applied precisely for a correct first frame.
 

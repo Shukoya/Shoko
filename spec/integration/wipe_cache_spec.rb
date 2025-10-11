@@ -3,9 +3,8 @@
 require 'spec_helper'
 
 RSpec.describe 'Wipe Cache setting' do
-  include FakeFS::SpecHelpers
-
-  let(:home) { '/home/test' }
+  let(:tmp_dir) { Dir.mktmpdir }
+  let(:home) { tmp_dir }
   let(:xdg_cache) { File.join(home, '.cache') }
   let(:reader_cache_root) { File.join(xdg_cache, 'reader') }
   let(:config_dir) { File.join(home, '.config', 'reader') }
@@ -14,6 +13,8 @@ RSpec.describe 'Wipe Cache setting' do
 
   before do
     # Simulate HOME and XDG_CACHE_HOME
+    @old_home = ENV['HOME']
+    @old_cache = ENV['XDG_CACHE_HOME']
     ENV['HOME'] = home
     ENV['XDG_CACHE_HOME'] = xdg_cache
     stub_const('EbookReader::EPUBFinder::CACHE_FILE', epub_cache_file)
@@ -23,12 +24,17 @@ RSpec.describe 'Wipe Cache setting' do
     end
 
     FileUtils.mkdir_p(reader_cache_root)
-    FileUtils.mkdir_p(File.join(reader_cache_root, 'dummysha'))
-    File.write(File.join(reader_cache_root, 'dummysha', 'manifest.json'), '{"ok":true}')
+    File.write(File.join(reader_cache_root, 'dummysha.cache'), 'cache-bytes')
 
     FileUtils.mkdir_p(config_dir)
     File.write(epub_cache_file, '{"timestamp":"2020-01-01T00:00:00Z","files":[]}')
     File.write(recent_file, '[{"path":"/book.epub","name":"Book","accessed":"2020-01-01T00:00:00Z"}]')
+  end
+
+  after do
+    ENV['HOME'] = @old_home
+    ENV['XDG_CACHE_HOME'] = @old_cache
+    FileUtils.rm_rf(tmp_dir)
   end
 
   it 'wipes epub cache directory and scan cache file' do

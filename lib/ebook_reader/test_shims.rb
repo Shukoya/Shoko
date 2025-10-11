@@ -21,8 +21,8 @@ module EbookReader
           rescue ArgumentError
             # Fallback: build a minimal doc compatible with pagination tests
             if args.length == 2 && args[1].is_a?(Array)
-              cache_dir, chapters = args
-              return EbookReader::TestShims::DocFromChapters.new(cache_dir, chapters)
+              cache_path, chapters = args
+              return EbookReader::TestShims::DocFromChapters.new(cache_path, chapters)
             end
             raise
           end
@@ -34,11 +34,17 @@ module EbookReader
     end
 
     class DocFromChapters
-      attr_reader :cache_dir
+      attr_reader :cache_path
 
-      def initialize(cache_dir, chapters)
-        @cache_dir = cache_dir
+      def initialize(cache_path, chapters)
+        @cache_path = cache_path
         @chapters = chapters
+      end
+
+      def cache_dir
+        return nil unless @cache_path
+
+        File.dirname(@cache_path)
       end
 
       def chapter_count = @chapters.length

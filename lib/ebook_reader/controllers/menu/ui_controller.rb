@@ -239,7 +239,7 @@ module EbookReader
 
         def resolve_library_path(item)
           primary = item.respond_to?(:open_path) ? item.open_path : nil
-          return primary if state_controller.valid_cache_directory?(primary)
+          return primary if state_controller.valid_cache_path?(primary)
 
           fallback = item.respond_to?(:epub_path) ? item.epub_path : nil
           return fallback if fallback && !fallback.empty? && File.exist?(fallback)

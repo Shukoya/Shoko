@@ -3,7 +3,7 @@
 require 'spec_helper'
 
 RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
-  include FakeFS::SpecHelpers
+  let(:tmp_dir) { Dir.mktmpdir }
 
   class PCCN_FakeChapter
     attr_reader :lines
@@ -14,10 +14,11 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
   end
 
   class PCCN_FakeDoc
-    attr_reader :cache_dir
+    attr_reader :cache_path, :canonical_path
 
-    def initialize(cache_dir, chapters)
-      @cache_dir = cache_dir
+    def initialize(cache_path, chapters, canonical_path = nil)
+      @cache_path = cache_path
+      @canonical_path = canonical_path
       @chapters = chapters
     end
 
@@ -25,15 +26,40 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
     def get_chapter(idx) = @chapters[idx]
   end
 
-  let(:home) { '/home/test' }
+  let(:home) { tmp_dir }
   let(:cache_root) { File.join(home, '.cache') }
   let(:reader_root) { File.join(cache_root, 'reader') }
-  let(:book_dir) { File.join(reader_root, 'deadbeef') }
+  let(:epub_path) { File.join(home, 'books/demo.epub') }
+  let(:cache) { EbookReader::Infrastructure::EpubCache.new(epub_path) }
 
   before do
+    @old_home = ENV['HOME']
+    @old_cache = ENV['XDG_CACHE_HOME']
     ENV['HOME'] = home
     ENV['XDG_CACHE_HOME'] = cache_root
-    FileUtils.mkdir_p(File.join(book_dir, 'pagination'))
+    FileUtils.mkdir_p(File.dirname(epub_path))
+    File.write(epub_path, 'epub-data')
+    book = EbookReader::Infrastructure::EpubCache::BookData.new(
+      title: 'Demo',
+      language: 'en_US',
+      authors: ['Author'],
+      chapters: [EbookReader::Domain::Models::Chapter.new(number: '1', title: 'Demo', lines: Array.new(10) { |i| "L#{i}" }, metadata: nil, blocks: nil, raw_content: '<p></p>')],
+      toc_entries: [],
+      opf_path: 'OPS/content.opf',
+      spine: ['xhtml/1.xhtml'],
+      chapter_hrefs: ['xhtml/1.xhtml'],
+      resources: { 'META-INF/container.xml' => '<xml/>' },
+      metadata: {},
+      container_path: 'META-INF/container.xml',
+      container_xml: '<xml/>'
+    )
+    cache.write_book!(book)
+  end
+
+  after do
+    ENV['HOME'] = @old_home
+    ENV['XDG_CACHE_HOME'] = @old_cache
+    FileUtils.rm_rf(tmp_dir)
   end
 
   it 'does not invoke wrapping service during build when cached pagination exists' do
@@ -42,12 +68,12 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
     compact_pages = [
       { 'chapter_index' => 0, 'page_in_chapter' => 0, 'total_pages_in_chapter' => 1, 'start_line' => 0, 'end_line' => 9 },
     ]
-    ok = EbookReader::Infrastructure::PaginationCache.save_for_document(PCCN_FakeDoc.new(book_dir, []), key, compact_pages)
+    ok = EbookReader::Infrastructure::PaginationCache.save_for_document(PCCN_FakeDoc.new(cache.cache_path, [], epub_path), key, compact_pages)
     expect(ok).to be true
 
     # Doc and container
     lines = Array.new(10) { |i| "L#{i}" }
-    doc = PCCN_FakeDoc.new(book_dir, [PCCN_FakeChapter.new(lines)])
+    doc = PCCN_FakeDoc.new(cache.cache_path, [PCCN_FakeChapter.new(lines)], epub_path)
     container = EbookReader::Domain::ContainerFactory.create_default_container
     state = container.resolve(:global_state)
     state.update({ %i[config page_numbering_mode] => :dynamic,

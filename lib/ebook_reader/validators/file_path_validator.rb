@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../infrastructure/validator'
+require_relative '../infrastructure/epub_cache'
 
 module EbookReader
   module Validators
@@ -59,8 +60,9 @@ module EbookReader
       # @return [Boolean] true if EPUB
       def extension_valid?(path)
         return true if path.downcase.end_with?('.epub')
+        return true if EbookReader::Infrastructure::EpubCache.cache_file?(path)
 
-        add_error(:path, 'file must have .epub extension')
+        add_error(:path, 'file must have .epub or .cache extension')
         false
       end
 

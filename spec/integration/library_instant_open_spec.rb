@@ -3,35 +3,52 @@
 require 'spec_helper'
 
 RSpec.describe 'Library instant open' do
-  include FakeFS::SpecHelpers
-
-  let(:home) { '/home/test' }
+  let(:tmp_dir) { Dir.mktmpdir }
+  let(:home) { tmp_dir }
   let(:xdg_cache) { File.join(home, '.cache') }
   let(:reader_cache_root) { File.join(xdg_cache, 'reader') }
-  let(:book_dir) { File.join(reader_cache_root, 'deadbeef') }
+  let(:epub_path) { File.join(home, 'books', 'cached.epub') }
+  let(:cache) { EbookReader::Infrastructure::EpubCache.new(epub_path) }
 
   before do
+    @old_home = ENV['HOME']
+    @old_cache = ENV['XDG_CACHE_HOME']
     ENV['HOME'] = home
     ENV['XDG_CACHE_HOME'] = xdg_cache
-    FileUtils.mkdir_p(File.join(book_dir, 'META-INF'))
-    # Minimal manifest and files
-    File.write(File.join(book_dir, 'manifest.json'), JSON.generate({
-                                                                     'title' => 'Cached Book',
-                                                                     'author' => 'A. Author',
-                                                                     'authors' => ['A. Author'],
-                                                                     'opf_path' => 'OEBPS/content.opf',
-                                                                     'spine' => ['OEBPS/ch1.xhtml'],
-                                                                   }))
-    FileUtils.mkdir_p(File.join(book_dir, 'OEBPS'))
-    File.write(File.join(book_dir, 'META-INF', 'container.xml'), '<c/>')
-    File.write(File.join(book_dir, 'OEBPS', 'content.opf'), '<opf/>')
-    File.write(File.join(book_dir, 'OEBPS', 'ch1.xhtml'), '<html><body><p>Hello</p></body></html>')
+    allow(EbookReader::Infrastructure::CachePaths).to receive(:reader_root).and_return(reader_cache_root)
+    FileUtils.mkdir_p(File.dirname(epub_path))
+    File.write(epub_path, 'book')
+    book = EbookReader::Infrastructure::EpubCache::BookData.new(
+      title: 'Cached Book',
+      language: 'en_US',
+      authors: ['A. Author'],
+      chapters: [EbookReader::Domain::Models::Chapter.new(number: '1', title: 'Cached Book', lines: ['Hello'], metadata: nil, blocks: nil, raw_content: '<p>Hello</p>')],
+      toc_entries: [],
+      opf_path: 'OEBPS/content.opf',
+      spine: ['OEBPS/ch1.xhtml'],
+      chapter_hrefs: ['OEBPS/ch1.xhtml'],
+      resources: {
+        'META-INF/container.xml' => '<c/>',
+        'OEBPS/content.opf' => '<opf/>',
+        'OEBPS/ch1.xhtml' => '<html><body><p>Hello</p></body></html>',
+      },
+      metadata: {},
+      container_path: 'META-INF/container.xml',
+      container_xml: '<c/>'
+    )
+    cache.write_book!(book)
+  end
+
+  after do
+    ENV['HOME'] = @old_home
+    ENV['XDG_CACHE_HOME'] = @old_cache
+    FileUtils.rm_rf(tmp_dir)
   end
 
   it 'opens instantly from Library by using cache directory' do
     # Stub MouseableReader to capture open path without launching terminal
     reader = class_double('EbookReader::MouseableReader').as_stubbed_const
-    expect(reader).to receive(:new).with(book_dir, anything, anything).and_return(double(run: true))
+    expect(reader).to receive(:new).with(cache.cache_path, anything, anything).and_return(double(run: true))
 
     mm = EbookReader::MainMenu.new
     mm.switch_to_mode(:library)

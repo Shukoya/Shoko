@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../cache_paths'
-require_relative '../../serializers'
-require_relative '../../helpers/opf_processor'
+require_relative '../epub_cache'
 
 module EbookReader
   module Infrastructure
@@ -16,68 +15,48 @@ module EbookReader
         def list_entries
           return [] unless File.directory?(@cache_root)
 
-          Dir.children(@cache_root).sort.each_with_object([]) do |sha, acc|
-            entry_path = File.join(@cache_root, sha)
-            next unless File.directory?(entry_path)
+          Dir.children(@cache_root).sort.each_with_object([]) do |entry, acc|
+            next unless entry.end_with?(Infrastructure::EpubCache.cache_extension)
 
-            manifest = load_manifest_data(entry_path)
-            next unless manifest && Array(manifest['spine']).any?
+            cache_path = File.join(@cache_root, entry)
+            payload = load_payload(cache_path)
+            next unless payload
 
-            acc << build_entry(entry_path, manifest)
+            acc << build_entry(cache_path, payload)
           end
         end
 
         private
 
-        def build_entry(entry_path, manifest)
-          epub_path = (manifest['epub_path'] || '').to_s
+        def load_payload(path)
+          cache = Infrastructure::EpubCache.new(path)
+          cache.read_cache(strict: true)
+        rescue EbookReader::Error, StandardError
+          nil
+        end
+
+        def build_entry(cache_path, payload)
+          book = payload.book
+          metadata = book.metadata || {}
+          authors = Array(book.authors).join(', ')
 
           {
-            title: (manifest['title'] || 'Unknown').to_s,
-            authors: (manifest['author'] || '').to_s,
-            year: extract_year_from_opf(entry_path, manifest['opf_path']),
-            size_bytes: calculate_size_bytes(epub_path, entry_path),
-            open_path: entry_path,
-            epub_path: epub_path,
+            title: present_or_default(book.title, 'Unknown'),
+            authors: authors,
+            year: metadata[:year].to_s,
+            size_bytes: safe_file_size(cache_path),
+            open_path: cache_path,
+            epub_path: payload.source_path.to_s,
           }
         end
 
-        def load_manifest_data(entry)
-          mp = File.join(entry, 'manifest.msgpack')
-          js = File.join(entry, 'manifest.json')
-          if File.exist?(mp)
-            begin
-              return EbookReader::Infrastructure::MessagePackSerializer.new.load_file(mp)
-            rescue StandardError
-              # fall through to JSON
-            end
-          end
-
-          return EbookReader::Infrastructure::JSONSerializer.new.load_file(js) if File.exist?(js)
-
-          nil
-        rescue StandardError
-          nil
+        def present_or_default(value, fallback)
+          str = value.to_s.strip
+          str.empty? ? fallback : value
         end
 
-        def extract_year_from_opf(cache_dir, opf_rel)
-          return '' unless opf_rel
-
-          opf = File.join(cache_dir, opf_rel.to_s)
-          return '' unless File.exist?(opf)
-
-          meta = EbookReader::Helpers::OPFProcessor.new(opf).extract_metadata
-          (meta[:year] || '').to_s
-        rescue StandardError
-          ''
-        end
-
-        def calculate_size_bytes(epub_path, cache_dir)
-          return File.size(epub_path) if epub_path && !epub_path.empty? && File.exist?(epub_path)
-
-          Dir.glob(File.join(cache_dir, '**', '*')).sum do |path|
-            File.file?(path) ? File.size(path) : 0
-          end
+        def safe_file_size(path)
+          File.size(path)
         rescue StandardError
           0
         end

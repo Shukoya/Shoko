@@ -8,7 +8,8 @@ RSpec.describe EbookReader::Domain::Services::LibraryService do
   let(:home) { '/home/test' }
   let(:xdg_cache) { File.join(home, '.cache') }
   let(:reader_root) { File.join(xdg_cache, 'reader') }
-  let(:book_dir) { File.join(reader_root, 'deadbeef') }
+  let(:epub_path) { File.join(home, 'books', 'library.epub') }
+  let(:cache) { EbookReader::Infrastructure::EpubCache.new(epub_path) }
 
   let(:recent_repository) do
     Class.new do
@@ -37,22 +38,37 @@ RSpec.describe EbookReader::Domain::Services::LibraryService do
   subject(:service) { described_class.new(dependencies) }
 
   before do
+    @old_home = ENV['HOME']
+    @old_cache = ENV['XDG_CACHE_HOME']
     ENV['HOME'] = home
     ENV['XDG_CACHE_HOME'] = xdg_cache
-    FileUtils.mkdir_p(File.join(book_dir, 'META-INF'))
-    FileUtils.mkdir_p(File.join(book_dir, 'OPS'))
-    File.write(File.join(book_dir, 'META-INF', 'container.xml'), '<xml/>')
-    File.write(File.join(book_dir, 'OPS', 'content.opf'), '<xml/>')
-    # Simple manifest.json
-    File.write(File.join(book_dir, 'manifest.json'), JSON.generate({
-                                                                     'title' => 'Test Book',
-                                                                     'author' => 'Tester',
-                                                                     'authors' => ['Tester'],
-                                                                     'opf_path' => 'OPS/content.opf',
-                                                                     'spine' => ['OPS/ch1.xhtml'],
-                                                                     'epub_path' => '/tmp/book.epub',
-                                                                   }))
-    File.write(File.join(book_dir, 'OPS', 'ch1.xhtml'), '<html><body><p>Hi</p></body></html>')
+    allow(EbookReader::Infrastructure::CachePaths).to receive(:reader_root).and_return(reader_root)
+    FileUtils.mkdir_p(File.dirname(epub_path))
+    File.write(epub_path, 'epub')
+    book = EbookReader::Infrastructure::EpubCache::BookData.new(
+      title: 'Test Book',
+      language: 'en_US',
+      authors: ['Tester'],
+      chapters: [EbookReader::Domain::Models::Chapter.new(number: '1', title: 'Test Book', lines: ['Hi'], metadata: nil, blocks: nil, raw_content: '<p>Hi</p>')],
+      toc_entries: [],
+      opf_path: 'OPS/content.opf',
+      spine: ['OPS/ch1.xhtml'],
+      chapter_hrefs: ['OPS/ch1.xhtml'],
+      resources: {
+        'META-INF/container.xml' => '<xml/>',
+        'OPS/content.opf' => '<xml/>',
+        'OPS/ch1.xhtml' => '<html><body><p>Hi</p></body></html>',
+      },
+      metadata: { year: '2022' },
+      container_path: 'META-INF/container.xml',
+      container_xml: '<xml/>'
+    )
+    cache.write_book!(book)
+  end
+
+  after do
+    ENV['HOME'] = @old_home
+    ENV['XDG_CACHE_HOME'] = @old_cache
   end
 
   it 'lists cached books with basic metadata' do
@@ -61,23 +77,8 @@ RSpec.describe EbookReader::Domain::Services::LibraryService do
     book = items.first
     expect(book[:title]).to eq('Test Book')
     expect(book[:authors]).to eq('Tester')
-    expect(book[:open_path]).to eq(book_dir)
-    expect(book[:epub_path]).to eq('/tmp/book.epub')
-    # year may be empty since OPF has no year; ensure key exists
-    expect(book).to have_key(:year)
-  end
-
-  it 'loads msgpack manifest when available' do
-    mp_path = File.join(book_dir, 'manifest.msgpack')
-    File.write(mp_path, 'binary')
-    serializer = instance_double(EbookReader::Infrastructure::MessagePackSerializer)
-    allow(EbookReader::Infrastructure::MessagePackSerializer).to receive(:new).and_return(serializer)
-    allow(serializer).to receive(:load_file).with(mp_path).and_return({
-                                                                        'title' => 'MP', 'author' => 'A', 'authors' => ['A'], 'opf_path' => 'OPS/content.opf', 'spine' => ['OPS/ch1.xhtml'], 'epub_path' => '/x.epub'
-                                                                      })
-
-    items = service.list_cached_books
-    expect(items.length).to eq(1)
-    expect(items.first[:title]).to eq('MP')
+    expect(book[:open_path]).to eq(cache.cache_path)
+    expect(book[:epub_path]).to eq(epub_path)
+    expect(book[:year]).to eq('2022')
   end
 end

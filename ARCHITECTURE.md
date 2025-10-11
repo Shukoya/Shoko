@@ -89,18 +89,16 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 - Buffered output: Terminal double-buffering via `TerminalBuffer`.
 - Lazy loading: Chapters loaded on demand.
 - Caching: Library scan and chapter wrapping caches via services.
- - Cached Library: `Domain::Services::LibraryService` lists cached books via manifests without coupling UI to Infra.
+ - Cached Library: `Domain::Services::LibraryService` lists cached books by reading Marshal payloads in `.cache` files via `Infrastructure::Repositories::CachedLibraryRepository`.
 
 ## EPUB Cache
 
 - Goal: instant subsequent opens by avoiding ZIP inflation and XML parsing.
-- Key: cache directory `${XDG_CACHE_HOME:-~/.cache}/reader/<sha256>/`, where `<sha256>` is the SHA‑256 of the `.epub` file.
-- Implementation: `Infrastructure::EpubCache` manages hashing, directories, copying, and manifest IO.
-- First open (miss): `EPUBDocument` parses normally, then spawns a background thread to:
-  - Copy `META-INF/container.xml`, the OPF file, and all spine XHTML files into the cache (relative paths preserved).
-  - Write manifest atomically (`manifest.msgpack` if `msgpack` is available; otherwise `manifest.json`) with `title`, `author` (string), `authors` (array), `opf_path`, and `spine`.
-- Subsequent opens (hit): `EPUBDocument` loads the manifest and reads XHTML directly from the cache directory; it does not reopen the ZIP or re-parse the OPF. Pagination loads compactly from cache; line content populates lazily on demand for instant open.
-- Dependencies: Standard library only; ZIP reads handled in‑house via a minimal reader using `Zlib` (no external gems). MessagePack used opportunistically if present.
+- Key: cache file `${XDG_CACHE_HOME:-~/.cache}/reader/<sha256>.cache`, where `<sha256>` is the SHA‑256 of the `.epub` file.
+- Implementation: `Infrastructure::BookCachePipeline` coordinates `EpubImporter` (ZIP/OPF/HTML processing) and `EpubCache` (Marshal serialization with integrity metadata + pagination layouts).
+- First open (miss): pipeline imports the EPUB, builds `BookData` (chapters, resources, metadata) and writes a single `.cache` file via `AtomicFileWriter`.
+- Subsequent opens (hit): pipeline loads the Marshal payload, validates version/digest/mtime, and hands `BookData` directly to `EPUBDocument`; no filesystem extraction is required. Pagination layouts are retrieved from the same payload when available.
+- Dependencies: Standard library only; ZIP reads handled in-house via a minimal reader using `Zlib`.
 
 ## Content Formatting Pipeline
 

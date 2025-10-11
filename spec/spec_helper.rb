@@ -24,6 +24,7 @@ ENV['EBOOK_READER_TEST_MODE'] ||= '1'
 ENV['READER_SKIP_PROGRESS_OVERLAY'] ||= '1'
 
 require 'json'
+require 'tmpdir'
 require 'simplecov'
 SimpleCov.start do
   track_files 'lib/ebook_reader/infrastructure/**/*.rb'

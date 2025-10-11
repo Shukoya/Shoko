@@ -76,8 +76,17 @@ module EbookReader
       @clipboard_service = @dependencies.resolve(:clipboard_service)
       @terminal_service = @dependencies.resolve(:terminal_service)
       @wrapping_service = @dependencies.resolve(:wrapping_service) if @dependencies.registered?(:wrapping_service)
-      @background_worker = Infrastructure::BackgroundWorker.new(name: 'reader-background')
-      @dependencies.register(:background_worker, @background_worker)
+      @background_worker = if @dependencies.registered?(:background_worker)
+                             begin
+                               @dependencies.resolve(:background_worker)
+                             rescue StandardError
+                               nil
+                             end
+                           end
+      unless @background_worker
+        @background_worker = Infrastructure::BackgroundWorker.new(name: 'reader-background')
+        @dependencies.register(:background_worker, @background_worker)
+      end
 
       # Load document before creating controllers that depend on it
       @doc = preload_document_from_dependencies

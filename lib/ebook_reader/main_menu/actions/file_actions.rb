@@ -29,8 +29,8 @@ module EbookReader
           state_controller.handle_reader_error(path, error)
         end
 
-        def valid_cache_directory?(dir)
-          state_controller.valid_cache_directory?(dir)
+        def valid_cache_path?(path)
+          state_controller.valid_cache_path?(path)
         end
 
         def sanitize_input_path(input)
