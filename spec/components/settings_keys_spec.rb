@@ -3,7 +3,7 @@
 require 'spec_helper'
 
 RSpec.describe 'Settings key bindings' do
-  it "maps '6' to wipe_cache action" do
+  it 'calls wipe_cache when confirming the wipe cache option' do
     container = EbookReader::Domain::ContainerFactory.create_default_container
     settings_service = instance_double('SettingsService',
                                        wipe_cache: EbookReader::Domain::Services::SettingsService::WIPE_CACHE_MESSAGE)
@@ -13,7 +13,8 @@ RSpec.describe 'Settings key bindings' do
     dispatcher = mm.instance_variable_get(:@dispatcher)
     dispatcher.activate(:settings)
 
-    dispatcher.handle_key('6')
+    5.times { dispatcher.handle_key('j') }
+    dispatcher.handle_key(' ')
     expect(settings_service).to have_received(:wipe_cache)
   end
 end

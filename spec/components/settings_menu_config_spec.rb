@@ -15,14 +15,15 @@ RSpec.describe 'Settings menu configuration toggles' do
     dispatcher.activate(:settings)
   end
 
-  it 'toggles page numbering mode when pressing 4' do
+  it 'toggles page numbering mode when navigating to the option and pressing enter' do
     expect(state.get(%i[config page_numbering_mode])).to eq(:absolute)
 
-    dispatcher.handle_key('4')
+    2.times { dispatcher.handle_key("\e[B") }
+    dispatcher.handle_key("\r")
 
     expect(state.get(%i[config page_numbering_mode])).to eq(:dynamic)
 
-    dispatcher.handle_key('4')
+    dispatcher.handle_key("\r")
 
     expect(state.get(%i[config page_numbering_mode])).to eq(:absolute)
   end

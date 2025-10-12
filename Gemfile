@@ -4,7 +4,7 @@ source 'https://rubygems.org'
 
 gem 'rake'
 gem 'rexml'
-
+gem 'reek'
 group :development do
   gem 'rubocop', require: false
   gem 'rubocop-performance', require: false

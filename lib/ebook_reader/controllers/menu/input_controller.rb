@@ -114,12 +114,9 @@ module EbookReader
 
         def register_settings_bindings
           bindings = {}
-          bindings['1'] = :toggle_view_mode
-          bindings['2'] = :cycle_line_spacing
-          bindings['3'] = :toggle_page_numbers
-          bindings['4'] = :toggle_page_numbering_mode
-          bindings['5'] = :toggle_highlight_quotes
-          bindings['6'] = :wipe_cache
+          add_nav_up_down(bindings, :settings_up, :settings_down)
+          add_confirm_bindings(bindings, :settings_select)
+          Array(Input::KeyDefinitions::ACTIONS[:space]).each { |k| bindings[k] = :settings_select }
           add_back_bindings(bindings)
           dispatcher.register_mode(:settings, bindings)
         end

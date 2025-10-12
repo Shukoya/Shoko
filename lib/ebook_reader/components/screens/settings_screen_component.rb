@@ -10,7 +10,19 @@ module EbookReader
       class SettingsScreenComponent < BaseComponent
         include Constants::UIConstants
 
-        OptionCtx = Struct.new(:row, :key, :name, :value, keyword_init: true)
+        SettingsItem = Struct.new(:action, :icon, :label, keyword_init: true)
+
+        SETTINGS_ITEMS = [
+          SettingsItem.new(action: :back_to_menu, icon: '', label: 'Go Back'),
+          SettingsItem.new(action: :toggle_view_mode, icon: '', label: 'View Mode'),
+          SettingsItem.new(action: :cycle_line_spacing, icon: '', label: 'Line Spacing'),
+          SettingsItem.new(action: :toggle_page_numbering_mode, icon: '', label: 'Page Numbering Mode'),
+          SettingsItem.new(action: :toggle_page_numbers, icon: '', label: 'Page Numbers'),
+          SettingsItem.new(action: :toggle_highlight_quotes, icon: '', label: 'Highlight Quotes'),
+          SettingsItem.new(action: :wipe_cache, icon: '', label: 'Wipe Cache'),
+        ].freeze
+
+        ItemCtx = Struct.new(:row, :item, :value_text, :value_color, :index, :selected, :indent, keyword_init: true)
 
         def initialize(state, catalog_service = nil)
           super()
@@ -19,32 +31,11 @@ module EbookReader
         end
 
         def do_render(surface, bounds)
-          height = bounds.height
-          width = bounds.width
+          surface.write(bounds, 1, 2, "#{COLOR_TEXT_ACCENT}Settings#{Terminal::ANSI::RESET}")
 
-          # Header
-          surface.write(bounds, 1, 2, "#{COLOR_TEXT_ACCENT}⚙️ Settings#{Terminal::ANSI::RESET}")
-          surface.write(bounds, 1, width - 20, "#{COLOR_TEXT_DIM}[ESC] Back#{Terminal::ANSI::RESET}")
-
-          # Settings options
-          render_setting_option(surface, bounds,
-                                OptionCtx.new(row: 3,  key: '1', name: 'View Mode',            value: format_view_mode))
-          render_setting_option(surface, bounds,
-                                OptionCtx.new(row: 4,  key: '2', name: 'Line Spacing',         value: format_line_spacing))
-          render_setting_option(surface, bounds,
-                                OptionCtx.new(row: 5,  key: '3', name: 'Page Numbers',         value: format_page_numbers))
-          render_setting_option(surface, bounds,
-                                OptionCtx.new(row: 6,  key: '4', name: 'Page Numbering Mode',  value: format_page_numbering_mode))
-          render_setting_option(surface, bounds,
-                                OptionCtx.new(row: 7,  key: '5', name: 'Highlight Quotes',     value: format_highlight_quotes))
-          render_setting_option(surface, bounds,
-                                OptionCtx.new(row: 8,  key: '6', name: 'Wipe Cache',           value: 'Removes EPUB + scan caches'))
-
-          # Instructions
-          surface.write(bounds, height - 3, 2,
-                        "#{COLOR_TEXT_DIM}Press number keys to change settings#{Terminal::ANSI::RESET}")
-          surface.write(bounds, height - 2, 2,
-                        "#{COLOR_TEXT_DIM}Changes are saved automatically#{Terminal::ANSI::RESET}")
+          selected = @state.get(%i[menu settings_selected]) || 1
+          text_values = setting_value_map
+          render_settings(surface, bounds, selected, text_values)
         end
 
         def preferred_height(_available_height)
@@ -53,43 +44,167 @@ module EbookReader
 
         private
 
-        def render_setting_option(surface, bounds, ctx)
-          key_text = "#{COLOR_TEXT_ACCENT}[#{ctx.key}]#{Terminal::ANSI::RESET}"
-          name_text = "#{COLOR_TEXT_PRIMARY}#{ctx.name}:#{Terminal::ANSI::RESET}"
-          value_text = "#{COLOR_TEXT_SUCCESS}#{ctx.value}#{Terminal::ANSI::RESET}"
+        def render_settings(surface, bounds, selected, text_values)
+          metrics = layout_metrics(bounds, text_values)
+          max_index = SETTINGS_ITEMS.length - 1
+          cursor = selected.clamp(0, max_index)
+          row = metrics[:start_row]
+          insert_toggle_gap = false
 
-          row = ctx.row
-          surface.write(bounds, row, 2, "#{key_text} #{name_text}")
-          surface.write(bounds, row, 25, value_text)
-        end
+          SETTINGS_ITEMS.each_with_index do |item, index|
+            break if row >= metrics[:max_row]
 
-        def format_view_mode
-          case @state.get(%i[config view_mode])
-          when :split then 'Split View'
-          when :single then 'Single Page'
-          else 'Unknown'
+            case item.action
+            when :toggle_view_mode
+              row = render_button_group(surface, bounds, item, row, metrics[:indent], cursor == index,
+                                        current_view_mode, view_mode_buttons)
+              insert_toggle_gap = false
+            when :cycle_line_spacing
+              row = render_button_group(surface, bounds, item, row, metrics[:indent], cursor == index,
+                                        current_line_spacing, line_spacing_buttons)
+              insert_toggle_gap = false
+            when :toggle_page_numbering_mode
+              row = render_button_group(surface, bounds, item, row, metrics[:indent], cursor == index,
+                                        current_page_numbering_mode, page_numbering_buttons)
+              insert_toggle_gap = true
+            else
+              if toggled_action?(item.action) && insert_toggle_gap
+                row += 1
+                insert_toggle_gap = false
+              end
+              value_text, value_color = text_values[item.action]
+              ctx = ItemCtx.new(row: row, item: item, value_text: value_text, value_color: value_color,
+                                index: index, selected: cursor == index, indent: metrics[:indent])
+              row = render_text_item(surface, bounds, ctx)
+            end
           end
         end
 
-        def format_line_spacing
-          case @state.get(%i[config line_spacing])
-          when :compact then 'Compact'
-          when :normal then 'Normal'
-          when :relaxed then 'Relaxed'
-          else 'Unknown'
+        def render_text_item(surface, bounds, ctx)
+          text = formatted_row(ctx.item, ctx.value_text, ctx.value_color, ctx.selected)
+          surface.write(bounds, ctx.row, ctx.indent, text)
+          ctx.row + 2
+        end
+
+        def formatted_row(item, value_text, value_color, selected)
+          label = label_text(item)
+          colors = row_colors(selected)
+          line = "#{colors[:prefix]}#{colors[:fg]}#{label}"
+          if value_text && !value_text.to_s.empty?
+            line = "#{line}#{Terminal::ANSI::RESET}  #{value_color}#{value_text}"
           end
+          "#{line}#{Terminal::ANSI::RESET}"
+        end
+
+        def row_colors(selected)
+          if selected
+            { prefix: Terminal::ANSI::BOLD, fg: COLOR_TEXT_ACCENT }
+          else
+            { prefix: '', fg: COLOR_TEXT_PRIMARY }
+          end
+        end
+
+        def label_text(item)
+          "#{item.icon}  #{item.label}"
+        end
+
+        def layout_metrics(bounds, text_values)
+          width = bounds.width
+          label_width = SETTINGS_ITEMS.map { |item| display_width(label_text(item)) }.max || 0
+          text_value_width = text_values.values.map { |value| display_width(Array(value).first) }.max || 0
+          button_width = [
+            button_group_width(view_mode_buttons),
+            button_group_width(line_spacing_buttons),
+            button_group_width(page_numbering_buttons),
+          ].max || 0
+          content_width = label_width + 2 + [text_value_width, button_width].max
+          indent = ((width - content_width) / 2).floor
+          indent = indent.clamp(2, [width - content_width, 0].max)
+          {
+            indent: indent,
+            start_row: [(bounds.height - 16) / 2, 4].max,
+            max_row: bounds.height - 3,
+          }
+        end
+
+        def display_width(text)
+          text.to_s.length
+        end
+
+        def setting_value_map
+          {
+            back_to_menu: ['Return to main menu', COLOR_TEXT_DIM],
+            toggle_page_numbers: toggle_page_number_value,
+            toggle_highlight_quotes: toggle_highlight_value,
+            wipe_cache: ['Removes EPUB + scan caches', COLOR_TEXT_WARNING],
+          }
+        end
+
+        def render_button_group(surface, bounds, item, row, indent, selected, current_value, buttons)
+          colors = row_colors(selected)
+          label = "#{colors[:prefix]}#{colors[:fg]}#{label_text(item)}#{Terminal::ANSI::RESET}"
+          surface.write(bounds, row, indent, label)
+          buttons_line = button_row(buttons, current_value)
+          surface.write(bounds, row + 1, indent, buttons_line) if row + 1 < bounds.height
+          row + 3
+        end
+
+        def button_row(buttons, current_value)
+          buttons.map { |value, label| button_string(label, value == current_value) }.join(' ')
+        end
+
+        def button_string(label, active)
+          bg = active ? BUTTON_BG_ACTIVE : BUTTON_BG_INACTIVE
+          fg = active ? BUTTON_FG_ACTIVE : BUTTON_FG_INACTIVE
+          "#{bg}#{fg} #{label} #{Terminal::ANSI::RESET}"
+        end
+
+        def button_group_width(buttons)
+          buttons.sum { |_value, label| label.length + 2 } + (buttons.length - 1)
+        end
+
+        def toggled_action?(action)
+          %i[toggle_page_numbers toggle_highlight_quotes].include?(action)
+        end
+
+        def view_mode_buttons
+          [[:split, 'Split'], [:single, 'Single']]
+        end
+
+        def line_spacing_buttons
+          [[:normal, 'Normal'], [:relaxed, 'Relaxed'], [:compact, 'Compact']]
+        end
+
+        def page_numbering_buttons
+          [[:absolute, 'Absolute'], [:dynamic, 'Dynamic']]
+        end
+
+        def current_view_mode
+          @state.get(%i[config view_mode]) || :split
+        end
+
+        def current_line_spacing
+          @state.get(%i[config line_spacing]) || :compact
+        end
+
+        def current_page_numbering_mode
+          @state.get(%i[config page_numbering_mode]) || :absolute
+        end
+
+        def toggle_page_number_value
+          text = format_page_numbers
+          color = text == 'Enabled' ? COLOR_TEXT_SUCCESS : COLOR_TEXT_WARNING
+          [text, color]
+        end
+
+        def toggle_highlight_value
+          text = format_highlight_quotes
+          color = text == 'On' ? COLOR_TEXT_SUCCESS : COLOR_TEXT_WARNING
+          [text, color]
         end
 
         def format_page_numbers
           @state.get(%i[config show_page_numbers]) ? 'Enabled' : 'Disabled'
-        end
-
-        def format_page_numbering_mode
-          case @state.get(%i[config page_numbering_mode])
-          when :absolute then 'Absolute'
-          when :dynamic then 'Dynamic'
-          else 'Unknown'
-          end
         end
 
         def format_highlight_quotes

@@ -5,6 +5,18 @@ module EbookReader
     module Commands
       # Menu commands for top-level and browse screens
       class MenuCommand < BaseCommand
+        SETTINGS_ACTIONS = %i[
+          back_to_menu
+          toggle_view_mode
+          cycle_line_spacing
+          toggle_page_numbering_mode
+          toggle_page_numbers
+          toggle_highlight_quotes
+          wipe_cache
+        ].freeze
+        SETTINGS_MAX_INDEX = SETTINGS_ACTIONS.length - 1
+        private_constant :SETTINGS_ACTIONS, :SETTINGS_MAX_INDEX
+
         def initialize(action)
           @action = action
           super(name: "menu_#{action}", description: "Menu action #{action}")
@@ -32,6 +44,9 @@ module EbookReader
           when :library_up then context.library_up if context.respond_to?(:library_up)
           when :library_down then context.library_down if context.respond_to?(:library_down)
           when :library_select then context.library_select if context.respond_to?(:library_select)
+          when :settings_up then update_menu_index(context, :settings_selected, -1, 0, SETTINGS_MAX_INDEX)
+          when :settings_down then update_menu_index(context, :settings_selected, +1, 0, SETTINGS_MAX_INDEX)
+          when :settings_select then perform_settings_select(context, can_switch)
           when :toggle_view_mode then context.toggle_view_mode if context.respond_to?(:toggle_view_mode)
           when :cycle_line_spacing then context.cycle_line_spacing if context.respond_to?(:cycle_line_spacing)
           when :toggle_page_numbers then context.toggle_page_numbers if context.respond_to?(:toggle_page_numbers)
@@ -109,6 +124,20 @@ module EbookReader
           new_val = (current + delta).clamp(min_idx, max_idx)
           state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(field => new_val))
           new_val
+        end
+
+        def perform_settings_select(context, can_switch)
+          state = context.state
+          index = state.get(%i[menu settings_selected]) || 0
+          action = SETTINGS_ACTIONS[index]
+          return unless action
+
+          if action == :back_to_menu
+            switch_mode(context, :menu, can_switch)
+            return
+          end
+
+          context.public_send(action) if context.respond_to?(action)
         end
 
         def browse_nav(context, delta)

@@ -48,7 +48,9 @@ module EbookReader
         end
 
         def switch_to_mode(mode)
-          state.dispatch(menu_action(mode: mode, browse_selected: 0))
+          payload = { mode: mode, browse_selected: 0 }
+          payload[:settings_selected] = 1 if mode == :settings
+          state.dispatch(menu_action(payload))
           preload_annotations if mode == :annotations
           input_controller.activate(selectors.mode(state))
         end

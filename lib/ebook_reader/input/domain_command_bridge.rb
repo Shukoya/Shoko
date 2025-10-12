@@ -119,6 +119,9 @@ module EbookReader
           when :library_up then Domain::Commands::MenuCommand.new(:library_up)
           when :library_down then Domain::Commands::MenuCommand.new(:library_down)
           when :library_select then Domain::Commands::MenuCommand.new(:library_select)
+          when :settings_up then Domain::Commands::MenuCommand.new(:settings_up)
+          when :settings_down then Domain::Commands::MenuCommand.new(:settings_down)
+          when :settings_select then Domain::Commands::MenuCommand.new(:settings_select)
           # recent_* commands removed
           when :start_search then Domain::Commands::MenuCommand.new(:start_search)
           when :exit_search then Domain::Commands::MenuCommand.new(:exit_search)
