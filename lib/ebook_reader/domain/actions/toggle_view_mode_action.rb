@@ -21,6 +21,7 @@ module EbookReader
                          %i[reader last_dynamic_width] => 0,
                          %i[reader last_dynamic_height] => 0,
                        })
+          state.save_config if state.respond_to?(:save_config)
 
           new_mode
         end

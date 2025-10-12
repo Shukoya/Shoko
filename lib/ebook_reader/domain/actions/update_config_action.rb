@@ -14,6 +14,7 @@ module EbookReader
             updates[[:config, config_field]] = value
           end
           state.update(updates)
+          state.save_config if state.respond_to?(:save_config)
         end
       end
     end

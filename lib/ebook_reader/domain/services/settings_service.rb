@@ -24,7 +24,7 @@ module EbookReader
 
         # Toggle split/single view mode and persist the change.
         def toggle_view_mode
-          current = ConfigSelectors.view_mode(@state_store) || :split
+          current = Selectors::ConfigSelectors.view_mode(@state_store) || :split
           new_mode = current == :split ? :single : :split
           dispatch_config(view_mode: new_mode)
           new_mode
@@ -32,14 +32,14 @@ module EbookReader
 
         # Toggle whether page numbers are displayed.
         def toggle_page_numbers
-          current = ConfigSelectors.show_page_numbers(@state_store)
+          current = Selectors::ConfigSelectors.show_page_numbers(@state_store)
           dispatch_config(show_page_numbers: !current)
         end
 
         # Cycle through line spacing options (compact → normal → relaxed → ...).
         def cycle_line_spacing
           modes = %i[compact normal relaxed]
-          current = ConfigSelectors.line_spacing(@state_store) || EbookReader::Constants::DEFAULT_LINE_SPACING
+          current = Selectors::ConfigSelectors.line_spacing(@state_store) || EbookReader::Constants::DEFAULT_LINE_SPACING
           next_mode = modes[(modes.index(current) || 1) + 1] || modes.first
           dispatch_config(line_spacing: next_mode)
           next_mode
@@ -47,13 +47,13 @@ module EbookReader
 
         # Toggle quote highlighting preference.
         def toggle_highlight_quotes
-          current = ConfigSelectors.highlight_quotes(@state_store)
+          current = Selectors::ConfigSelectors.highlight_quotes(@state_store)
           dispatch_config(highlight_quotes: !current)
         end
 
         # Toggle dynamic/absolute page numbering mode.
         def toggle_page_numbering_mode
-          current = ConfigSelectors.page_numbering_mode(@state_store) || :absolute
+          current = Selectors::ConfigSelectors.page_numbering_mode(@state_store) || :absolute
           next_mode = current == :absolute ? :dynamic : :absolute
           dispatch_config(page_numbering_mode: next_mode)
           next_mode

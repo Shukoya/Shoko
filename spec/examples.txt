@@ -25,6 +25,7 @@ example_id                                                                | stat
 ./spec/components/screens/annotation_editor_screen_component_spec.rb[1:1] | passed | 0.00075 seconds |
 ./spec/components/screens/annotation_editor_screen_component_spec.rb[1:2] | passed | 0.00053 seconds |
 ./spec/components/settings_keys_spec.rb[1:1]                              | passed | 0.00061 seconds |
+./spec/components/settings_menu_config_spec.rb[1:1]                       | passed | 0.00831 seconds |
 ./spec/components/sidebar/toc_tab_renderer_spec.rb[1:1]                   | passed | 0.00131 seconds |
 ./spec/components/surface_clipping_spec.rb[1:1]                           | passed | 0.00058 seconds |
 ./spec/components/surface_spec.rb[1:1]                                    | passed | 0.0001 seconds  |
