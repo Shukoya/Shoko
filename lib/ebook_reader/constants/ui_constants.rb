@@ -55,6 +55,15 @@ module EbookReader
       ICON_HELP = '❓'
       ICON_SEARCH = ''
       ICON_REFRESH = ''
+
+      SIDEBAR_BG = Terminal::ANSI::BG_DARK
+      SIDEBAR_SELECTION_BG = Terminal::ANSI::BG_BLUE
+      SIDEBAR_SELECTION_FG = Terminal::ANSI::BRIGHT_WHITE
+
+      BUTTON_BG_ACTIVE = Terminal::ANSI::BG_BRIGHT_GREEN
+      BUTTON_FG_ACTIVE = Terminal::ANSI::BLACK
+      BUTTON_BG_INACTIVE = Terminal::ANSI::BG_GREY
+      BUTTON_FG_INACTIVE = Terminal::ANSI::WHITE
     end
   end
 end

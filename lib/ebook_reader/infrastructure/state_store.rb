@@ -206,6 +206,7 @@ module EbookReader
             selected_index: 0,
             mode: :menu,
             browse_selected: 0,
+            settings_selected: 1,
             search_query: '',
             search_cursor: 0,
             file_input: '',

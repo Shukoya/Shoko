@@ -11,7 +11,7 @@ module EbookReader
       class TocTabRenderer < BaseComponent
         include Constants::UIConstants
 
-        ItemCtx = Struct.new(:chapter, :index, :selected_index, :y, keyword_init: true)
+        ItemCtx = Struct.new(:entries, :entry, :index, :selected_index, :y, keyword_init: true)
 
         def initialize(state, dependencies = nil)
           super()
@@ -37,18 +37,22 @@ module EbookReader
           entries = get_filtered_entries(entries_full, state)
           selected_entry_index = find_entry_index(entries, selected_chapter)
 
-          # Render filter input if active
           by = metrics.y
-          content_start_y = by
+          content_start_y = render_header(surface, bounds, metrics, doc, entries_full.length)
+
+          # Render filter input if active
           if state.get(%i[reader sidebar_toc_filter_active])
-            render_filter_input(surface, bounds, metrics, state)
-            content_start_y += 2
+            content_start_y = render_filter_input(surface, bounds, metrics, state, content_start_y)
           end
 
-          # Calculate visible area
-          available_height = metrics.height - (content_start_y - by)
+          footer_height = 2
+          available_height = metrics.height - (content_start_y - by) - footer_height
+          available_height = [available_height, 0].max
+
           render_entries_list(surface, bounds, metrics, entries, selected_entry_index, selected_chapter,
                               content_start_y, available_height)
+
+          render_footer(surface, bounds, metrics)
         end
 
         private
@@ -117,15 +121,40 @@ module EbookReader
           end
         end
 
-        def render_filter_input(surface, bounds, metrics, state)
+        def render_header(surface, bounds, metrics, doc, total_entries)
           reset = Terminal::ANSI::RESET
+          title = "#{Terminal::ANSI::BOLD}#{COLOR_TEXT_ACCENT}#{doc_title(doc)}#{reset}"
+          subtitle = "#{COLOR_TEXT_DIM}#{total_entries} entries#{reset}"
           bx = metrics.x
           by = metrics.y
+          bw = metrics.width
+
+          divider = "#{COLOR_TEXT_DIM}#{'─' * [bw - 2, 0].max}#{reset}"
+          surface.write(bounds, by, bx + 1, title)
+          surface.write(bounds, by, bx + bw - subtitle.length - 1, subtitle) if bw > subtitle.length + 2
+          surface.write(bounds, by + 1, bx + 1, divider)
+          by + 2
+        end
+
+        def doc_title(doc)
+          return 'CONTENTS' unless doc
+
+          metadata_title = doc.respond_to?(:metadata) ? doc.metadata&.fetch(:title, nil) : nil
+          title = metadata_title || (doc.respond_to?(:title) ? doc.title : nil)
+          return 'CONTENTS' unless title && !title.to_s.strip.empty?
+
+          title.to_s.strip.upcase
+        end
+
+        def render_filter_input(surface, bounds, metrics, state, start_y)
+          reset = Terminal::ANSI::RESET
+          bx = metrics.x
+          by = start_y
           filter_text = state.get(%i[reader sidebar_toc_filter]) || ''
           cursor_visible = state.get(%i[reader sidebar_toc_filter_active])
 
           # Filter input line with modern styling
-          prompt = "#{COLOR_TEXT_ACCENT}Search:#{reset} "
+          prompt = "#{COLOR_TEXT_ACCENT}SEARCH ▸#{reset} "
           input_text = "#{COLOR_TEXT_PRIMARY}#{filter_text}#{reset}"
           input_text += "#{Terminal::ANSI::REVERSE} #{reset}" if cursor_visible
 
@@ -134,8 +163,9 @@ module EbookReader
           surface.write(bounds, by, x1, input_line)
 
           # Help line with subtle styling
-          help_text = "#{COLOR_TEXT_DIM}ESC to cancel#{reset}"
+          help_text = "#{COLOR_TEXT_DIM}ESC cancel#{reset}"
           surface.write(bounds, by + 1, x1, help_text)
+          by + 2
         end
 
         def render_entries_list(surface, bounds, metrics, entries, selected_entry_index, selected_chapter_index,
@@ -148,7 +178,8 @@ module EbookReader
             idx = window_start + row
             y_pos = start_y + row
 
-            ctx = ItemCtx.new(chapter: entry,
+            ctx = ItemCtx.new(entries: entries,
+                              entry: entry,
                               index: idx,
                               selected_index: selected_chapter_index,
                               y: y_pos)
@@ -160,39 +191,25 @@ module EbookReader
           reset = Terminal::ANSI::RESET
           bx = metrics.x
           bw = metrics.width
-          # Truncate title to fit width
-          max_title_length = bw - 6
           y = ctx.y
-          entry = ctx.chapter
-          title = entry_title(entry)[0, max_title_length]
-          indent = '  ' * [entry.level, 0].max
-          navigable = entry.respond_to?(:chapter_index) ? !entry.chapter_index.nil? : true
-          selected = navigable && entry.chapter_index == ctx.selected_index
+          entry = ctx.entry
+          entries = ctx.entries
+          max_width = [bw - 2, 0].max
+          selected = navigable?(entry) && entry.chapter_index == ctx.selected_index
 
-          indicator = if selected
-                        "#{COLOR_TEXT_ACCENT}#{SELECTION_POINTER}#{reset}"
-                      elsif navigable
-                        "#{COLOR_TEXT_DIM}○ #{reset}"
-                      else
-                        '  '
-                      end
+          gutter = selected ? "#{COLOR_TEXT_ACCENT}▎#{reset}" : "#{COLOR_TEXT_DIM}│#{reset}"
+          surface.write(bounds, y, bx, gutter)
 
-          base_color = if entry.level.zero?
-                         COLOR_TEXT_ACCENT
-                       elsif navigable
-                         COLOR_TEXT_PRIMARY
-                       else
-                         COLOR_TEXT_DIM
-                       end
+          prefix_plain = branch_prefix(entries, ctx.index)
+          icon_plain = entry_icon(entries, ctx.index, entry)
+          icon_color = icon_color_for(entry)
+          prefix_len = prefix_plain.length
+          available_title_width = [max_width - prefix_len - icon_plain.length - 1, 0].max
+          title_plain = truncate_title(entry_title(entry), available_title_width)
 
-          text = if selected
-                   "#{SELECTION_HIGHLIGHT}#{indent}#{title}#{reset}"
-                 else
-                   "#{base_color}#{indent}#{title}#{reset}"
-                 end
-
-          surface.write(bounds, y, bx + 1, indicator)
-          surface.write(bounds, y, bx + 3, text)
+          segments = build_segments(prefix_plain, icon_plain, icon_color, title_plain, entry)
+          line = compose_line(segments, selected)
+          surface.write(bounds, y, bx + 2, line)
         end
 
         def find_entry_index(entries, chapter_index)
@@ -212,6 +229,142 @@ module EbookReader
         def entry_title(entry)
           title = entry.title || 'Untitled'
           entry.level.zero? ? title.upcase : title
+        end
+
+        def truncate_title(title, width)
+          return '' if width <= 0
+
+          title = title.to_s
+          return title if title.length <= width
+
+          ellipsis = width > 3 ? '...' : ''
+          cutoff = [width - ellipsis.length, 0].max
+          "#{title[0, cutoff]}#{ellipsis}"
+        end
+
+        def navigable?(entry)
+          entry.respond_to?(:chapter_index) ? !entry.chapter_index.nil? : true
+        end
+
+        def build_segments(prefix, icon, icon_color, title, entry)
+          segments = []
+          segments << [prefix, COLOR_TEXT_DIM] unless prefix.empty?
+          segments << [icon, icon_color]
+          segments << [' ', nil]
+          segments << [title, title_color_for(entry)]
+          segments
+        end
+
+        def compose_line(segments, selected)
+          reset = Terminal::ANSI::RESET
+          if selected
+            line = "#{Terminal::ANSI::BG_GREY}#{Terminal::ANSI::WHITE}"
+            segments.each { |text, _color| line << text }
+            line << reset
+            line
+          else
+            segments.map do |text, color|
+              if color
+                "#{color}#{text}#{reset}"
+              else
+                text
+              end
+            end.join
+          end
+        end
+
+        def branch_prefix(entries, idx)
+          entry = entries[idx]
+          level = entry.level
+          return '' if level <= 0
+
+          segments = []
+          (1..level).each do |depth|
+            if depth == level
+              segments << (last_child?(entries, idx) ? '└─' : '├─')
+            else
+              segments << (ancestor_continues?(entries, idx, depth) ? '│ ' : '  ')
+            end
+          end
+          segments.join
+        end
+
+        def last_child?(entries, idx)
+          current_level = entries[idx].level
+          ((idx + 1)...entries.length).each do |i|
+            level = entries[i].level
+            return false if level == current_level
+            return true if level < current_level
+          end
+          true
+        end
+
+        def ancestor_continues?(entries, idx, depth)
+          ((idx + 1)...entries.length).each do |i|
+            level = entries[i].level
+            return true if level == depth
+            return false if level < depth
+          end
+          false
+        end
+
+        def entry_icon(entries, idx, entry)
+          if entry.level.zero?
+            ''
+          elsif has_children?(entries, idx)
+            ''
+          else
+            ''
+          end
+        end
+
+        def has_children?(entries, idx)
+          next_entry = entries[idx + 1]
+          return false unless next_entry
+
+          next_entry.level > entries[idx].level
+        end
+
+        def icon_color_for(entry)
+          if entry.level.zero?
+            COLOR_TEXT_ACCENT
+          elsif entry.level == 1
+            COLOR_TEXT_SECONDARY
+          else
+            COLOR_TEXT_DIM
+          end
+        end
+
+        def title_color_for(entry)
+          if entry.level.zero?
+            "#{Terminal::ANSI::BOLD}#{COLOR_TEXT_PRIMARY}"
+          elsif entry.level == 1
+            COLOR_TEXT_PRIMARY
+          else
+            COLOR_TEXT_SECONDARY
+          end
+        end
+
+        def render_footer(surface, bounds, metrics)
+          reset = Terminal::ANSI::RESET
+          footer_y = metrics.y + metrics.height - 2
+          bx = metrics.x
+          bw = metrics.width
+
+          divider = "#{COLOR_TEXT_DIM}#{'─' * [bw - 2, 0].max}#{reset}"
+          surface.write(bounds, footer_y, bx + 1, divider)
+
+          hints = [
+            ['󰆐', 'navigate'],
+            ['󰜊', 'jump'],
+            ['/', 'filter'],
+          ]
+
+          hint_text = hints.map do |icon, label|
+            "#{COLOR_TEXT_DIM}#{icon}#{reset} #{COLOR_TEXT_PRIMARY}#{label}#{reset}"
+          end.join('  ')
+
+          surface.write(bounds, footer_y + 1, bx + 1, hint_text)
         end
       end
     end
