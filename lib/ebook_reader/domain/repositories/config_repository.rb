@@ -29,7 +29,7 @@ module EbookReader
         # Default configuration values
         DEFAULT_CONFIG = {
           view_mode: :split,
-          page_numbering_mode: :absolute,
+          page_numbering_mode: :dynamic,
           show_page_numbers: true,
           line_spacing: :compact,
           input_debounce_ms: 100,

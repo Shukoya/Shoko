@@ -42,17 +42,18 @@ module EbookReader
           handle_reader_error(path, e)
         end
 
-        def run_reader(path)
-          prior_mode = selectors.mode(state)
+      def run_reader(path)
+        prior_mode = selectors.mode(state)
 
-          return unless ensure_reader_document_for(path)
+        return unless ensure_reader_document_for(path)
 
-          recent_repository&.add(path)
-          state.dispatch(action(:update_reader_meta, book_path: path, running: true))
-          state.dispatch(action(:update_reader_mode, :read))
+        recent_path = canonical_recent_path(path)
+        recent_repository&.add(recent_path) if recent_path
+        state.dispatch(action(:update_reader_meta, book_path: path, running: true))
+        state.dispatch(action(:update_reader_mode, :read))
 
-          MouseableReader.new(path, nil, dependencies).run
-        ensure
+        MouseableReader.new(path, nil, dependencies).run
+      ensure
           menu.switch_to_mode(prior_mode || :browse)
         end
 
@@ -101,16 +102,17 @@ module EbookReader
           File.expand_path(path)
         end
 
-        def handle_file_path(path)
-          return invalid_file_path unless File.exist?(path)
+      def handle_file_path(path)
+        return invalid_file_path unless File.exist?(path)
 
-          if path.downcase.end_with?('.epub') || EbookReader::Infrastructure::EpubCache.cache_file?(path)
-            recent_repository&.add(path)
-            run_reader(path)
-          else
-            invalid_file_path
-          end
+        if path.downcase.end_with?('.epub') || EbookReader::Infrastructure::EpubCache.cache_file?(path)
+          recent_path = canonical_recent_path(path)
+          recent_repository&.add(recent_path) if recent_path
+          run_reader(path)
+        else
+          invalid_file_path
         end
+      end
 
         def invalid_file_path
           catalog.scan_message = 'Invalid file path'
@@ -178,13 +180,24 @@ module EbookReader
           @progress_presenter ||= EbookReader::MainMenu::MenuProgressPresenter.new(state)
         end
 
-        def recent_repository
-          @recent_repository ||= begin
-            dependencies.resolve(:recent_library_repository)
-          rescue StandardError
-            nil
-          end
+      def recent_repository
+        @recent_repository ||= begin
+          dependencies.resolve(:recent_library_repository)
+        rescue StandardError
+          nil
         end
+      end
+
+      def canonical_recent_path(path)
+        return path unless path && EbookReader::Infrastructure::EpubCache.cache_file?(path)
+
+        cache = EbookReader::Infrastructure::EpubCache.new(path)
+        payload = cache.read_cache(strict: false)
+        source = payload&.source_path
+        source && !source.empty? ? source : path
+      rescue EbookReader::Error, StandardError
+        path
+      end
 
         def prepare_reader_launch(path, presenter)
           width, height = terminal_service.size

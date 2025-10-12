@@ -157,7 +157,7 @@ module EbookReader
       end
 
       def dynamic_mode?
-        (state.get(%i[config page_numbering_mode]) || :absolute) == :dynamic
+        (state.get(%i[config page_numbering_mode]) || :dynamic) == :dynamic
       end
 
       def show_page_numbers?

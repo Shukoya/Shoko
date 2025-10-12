@@ -27,7 +27,7 @@ module EbookReader
           content_lines: [],
           page_info: {},
           show_page_numbers: true,
-          page_numbering_mode: :absolute,
+          page_numbering_mode: :dynamic,
           line_spacing: :compact,
           language: 'en'
         )

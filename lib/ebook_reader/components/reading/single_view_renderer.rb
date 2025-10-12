@@ -7,7 +7,7 @@ module EbookReader
     module Reading
       # Renderer for single-view reading mode (supports both dynamic and absolute page numbering)
       class SingleViewRenderer < BaseViewRenderer
-        def initialize(dependencies, page_numbering_mode: :absolute)
+        def initialize(dependencies, page_numbering_mode: :dynamic)
           super(dependencies)
           @page_numbering_mode = page_numbering_mode
         end

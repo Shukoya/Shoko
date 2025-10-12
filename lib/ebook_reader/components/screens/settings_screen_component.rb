@@ -188,7 +188,7 @@ module EbookReader
         end
 
         def current_page_numbering_mode
-          @state.get(%i[config page_numbering_mode]) || :absolute
+          @state.get(%i[config page_numbering_mode]) || :dynamic
         end
 
         def toggle_page_number_value

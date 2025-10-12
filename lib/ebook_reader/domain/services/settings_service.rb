@@ -53,7 +53,7 @@ module EbookReader
 
         # Toggle dynamic/absolute page numbering mode.
         def toggle_page_numbering_mode
-          current = Selectors::ConfigSelectors.page_numbering_mode(@state_store) || :absolute
+          current = Selectors::ConfigSelectors.page_numbering_mode(@state_store) || :dynamic
           next_mode = current == :absolute ? :dynamic : :absolute
           dispatch_config(page_numbering_mode: next_mode)
           next_mode

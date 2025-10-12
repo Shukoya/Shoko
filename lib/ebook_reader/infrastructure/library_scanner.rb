@@ -16,7 +16,7 @@ module EbookReader
       end
 
       def load_cached
-        @epubs = EPUBFinder.scan_system(false) || []
+        @epubs = EPUBFinder.scan_system(force_refresh: false) || []
         @filtered_epubs = @epubs
         @scan_status = @epubs.empty? ? :idle : :done
         @scan_message = "Loaded #{@epubs.length} books from cache" if @scan_status == :done

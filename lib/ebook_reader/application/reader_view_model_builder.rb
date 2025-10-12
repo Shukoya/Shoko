@@ -34,7 +34,7 @@ module EbookReader
           bookmarks: state_value(%i[reader bookmarks], []),
           toc_entries: doc_toc_entries,
           show_page_numbers: state_value(%i[config show_page_numbers], true),
-          page_numbering_mode: state_value(%i[config page_numbering_mode], :absolute),
+          page_numbering_mode: state_value(%i[config page_numbering_mode], :dynamic),
           line_spacing: state_value(%i[config line_spacing], EbookReader::Constants::DEFAULT_LINE_SPACING),
           language: @doc&.language || 'en',
         }

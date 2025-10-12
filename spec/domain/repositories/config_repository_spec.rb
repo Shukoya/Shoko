@@ -27,9 +27,9 @@ RSpec.describe EbookReader::Domain::Repositories::ConfigRepository do
     expect(repo.update_view_mode(:single)).to be true
     expect(repo.get_view_mode).to eq(:single)
 
-    expect(repo.get_page_numbering_mode).to eq(:absolute)
-    expect(repo.update_page_numbering_mode(:dynamic)).to be true
     expect(repo.get_page_numbering_mode).to eq(:dynamic)
+    expect(repo.update_page_numbering_mode(:absolute)).to be true
+    expect(repo.get_page_numbering_mode).to eq(:absolute)
 
     expect(repo.get_show_page_numbers).to be true
     expect(repo.update_show_page_numbers(false)).to be true

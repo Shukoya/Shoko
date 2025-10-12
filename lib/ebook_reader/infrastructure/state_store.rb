@@ -216,7 +216,7 @@ module EbookReader
           config: {
             view_mode: :split,
             line_spacing: :compact,
-            page_numbering_mode: :absolute,
+            page_numbering_mode: :dynamic,
             theme: :dark,
             show_page_numbers: true,
             highlight_quotes: false,
