@@ -29,9 +29,9 @@ RSpec.describe 'Render geometry integration' do
 
   before do
     doc = GeometryFixtureDoc.new([
-      "漢字	mix",
-      'plain text line',
-    ])
+                                   "漢字\tmix",
+                                   'plain text line',
+                                 ])
     container.register(:document, doc)
     state.update({ %i[config view_mode] => :single,
                    %i[config page_numbering_mode] => :absolute,

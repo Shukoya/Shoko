@@ -4,33 +4,24 @@ Status audited: 2025-09-14 (updated)
 
 Scope and counts
 - Scope: `lib/` only (matches how we enforce style in code, excludes `bin/` and `spec/`).
-- Offenses: 755 total across 121 files (`bundle exec rubocop lib --format offenses`; cache directory creation warnings were benign).
+- Offenses: 557 total across 112 files (`bundle exec rubocop lib --format offenses`, sampled during this review; cache directory creation warnings were benign).
 - Top offense categories (count):
-  - Metrics/MethodLength (107)
-  - Metrics/AbcSize (82)
-  - Metrics/CyclomaticComplexity (55)
-  - Metrics/PerceivedComplexity (50)
-  - Naming/MethodParameterName (47)
-  - Metrics/ParameterLists (40)
+  - Metrics/MethodLength (115)
+  - Metrics/AbcSize (99)
+  - Metrics/CyclomaticComplexity (59)
+  - Metrics/PerceivedComplexity (53)
+  - Metrics/ParameterLists (46)
+  - Naming/MethodParameterName (41)
   - Style/Documentation (40)
-  - Layout/EmptyLineAfterGuardClause (28) [Safe Correctable]
-  - Layout/IndentationConsistency (26) [Safe Correctable]
-  - Layout/LineLength (22) [Safe Correctable]
+  - Layout/LineLength (17) [Safe Correctable]
+  - Metrics/ClassLength (13)
   - Naming/AccessorMethodName (12)
-  - Lint/RedundantSafeNavigation (11) [Unsafe Correctable]
-  - Layout/IndentationWidth (10) [Safe Correctable]
   - Lint/SuppressedException (10)
-  - Metrics/ClassLength (10)
+  - Naming/PredicateMethod (9)
   - Naming/PredicatePrefix (9)
-  - Layout/FirstHashElementIndentation (8) [Safe Correctable]
-  - Naming/BlockForwarding (8) [Safe Correctable]
-  - Naming/PredicateMethod (8)
-  - Style/ArgumentsForwarding (8) [Safe Correctable]
-  - Style/IfUnlessModifier (8) [Safe Correctable]
-  - Style/TrailingCommaInArguments (8) [Safe Correctable]
-  - Layout/HashAlignment (7) [Safe Correctable]
-  - Layout/TrailingEmptyLines (7) [Safe Correctable]
+  - Style/ComparableClamp (9) [Safe Correctable]
   - Lint/UselessConstantScoping (7)
+  - Remaining cop counts are single digits; see latest `rubocop` output for the full tail.
 
 Hotspots (highest impact)
 - `lib/ebook_reader/reader_controller.rb` (class length + several long methods)
@@ -88,7 +79,7 @@ Milestones and acceptance criteria
 - M7: State/Repo trims + docs. Offense delta: −20 to −30.
 
 Tracking (current)
-- Current snapshot (2025-09-14): 755 offenses in lib (121 files). Metrics cops dominate; clearing safe-correctable layout items would still remove roughly 120 violations.
+- Current snapshot (review run): 557 offenses in lib (112 files). Metrics cops still dominate; clearing safe-correctable layout items would remove roughly 120 violations.
 - Target (phase end): ≤ 100 offenses in lib (mainly long, inherently complex algorithms where extraction would add risk without benefit).
 
 Notes

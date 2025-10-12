@@ -59,6 +59,15 @@ module EbookReader
       rescue StandardError => e
         cleanup_and_exit(1, "Error: #{e.message}", e)
       ensure
+        begin
+          if @terminal_service.respond_to?(:force_cleanup)
+            @terminal_service.force_cleanup
+          elsif @terminal_service.respond_to?(:cleanup)
+            @terminal_service.cleanup
+          end
+        rescue StandardError
+          # best effort; leave terminal as-is if cleanup fails here
+        end
         @catalog.cleanup if @catalog.respond_to?(:cleanup)
       end
 

@@ -162,7 +162,8 @@ module EbookReader
 
         def traverse_list(element, blocks, context, ordered:)
           list_context = ListContext.new(ordered: ordered, index: ordered ? 1 : nil)
-          new_context = Context.new(list_stack: context.list_stack + [list_context], in_blockquote: context.in_blockquote)
+          new_context = Context.new(list_stack: context.list_stack + [list_context],
+                                    in_blockquote: context.in_blockquote)
           element.each_element do |child|
             handle_element(child, blocks, new_context)
           end
@@ -174,7 +175,7 @@ module EbookReader
           marker = list_context&.ordered ? "#{list_context.index}." : '•'
           list_context.index += 1 if list_context&.ordered
 
-          text = segments.map(&:text).join(' ').strip
+          segments.map(&:text).join(' ').strip
           level = context.list_stack.length
           metadata = { marker: marker, level: level }
           metadata[:quoted] = true if context.in_blockquote
@@ -266,7 +267,8 @@ module EbookReader
           )
         end
 
-        def collect_segments(element, inherited_styles = {}, context = Context.new(list_stack: [], in_blockquote: false))
+        def collect_segments(element, inherited_styles = {},
+                             context = Context.new(list_stack: [], in_blockquote: false))
           segments = []
           element.children.each do |child|
             case child

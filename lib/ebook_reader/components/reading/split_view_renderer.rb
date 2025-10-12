@@ -25,7 +25,7 @@ module EbookReader
         # Divider provided by BaseViewRenderer#draw_divider
 
         def render_column_lines(surface, bounds, lines, start_col, col_width, context = nil,
-                                 column_id: 0, line_offset: 0, page_id: nil)
+                                column_id: 0, line_offset: 0, page_id: nil)
           params = Models::RenderParams.new(start_row: 3, col_start: start_col,
                                             col_width: col_width, context: context,
                                             column_id: column_id, line_offset: line_offset,
@@ -99,28 +99,28 @@ module EbookReader
         def render_dynamic_from_page_data(surface, bounds, context, col_width, left_start,
                                           right_start, divider_param, left_pd, right_pd)
           render_column_lines(surface, bounds, left_pd[:lines], left_start, col_width, context,
-                               column_id: 0, line_offset: left_pd[:start_line].to_i,
-                               page_id: context.current_page_index)
+                              column_id: 0, line_offset: left_pd[:start_line].to_i,
+                              page_id: context.current_page_index)
           draw_divider(surface, bounds, divider_param)
           return unless right_pd
 
           render_column_lines(surface, bounds, right_pd[:lines], right_start, col_width, context,
-                               column_id: 1, line_offset: right_pd[:start_line].to_i,
-                               page_id: context.current_page_index ? context.current_page_index + 1 : nil)
+                              column_id: 1, line_offset: right_pd[:start_line].to_i,
+                              page_id: context.current_page_index ? context.current_page_index + 1 : nil)
         end
 
         def render_dynamic_fallback(surface, bounds, context, col_width, left_start,
                                     right_start, divider_param, base_offset, displayable)
           left_lines = fetch_wrapped_lines(context, col_width, base_offset, displayable)
           render_column_lines(surface, bounds, left_lines, left_start, col_width, context,
-                               column_id: 0, line_offset: base_offset,
-                               page_id: context.current_page_index)
+                              column_id: 0, line_offset: base_offset,
+                              page_id: context.current_page_index)
           draw_divider(surface, bounds, divider_param)
           right_lines = fetch_wrapped_lines(context, col_width, base_offset + displayable,
                                             displayable)
           render_column_lines(surface, bounds, right_lines, right_start, col_width, context,
-                               column_id: 1, line_offset: base_offset + displayable,
-                               page_id: context.current_page_index ? context.current_page_index + 1 : nil)
+                              column_id: 1, line_offset: base_offset + displayable,
+                              page_id: context.current_page_index ? context.current_page_index + 1 : nil)
         end
 
         ColumnContext = Struct.new(:col_width, :display_height, :left_offset, :right_offset,
@@ -131,13 +131,13 @@ module EbookReader
           dh = col.display_height
           left_lines = fetch_wrapped_lines(context, cw, col.left_offset, dh)
           render_column_lines(surface, bounds, left_lines, col.left_start, cw, context,
-                               column_id: 0, line_offset: col.left_offset,
-                               page_id: context.current_page_index)
+                              column_id: 0, line_offset: col.left_offset,
+                              page_id: context.current_page_index)
           draw_divider(surface, bounds, col.divider_param)
           right_lines = fetch_wrapped_lines(context, cw, col.right_offset, dh)
           render_column_lines(surface, bounds, right_lines, col.right_start, cw, context,
-                               column_id: 1, line_offset: col.right_offset,
-                               page_id: context.current_page_index)
+                              column_id: 1, line_offset: col.right_offset,
+                              page_id: context.current_page_index)
         end
 
         def fetch_wrapped_lines(context, col_width, offset, length)

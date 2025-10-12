@@ -11,8 +11,8 @@ RSpec.describe EbookReader::Infrastructure::PaginationCache do
   let(:key) { described_class.layout_key(80, 24, :single, :normal) }
 
   before do
-    @old_home = ENV['HOME']
-    @old_cache = ENV['XDG_CACHE_HOME']
+    @old_home = Dir.home
+    @old_cache = ENV.fetch('XDG_CACHE_HOME', nil)
     ENV['HOME'] = tmp_dir
     ENV['XDG_CACHE_HOME'] = File.join(tmp_dir, '.cache')
     allow(EbookReader::Infrastructure::CachePaths).to receive(:reader_root).and_return(cache_root)

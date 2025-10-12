@@ -66,52 +66,50 @@ module EbookReader
 
           # Lazily populate lines when loaded from cache (compact format)
           Infrastructure::PerfTracer.measure('page_map.hydrate') do
-            begin
-              cs = @state_store.current_state
-              width  = cs.dig(:ui, :terminal_width) || 80
-              height = cs.dig(:ui, :terminal_height) || 24
-              config = @state_store
-              col_width, _content_height = @metrics_calculator.layout(width, height, config)
-              start_i = page[:start_line].to_i
-              end_i = page[:end_line].to_i
-              len = (end_i - start_i + 1)
-              wrapper = begin
-                @dependencies&.resolve(:wrapping_service)
+            cs = @state_store.current_state
+            width  = cs.dig(:ui, :terminal_width) || 80
+            height = cs.dig(:ui, :terminal_height) || 24
+            config = @state_store
+            col_width, _content_height = @metrics_calculator.layout(width, height, config)
+            start_i = page[:start_line].to_i
+            end_i = page[:end_line].to_i
+            len = (end_i - start_i + 1)
+            wrapper = begin
+              @dependencies&.resolve(:wrapping_service)
+            rescue StandardError
+              nil
+            end
+            doc = @doc_ref
+            if doc.nil?
+              begin
+                doc = @dependencies&.resolve(:document)
               rescue StandardError
-                nil
+                doc = nil
               end
-              doc = @doc_ref
-              if doc.nil?
-                begin
-                  doc = @dependencies&.resolve(:document)
-                rescue StandardError
-                  doc = nil
-                end
-              end
-              ch_i = page[:chapter_index].to_i
-              chapter = doc&.get_chapter(ch_i)
-              raw_lines = chapter&.lines || []
-              lines = if wrapper
-                        res = wrapper.wrap_window(raw_lines, ch_i, col_width, start_i, len)
-                        # Fallback to raw slicing if wrapper unexpectedly returns empty
-                        if res.nil? || res.empty?
-                          candidate = raw_lines[start_i, len] || []
-                          if candidate.empty? && defined?(RSpec)
-                            # Synthesize deterministic lines for tests when using fake docs
-                            (start_i..end_i).map { |i| "L#{i}" }
-                          else
-                            candidate
-                          end
+            end
+            ch_i = page[:chapter_index].to_i
+            chapter = doc&.get_chapter(ch_i)
+            raw_lines = chapter&.lines || []
+            lines = if wrapper
+                      res = wrapper.wrap_window(raw_lines, ch_i, col_width, start_i, len)
+                      # Fallback to raw slicing if wrapper unexpectedly returns empty
+                      if res.nil? || res.empty?
+                        candidate = raw_lines[start_i, len] || []
+                        if candidate.empty? && defined?(RSpec)
+                          # Synthesize deterministic lines for tests when using fake docs
+                          (start_i..end_i).map { |i| "L#{i}" }
                         else
-                          res
+                          candidate
                         end
                       else
-                        DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[start_i, len] || []
+                        res
                       end
-              page.merge(lines: lines)
-            rescue StandardError
-              page
-            end
+                    else
+                      DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[start_i, len] || []
+                    end
+            page.merge(lines: lines)
+          rescue StandardError
+            page
           end
         end
 

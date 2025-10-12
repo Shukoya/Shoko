@@ -2,7 +2,7 @@
 
 ## Overview
 
-Reader follows a Clean Architecture with strict layer boundaries, dependency injection, and component-driven rendering. Presentation never talks directly to persistence; all state mutations flow through domain services and actions.
+Reader follows a Clean Architecture with layer boundaries, dependency injection, and component-driven rendering. Presentation avoids direct persistence access, while controllers and domain services dispatch explicit `Domain::Actions` into the shared `ObserverStateStore`.
 
 ## Layers
 
@@ -40,7 +40,7 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 ## Key Components
 
 - Presentation
-  - UI Components: Header, Content, Footer, Sidebar, Overlay (tooltip, popup, annotations overlay), Screens (Browse, Library, Settings, Annotations, Annotation Editor). Annotation overlays reuse the same viewport math as full-screen editors—snippet preview + note viewport anchored top-left—so cursoring and rendering stay consistent across contexts.
+  - UI Components: Header, Content, Footer, Sidebar, Overlay (tooltip, popup, annotations overlay), Screens (Browse, Library, Settings, Annotations, Annotation Editor). Annotation overlays render as centered popups; they reuse the editor’s selection anchors, but positioning is handled by the coordinate service rather than inheriting the editor viewport math.
   - Rendering Surface: `Components::Surface` abstracts writing to Terminal.
 - Application
 - Controllers: `ReaderController` orchestrates rendering and loop; `UIController` manages modes, sidebar, and overlays; `StateController` handles persistence; `InputController` configures the dispatcher. Navigation flows through the `NavigationService` plus targeted state actions for persisted jumps so rendering stays decoupled from storage. Modal input (annotation popup) is coordinated via `Application::AnnotationEditorOverlaySession`; `ReaderController` owns the session and exposes it for the input dispatcher's modal stack, while `UIController` simply resolves the input controller and silently ignores resolution failures.

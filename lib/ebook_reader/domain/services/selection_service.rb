@@ -61,6 +61,22 @@ module EbookReader
           text_lines.join("\n")
         end
 
+        # Normalize a selection range using the coordinate service and rendered_lines
+        #
+        # @param state [Infrastructure::ObserverStateStore]
+        # @param selection_range [Hash]
+        # @return [Hash, nil] normalized range or nil when normalization fails
+        def normalize_range(state, selection_range)
+          return nil unless selection_range
+          return selection_range if anchor_range?(selection_range)
+
+          coordinate_service = resolve(:coordinate_service)
+          rendered = state.get(%i[reader rendered_lines]) || {}
+          coordinate_service.normalize_selection_range(selection_range, rendered)
+        rescue StandardError
+          nil
+        end
+
         protected
 
         def required_dependencies
@@ -68,6 +84,13 @@ module EbookReader
         end
 
         private
+
+        def anchor_range?(range)
+          return false unless range.is_a?(Hash)
+
+          start_anchor = range[:start] || range['start']
+          start_anchor.is_a?(Hash) && (start_anchor.key?(:geometry_key) || start_anchor.key?('geometry_key'))
+        end
 
         def build_geometry_index(rendered_lines)
           rendered_lines.each_with_object({}) do |(_key, info), acc|

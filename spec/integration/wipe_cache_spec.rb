@@ -13,8 +13,8 @@ RSpec.describe 'Wipe Cache setting' do
 
   before do
     # Simulate HOME and XDG_CACHE_HOME
-    @old_home = ENV['HOME']
-    @old_cache = ENV['XDG_CACHE_HOME']
+    @old_home = Dir.home
+    @old_cache = ENV.fetch('XDG_CACHE_HOME', nil)
     ENV['HOME'] = home
     ENV['XDG_CACHE_HOME'] = xdg_cache
     stub_const('EbookReader::EPUBFinder::CACHE_FILE', epub_cache_file)

@@ -10,32 +10,62 @@ module EbookReader
       end
 
       def build(page_info)
-        ch = @state.get(%i[reader current_chapter])
-        toc_entries = if @doc.respond_to?(:toc_entries)
-                        @doc.toc_entries
-                      else
-                        []
-                      end
+        UI::ViewModels::ReaderViewModel.new(**attributes(page_info))
+      end
 
-        UI::ViewModels::ReaderViewModel.new(
-          current_chapter: ch,
-          total_chapters: @doc&.chapters&.length || 0,
-          current_page: @state.get(%i[reader current_page]),
-          total_pages: @state.get(%i[reader total_pages]),
-          chapter_title: @doc&.get_chapter(ch)&.title || '',
+      private
+
+      def attributes(page_info)
+        base_attributes.merge(page_info: page_info)
+      end
+
+      def base_attributes
+        {
+          current_chapter: current_chapter_index,
+          total_chapters: total_chapter_count,
+          current_page: state_value(%i[reader current_page]),
+          total_pages: state_value(%i[reader total_pages]),
+          chapter_title: chapter_title(current_chapter_index),
           document_title: @doc&.title || '',
-          view_mode: @state.get(%i[config view_mode]) || :split,
-          sidebar_visible: @state.get(%i[reader sidebar_visible]),
-          mode: @state.get(%i[reader mode]),
-          message: @state.get(%i[reader message]),
-          bookmarks: @state.get(%i[reader bookmarks]) || [],
-          toc_entries: toc_entries,
-          show_page_numbers: @state.get(%i[config show_page_numbers]) || true,
-          page_numbering_mode: @state.get(%i[config page_numbering_mode]) || :absolute,
-          line_spacing: @state.get(%i[config line_spacing]) || EbookReader::Constants::DEFAULT_LINE_SPACING,
+          view_mode: state_value(%i[config view_mode], :split),
+          sidebar_visible: state_value(%i[reader sidebar_visible]),
+          mode: state_value(%i[reader mode]),
+          message: state_value(%i[reader message]),
+          bookmarks: state_value(%i[reader bookmarks], []),
+          toc_entries: doc_toc_entries,
+          show_page_numbers: state_value(%i[config show_page_numbers], true),
+          page_numbering_mode: state_value(%i[config page_numbering_mode], :absolute),
+          line_spacing: state_value(%i[config line_spacing], EbookReader::Constants::DEFAULT_LINE_SPACING),
           language: @doc&.language || 'en',
-          page_info: page_info
-        )
+        }
+      end
+
+      def current_chapter_index
+        state_value(%i[reader current_chapter])
+      end
+
+      def total_chapter_count
+        Array(@doc&.chapters).length
+      end
+
+      def chapter_title(index)
+        chapter = @doc&.get_chapter(index)
+        chapter&.title || ''
+      rescue StandardError
+        ''
+      end
+
+      def doc_toc_entries
+        return [] unless @doc.respond_to?(:toc_entries)
+
+        Array(@doc.toc_entries)
+      rescue StandardError
+        []
+      end
+
+      def state_value(path, default = nil)
+        value = @state.get(path)
+        value.nil? ? default : value
       end
     end
   end

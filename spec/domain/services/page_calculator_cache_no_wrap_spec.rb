@@ -33,8 +33,8 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
   let(:cache) { EbookReader::Infrastructure::EpubCache.new(epub_path) }
 
   before do
-    @old_home = ENV['HOME']
-    @old_cache = ENV['XDG_CACHE_HOME']
+    @old_home = Dir.home
+    @old_cache = ENV.fetch('XDG_CACHE_HOME', nil)
     ENV['HOME'] = home
     ENV['XDG_CACHE_HOME'] = cache_root
     FileUtils.mkdir_p(File.dirname(epub_path))

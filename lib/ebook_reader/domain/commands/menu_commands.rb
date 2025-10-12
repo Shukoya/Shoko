@@ -69,10 +69,10 @@ module EbookReader
               ann = screen.current_annotation
               path = screen.current_book_path
               if ann && path
-                state.update({
-                               %i[menu selected_annotation] => ann,
-                               %i[menu selected_annotation_book] => path,
-                             })
+                state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
+                                 selected_annotation: ann,
+                                 selected_annotation_book: path
+                               ))
                 switch_mode(context, :annotation_detail, can_switch)
               end
             end

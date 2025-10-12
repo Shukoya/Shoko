@@ -40,9 +40,7 @@ module EbookReader
           )
         end
 
-        if cache.cache_file?
-          raise EbookReader::CacheLoadError.new(cache.cache_path)
-        end
+        raise EbookReader::CacheLoadError, cache.cache_path if cache.cache_file?
 
         importer = EpubImporter.new(formatting_service:)
         book_data = importer.import(cache.source_path)

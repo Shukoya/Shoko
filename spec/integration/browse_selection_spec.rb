@@ -62,10 +62,18 @@ RSpec.describe 'Browse library respects current selection', :fakefs do
   context 'with progress overlay' do
     it 'opens the newly selected book' do
       ENV.delete('READER_SKIP_PROGRESS_OVERLAY')
-      allow_any_instance_of(EbookReader::Controllers::Menu::PaginationBuilder).to receive(:build)
+      build_calls = 0
+      allow_any_instance_of(EbookReader::Application::PaginationOrchestrator)
+        .to receive(:build_full_map!)
+        .and_wrap_original do |method, *args|
+          build_calls += 1
+          method.call(*args)
+        end
 
       menu = build_menu
       drive_sequence(menu)
+
+      expect(build_calls).to be >= 1
     end
   end
 

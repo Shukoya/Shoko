@@ -82,9 +82,7 @@ module EbookReader
       private_class_method :cache_for
 
       def resolve_cache_path(doc)
-        if doc.respond_to?(:cache_path) && doc.cache_path && !doc.cache_path.to_s.empty?
-          return doc.cache_path
-        end
+        return doc.cache_path if doc.respond_to?(:cache_path) && doc.cache_path && !doc.cache_path.to_s.empty?
 
         if doc.respond_to?(:cache_dir) && doc.cache_dir && !doc.cache_dir.to_s.empty?
           legacy = Dir.children(doc.cache_dir).find { |name| name.end_with?(EpubCache.cache_extension) }

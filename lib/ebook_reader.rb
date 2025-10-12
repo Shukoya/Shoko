@@ -153,6 +153,7 @@ require_relative 'ebook_reader/application/reader_view_model_builder'
 require_relative 'ebook_reader/application/reader_startup_orchestrator'
 require_relative 'ebook_reader/application/frame_coordinator'
 require_relative 'ebook_reader/application/render_pipeline'
+require_relative 'ebook_reader/application/page_info_calculator'
 require_relative 'ebook_reader/application/pagination_orchestrator'
 require_relative 'ebook_reader/application/progress_helper'
 # Removed unused: reader_application, menu_application

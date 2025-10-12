@@ -79,8 +79,8 @@ RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
   let(:pipeline) { described_class.new(cache_root: File.join(tmp_dir, '.cache', 'reader')) }
 
   before do
-    @old_home = ENV['HOME']
-    @old_cache = ENV['XDG_CACHE_HOME']
+    @old_home = Dir.home
+    @old_cache = ENV.fetch('XDG_CACHE_HOME', nil)
     ENV['HOME'] = tmp_dir
     ENV['XDG_CACHE_HOME'] = File.join(tmp_dir, '.cache')
     File.binwrite(epub_path, ZipTestBuilder.build_zip(zip_entries))

@@ -11,8 +11,8 @@ RSpec.describe 'Library reopening cached books respects selection' do
   let(:book_b_epub) { File.join(home, 'book_b.epub') }
 
   before do
-    @old_home = ENV['HOME']
-    @old_cache = ENV['XDG_CACHE_HOME']
+    @old_home = Dir.home
+    @old_cache = ENV.fetch('XDG_CACHE_HOME', nil)
     ENV['HOME'] = home
     ENV['XDG_CACHE_HOME'] = xdg_cache
     allow(EbookReader::Infrastructure::CachePaths).to receive(:reader_root).and_return(reader_cache_root)

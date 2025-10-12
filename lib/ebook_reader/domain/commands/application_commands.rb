@@ -16,21 +16,23 @@ module EbookReader
         protected
 
         def perform(context, _params = {})
+          deps = dependencies_from(context)
+
           case @action
           when :quit_to_menu
-            handle_quit_to_menu(context)
+            handle_quit_to_menu(deps)
           when :quit_application
-            handle_quit_application(context)
+            handle_quit_application(deps)
           when :toggle_view_mode
-            handle_toggle_view_mode(context)
+            handle_toggle_view_mode(deps)
           when :show_help
-            handle_show_help(context)
+            handle_show_help(deps)
           when :show_toc
-            handle_show_toc(context)
+            handle_show_toc(deps)
           when :show_bookmarks
-            handle_show_bookmarks(context)
+            handle_show_bookmarks(deps)
           when :show_annotations
-            handle_show_annotations(context)
+            handle_show_annotations(deps)
           else
             raise ExecutionError.new("Unknown application action: #{@action}", command_name: name)
           end
@@ -40,68 +42,108 @@ module EbookReader
 
         private
 
-        def handle_quit_to_menu(context)
-          # Prefer controller implementation to preserve side effects
-          return context.quit_to_menu if context.respond_to?(:quit_to_menu)
-
-          # Save progress before quitting
-          save_progress(context)
-          state_store_for(context).set(%i[reader running], false)
+        def handle_quit_to_menu(deps)
+          controller = resolve_optional(deps, :state_controller)
+          if controller.respond_to?(:quit_to_menu)
+            controller.quit_to_menu
+          else
+            dispatch_action(deps, Domain::Actions::QuitToMenuAction.new)
+          end
         end
 
-        def handle_quit_application(context)
-          save_progress(context)
+        def handle_quit_application(deps)
+          controller = resolve_optional(deps, :state_controller)
+          if controller.respond_to?(:quit_application)
+            controller.quit_application
+            return
+          end
 
-          # Clean shutdown
-          context.cleanup if context.respond_to?(:cleanup)
-
+          handle_quit_to_menu(deps)
+          force_cleanup(deps)
           exit(0)
         end
 
-        def handle_toggle_view_mode(context)
-          # Prefer controller implementation to preserve renderer reset side effects
-          return context.toggle_view_mode if context.respond_to?(:toggle_view_mode)
-
-          # Fallback: update state via state store
-          state_store = state_store_for(context)
-          current_state = state_store.current_state
-          current_mode = current_state.dig(:reader, :view_mode) || :split
-          new_mode = current_mode == :split ? :single : :split
-          state_store.update({ %i[reader view_mode] => new_mode })
+        def handle_toggle_view_mode(deps)
+          controller = resolve_optional(deps, :ui_controller)
+          if controller.respond_to?(:toggle_view_mode)
+            controller.toggle_view_mode
+          else
+            dispatch_action(deps, Domain::Actions::ToggleViewModeAction.new)
+          end
         end
 
-        def handle_show_help(context)
-          state_store = context.dependencies.resolve(:state_store)
-          state_store.set(%i[reader mode], :help)
+        def handle_show_help(deps)
+          controller = resolve_optional(deps, :ui_controller)
+          if controller.respond_to?(:show_help)
+            controller.show_help
+          else
+            state_store = resolve_state_store(deps)
+            state_store&.set(%i[reader mode], :help)
+          end
         end
 
-        def handle_show_toc(context)
-          return context.open_toc if context.respond_to?(:open_toc)
-
-          state_store_for(context).set(%i[reader mode], :toc)
+        def handle_show_toc(deps)
+          controller = resolve_optional(deps, :ui_controller)
+          if controller.respond_to?(:open_toc)
+            controller.open_toc
+          else
+            state_store = resolve_state_store(deps)
+            state_store&.set(%i[reader mode], :toc)
+          end
         end
 
-        def handle_show_bookmarks(context)
-          return context.open_bookmarks if context.respond_to?(:open_bookmarks)
-
-          state_store_for(context).set(%i[reader mode], :bookmarks)
+        def handle_show_bookmarks(deps)
+          controller = resolve_optional(deps, :ui_controller)
+          if controller.respond_to?(:open_bookmarks)
+            controller.open_bookmarks
+          else
+            state_store = resolve_state_store(deps)
+            state_store&.set(%i[reader mode], :bookmarks)
+          end
         end
 
-        def handle_show_annotations(context)
-          return context.open_annotations if context.respond_to?(:open_annotations)
-
-          state_store_for(context).set(%i[reader mode], :annotations)
+        def handle_show_annotations(deps)
+          controller = resolve_optional(deps, :ui_controller)
+          if controller.respond_to?(:open_annotations)
+            controller.open_annotations
+          else
+            state_store = resolve_state_store(deps)
+            state_store&.set(%i[reader mode], :annotations)
+          end
         end
 
-        def save_progress(context)
-          # This would integrate with a progress persistence service
-          deps = context.dependencies
-          return unless deps.registered?(:progress_service)
+        def dependencies_from(context)
+          return context.dependencies if context.respond_to?(:dependencies)
 
-          progress_service = deps.resolve(:progress_service)
-          return unless progress_service.respond_to?(:save_current_progress)
+          raise ExecutionError.new('Command context must expose dependencies', command_name: name)
+        end
 
-          progress_service.save_current_progress
+        def resolve_optional(deps, key)
+          return nil if deps.respond_to?(:registered?) && !deps.registered?(key)
+
+          deps.resolve(key)
+        rescue StandardError
+          nil
+        end
+
+        def resolve_state_store(deps)
+          resolve_optional(deps, :state_store) || resolve_optional(deps, :global_state)
+        end
+
+        def dispatch_action(deps, action)
+          state_store = resolve_state_store(deps)
+          state_store&.dispatch(action)
+        end
+
+        def force_cleanup(deps)
+          terminal = resolve_optional(deps, :terminal_service)
+          return unless terminal
+
+          if terminal.respond_to?(:force_cleanup)
+            terminal.force_cleanup
+          elsif terminal.respond_to?(:cleanup)
+            terminal.cleanup
+          end
         end
       end
 

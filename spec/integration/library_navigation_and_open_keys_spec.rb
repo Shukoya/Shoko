@@ -11,8 +11,8 @@ RSpec.describe 'Library navigation and open via keys' do
   let(:book2_epub) { File.join(home, 'books', 'book2.epub') }
 
   before do
-    @old_home = ENV['HOME']
-    @old_cache = ENV['XDG_CACHE_HOME']
+    @old_home = Dir.home
+    @old_cache = ENV.fetch('XDG_CACHE_HOME', nil)
     ENV['HOME'] = home
     ENV['XDG_CACHE_HOME'] = xdg_cache
     allow(EbookReader::Infrastructure::CachePaths).to receive(:reader_root).and_return(reader_cache_root)

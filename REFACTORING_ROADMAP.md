@@ -3,7 +3,7 @@
 **Current Status: Phase 4.6 - Documentation + Input Alignment**  
 **Overall Progress: ~88% Complete (audited 2025-09-11, updated)**  
 **Estimated Completion: Phase 4.6**  
-**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation alignment is still pending—`DEVELOPMENT.md` carries stale guidance that needs updating. Terminal exit regression remains reproducible when returning from the reader via `q`; reopen the cleanup work so the shell state is restored consistently. Progress is shown inline during menu-driven open, and direct CLI open renders the same loading overlay via `Application::PaginationOrchestrator.initial_build`. Canonical book identity (`EPUBDocument#canonical_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and the first frame lands on the saved page in dynamic mode once pagination completes. Annotation popup input is still managed via `ReaderController#activate_annotation_editor_overlay_session`; add DI validation as part of upcoming cleanup.
+**Status Note:** Overlay and reader input are unified; annotations flow in the reader is unified via a component. Menu annotation editor input is already routed through Domain commands. Documentation alignment is still pending—`DEVELOPMENT.md` carries stale guidance that needs updating. Terminal cleanup regression is resolved: `Application::UnifiedApplication#reader_mode` and `ReaderController#run` now balance `TerminalService` setup/cleanup so quitting with `q` returns to a clean shell. Progress is shown inline during menu-driven open, and direct CLI open renders the same loading overlay via `Application::PaginationOrchestrator.initial_build`. Canonical book identity (`EPUBDocument#canonical_path`) ensures progress/bookmarks restore whether opening the original file or a cache dir, and the first frame lands on the saved page in dynamic mode once pagination completes. Annotation popup input is still managed via `ReaderController#activate_annotation_editor_overlay_session`; add DI validation as part of upcoming cleanup.
 - 2025-10-09 Library cached reopen regression traced to `lib/ebook_reader/controllers/menu/state_controller.rb:41` retaining the prior `:document` singleton for cached paths.
 - Fix primes cached launches via `ensure_reader_document_for` so each `run_reader` registers the freshly selected book before `MouseableReader` boots.
 - Regression guard: `spec/integration/library_reopens_selected_book_spec.rb` asserts Library A ➝ quit ➝ B opens the new selection.
@@ -63,7 +63,7 @@
 - [x] Extract UIController (mode switching, overlays)  
 - [x] Extract InputController (key handling consolidation)
 - [x] Extract StateController (state updates and persistence)
-- [x] Keep ReaderController primarily as a coordinator (currently ~762 LOC in the class body as of this audit); further slimming is required by moving startup/pagination orchestration fully into Application/Domain services.
+- [ ] ReaderController still mixes coordination with pagination/state logic (~848 LOC in the class body as of this audit); move startup/pagination orchestration fully into Application/Domain services before marking this complete.
 
 ### 3.2 Input System Unification ✅ COMPLETE
 **Issue Resolved**: All core navigation uses Domain Commands, specialized modes retain existing patterns
@@ -193,9 +193,9 @@ Tracking for code duplication has moved to `RUBOCOP_OFFENSES_REFACTOR_ROADMAP.md
 **Location**: `services/` vs `domain/services/` directories
 **Solution**: Legacy service wrappers deleted, all references use domain services
 
-### 3. ReaderController Complexity ✅ RESOLVED
-**Location**: `reader_controller.rb` (1314→664 lines, ~53% reduction from peak; additional slimming tracked below)
-**Solution**: God class decomposed into UIController, StateController, InputController; navigation now goes through `Domain::NavigationService`
+### 3. ReaderController Complexity 🔶 OPEN
+**Location**: `reader_controller.rb` (~804 LOC; still orchestrates pagination refresh, cache invalidation, selection normalization, and state fallbacks)
+**Next Step**: Finish moving pagination/cache helpers into `Application::PaginationOrchestrator` / `Domain::Services::PageCalculatorService`, push selection + message helpers into `Domain::Services::SelectionService` / `NotificationService`, and leave the controller as a thin coordinator while keeping navigation on `Domain::NavigationService`.
 
 ## Phase 5: Component System Standardization ✅ COMPLETE
 

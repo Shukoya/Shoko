@@ -38,9 +38,7 @@ module EbookReader
           end_anchor = normalize_anchor(selection_range[:end], rendered_lines)
           return nil unless start_anchor && end_anchor
 
-          if (start_anchor <=> end_anchor)&.positive?
-            start_anchor, end_anchor = end_anchor, start_anchor
-          end
+          start_anchor, end_anchor = end_anchor, start_anchor if (start_anchor <=> end_anchor)&.positive?
 
           {
             start: start_anchor.to_h,
@@ -201,14 +199,13 @@ module EbookReader
 
             if col < line_start
               return geometry if geometry.visible_width.zero?
+
               next
             end
 
             return geometry if col <= line_end || geometry.visible_width.zero?
-          end
 
-          # No direct hit; try closest line on same row (for trailing whitespace selections)
-          rendered_lines.each_value do |line_info|
+            # No direct hit; try closest line on same row (for trailing whitespace selections)
             geometry = line_info[:geometry]
             next unless geometry
             return geometry if geometry.row == row

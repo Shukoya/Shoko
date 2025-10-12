@@ -20,6 +20,7 @@ require_relative 'application/annotation_editor_overlay_session'
 require_relative 'input/dispatcher'
 require_relative 'application/frame_coordinator'
 require_relative 'application/render_pipeline'
+require_relative 'application/pending_jump_handler'
 require_relative 'infrastructure/performance_monitor'
 require_relative 'infrastructure/perf_tracer'
 require_relative 'infrastructure/background_worker'
@@ -174,7 +175,9 @@ module EbookReader
 
       # Update page maps on resize
       if size_changed?(width, height)
-        refresh_page_map(width, height) unless @defer_page_map
+        unless @defer_page_map
+          @pagination_orchestrator.refresh_after_resize(@doc, @state, @page_calculator, [width, height])
+        end
         # Clear wrapped-lines cache for prior width via WrappingService (if available)
         begin
           prior_width = @state.get(%i[reader last_width])
@@ -258,99 +261,6 @@ module EbookReader
     end
 
     # Page calculation and navigation support
-    def calculate_current_pages
-      return { current: 0, total: 0 } unless @state.get(%i[config show_page_numbers])
-
-      numbering_mode = @state.get(%i[config page_numbering_mode])
-      if numbering_mode == :dynamic
-        return { current: 0, total: 0 } unless @page_calculator
-
-        current = (@state.get(%i[reader current_page_index]) || 0) + 1
-        total = @page_calculator.total_pages.to_i
-        # If dynamic map not ready yet, return current with unknown total
-        total = 0 if total <= 0
-        { current: current, total: total }
-      else
-        height, width = @terminal_service.size
-        view_mode = @state.get(%i[config view_mode])
-        _, content_height = @layout_service.calculate_metrics(width, height, view_mode)
-        actual_height = adjust_for_line_spacing(content_height)
-
-        return { current: 0, total: 0 } if actual_height <= 0
-
-        # Avoid heavy page-map build on first frame when deferred
-        page_map = Array(@state.get(%i[reader page_map]) || [])
-        if !@defer_page_map && (size_changed?(width, height) || page_map.empty?)
-          update_page_map(width, height)
-          page_map = Array(@state.get(%i[reader page_map]) || [])
-        end
-
-        current_chapter = @state.get(%i[reader current_chapter]) || 0
-        pages_before = page_map[0...current_chapter].sum
-        line_offset = if view_mode == :split
-                        @state.get(%i[reader left_page])
-                      else
-                        @state.get(%i[reader single_page])
-                      end
-        page_in_chapter = (line_offset.to_f / actual_height).floor + 1
-        current_global_page = pages_before + page_in_chapter
-        total_pages = @state.get(%i[reader total_pages]).to_i
-        # When deferred, total may be 0; footer will show current without total
-        { current: current_global_page, total: total_pages }
-      end
-    end
-
-    def calculate_split_pages
-      unless @state.get(%i[config show_page_numbers])
-        return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } }
-      end
-
-      numbering_mode = @state.get(%i[config page_numbering_mode])
-      if numbering_mode == :dynamic
-        return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } } unless @page_calculator
-
-        left_page = @state.get(%i[reader current_page_index]) + 1
-        total_pages = @page_calculator.total_pages
-        right_page = [left_page + 1, total_pages].min
-
-        { left: { current: left_page, total: total_pages }, right: { current: right_page, total: total_pages } }
-      else
-        height, width = @terminal_service.size
-        _, content_height = @layout_service.calculate_metrics(width, height, :split)
-        actual_height = adjust_for_line_spacing(content_height)
-
-        return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } } if actual_height <= 0
-
-        pm = Array(@state.get(%i[reader page_map]) || [])
-        if size_changed?(width, height) || pm.empty?
-          update_page_map(width, height)
-          pm = Array(@state.get(%i[reader page_map]) || [])
-        end
-        total_pages = @state.get(%i[reader total_pages])
-        return { left: { current: 0, total: 0 }, right: { current: 0, total: 0 } } unless total_pages.positive?
-
-        current_chapter = @state.get(%i[reader current_chapter]) || 0
-        pages_before = pm[0...current_chapter].sum
-
-        # Calculate left page
-        left_line_offset = @state.get(%i[reader left_page]) || 0
-        left_page_in_chapter = (left_line_offset.to_f / actual_height).floor + 1
-        left_current = pages_before + left_page_in_chapter
-
-        # Calculate right page
-        right_line_offset = @state.get(%i[reader right_page]) || actual_height
-        right_page_in_chapter = (right_line_offset.to_f / actual_height).floor + 1
-        right_current = pages_before + right_page_in_chapter
-
-        total = total_pages
-
-        {
-          left: { current: left_current, total: total },
-          right: { current: [right_current, total].min, total: total },
-        }
-      end
-    end
-
     # Compatibility methods for legacy mode handlers
     def exit_help
       @ui_controller.switch_mode(:read)
@@ -464,6 +374,14 @@ module EbookReader
       end
     end
 
+    def selection_service
+      @selection_service ||= begin
+        @dependencies.resolve(:selection_service)
+      rescue StandardError
+        nil
+      end
+    end
+
     # Expose controlled flag setters for the orchestrator
     attr_writer :defer_page_map
 
@@ -495,44 +413,11 @@ module EbookReader
     end
 
     def apply_pending_jump_if_present
-      pending = @state.get(%i[reader pending_jump])
-      return unless pending
+      jump_handler.apply
+    end
 
-      begin
-        chapter_index = pending[:chapter_index] || pending['chapter_index']
-        selection_range = pending[:selection_range] || pending['selection_range']
-        edit_flag = pending[:edit] || pending['edit']
-        ann = pending[:annotation] || pending['annotation']
-        if chapter_index
-          begin
-            @dependencies.resolve(:navigation_service).jump_to_chapter(chapter_index)
-          rescue StandardError
-            # best-effort
-          end
-        end
-        if selection_range
-          normalized = normalize_selection_for_state(selection_range)
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(normalized)) if normalized
-        end
-        if edit_flag && ann
-          ann_text = ann[:text] || ann['text']
-          ann_range = ann[:range] || ann['range']
-          ann_chapter = ann[:chapter_index] || ann['chapter_index']
-          normalized = {
-            id: ann[:id] || ann['id'],
-            text: ann_text,
-            note: ann[:note] || ann['note'],
-            chapter_index: ann_chapter,
-            range: ann_range,
-          }
-          @ui_controller.open_annotation_editor_overlay(text: ann_text,
-                                                        range: ann_range,
-                                                        chapter_index: chapter_index,
-                                                        annotation: normalized)
-        end
-      ensure
-        @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_jump: nil))
-      end
+    def jump_handler
+      @jump_handler ||= Application::PendingJumpHandler.new(@state, @dependencies, @ui_controller)
     end
 
     def build_component_layout
@@ -564,69 +449,29 @@ module EbookReader
     end
 
     def calculate_page_info_for_view_model
-      if @state.get(%i[config view_mode]) == :split
-        split_pages = calculate_split_pages
-        {
-          type: :split,
-          left: split_pages[:left],
-          right: split_pages[:right],
-        }
-      else
-        single_pages = calculate_current_pages
-        {
-          type: :single,
-          current: single_pages[:current],
-          total: single_pages[:total],
-        }
-      end
+      calculator = Application::PageInfoCalculator.new(
+        state: @state,
+        doc: @doc,
+        page_calculator: @page_calculator,
+        layout_service: @layout_service,
+        terminal_service: @terminal_service,
+        pagination_orchestrator: @pagination_orchestrator,
+        defer_page_map: @defer_page_map
+      )
+      calculator.calculate
     rescue StandardError
       { type: :single, current: 0, total: 0 }
     end
 
     def normalize_selection_for_state(range)
-      return nil unless range
+      service = selection_service
+      return nil unless service
 
-      return range if anchor_range?(range)
-
-      coord = resolve_coordinate_service
-      return nil unless coord
-
-      rendered = @state.get(%i[reader rendered_lines]) || {}
-      coord.normalize_selection_range(range, rendered)
-    rescue StandardError
-      nil
-    end
-
-    def anchor_range?(range)
-      return false unless range.is_a?(Hash)
-
-      start_anchor = range[:start] || range['start']
-      start_anchor.is_a?(Hash) && (start_anchor.key?(:geometry_key) || start_anchor.key?('geometry_key'))
-    end
-
-    def resolve_coordinate_service
-      @resolved_coordinate_service ||= @dependencies.resolve(:coordinate_service)
-    rescue StandardError
-      nil
+      service.normalize_range(@state, range)
     end
 
     def initialize_page_calculations
       # left for compatibility; now handled in perform_initial_calculations_with_progress
-    end
-
-    def refresh_page_map(width, height)
-      changed = size_changed?(width, height)
-      if @state.get(%i[config page_numbering_mode]) == :dynamic && @page_calculator
-        if changed
-          @page_calculator.build_page_map(width, height, @doc, @state)
-          clamped_index = [@state.get(%i[reader current_page_index]),
-                           @page_calculator.total_pages - 1].min
-          clamped_index = [0, clamped_index].max
-          @state.dispatch(EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: clamped_index))
-        end
-      elsif changed
-        update_page_map(width, height)
-      end
     end
 
     def size_changed?(width, height)
@@ -635,13 +480,7 @@ module EbookReader
 
     def build_page_map_in_background
       height, width = @terminal_service.size
-      if @state.get(%i[config page_numbering_mode]) == :dynamic && @page_calculator
-        @page_calculator.build_dynamic_map!(width, height, @doc, @state)
-        @page_calculator.apply_pending_precise_restore!(@state)
-      else
-        # Absolute page numbering: delegate to PageCalculatorService
-        @page_calculator.build_absolute_map!(width, height, @doc, @state)
-      end
+      @pagination_orchestrator.build_full_map!(@doc, @state, @page_calculator, [width, height])
       @defer_page_map = false
       force_redraw
       # Ensure the screen reflects the updated state without waiting for a keypress
@@ -654,19 +493,8 @@ module EbookReader
       @defer_page_map = false
     end
 
-    def adjust_for_line_spacing(height)
-      @layout_service.adjust_for_line_spacing(height, @state.get(%i[config line_spacing]))
-    end
-
     def read_input_keys
       @terminal_service.read_keys_blocking(limit: 10)
-    end
-
-    def update_page_map(width, height)
-      return if @doc.nil?
-
-      # Delegate absolute pagination to the PageCalculatorService for consistency
-      @page_calculator.build_absolute_map!(width, height, @doc, @state)
     end
 
     # Perform initial heavy page calculations with a visual progress overlay
@@ -693,19 +521,14 @@ module EbookReader
     # Invalidate cached pagination for current layout and notify user
     def invalidate_pagination_cache(_key = nil)
       height, width = @terminal_service.size
-      view_mode = Domain::Selectors::ConfigSelectors.view_mode(@state)
-      line_spacing = Domain::Selectors::ConfigSelectors.line_spacing(@state)
-      key = EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode,
-                                                                    line_spacing)
-      if EbookReader::Infrastructure::PaginationCache.exists_for_document?(@doc, key)
-        begin
-          EbookReader::Infrastructure::PaginationCache.delete_for_document(@doc, key)
-          @ui_controller.set_message('Pagination cache cleared')
-        rescue StandardError
-          @ui_controller.set_message('Failed to clear pagination cache')
-        end
-      else
+      result = @pagination_orchestrator.invalidate_cache(@doc, @state, width: width, height: height)
+      case result
+      when :deleted
+        @ui_controller.set_message('Pagination cache cleared')
+      when :missing
         @ui_controller.set_message('No pagination cache for this layout')
+      else
+        @ui_controller.set_message('Failed to clear pagination cache')
       end
       :handled
     end

@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-require 'set'
-require 'thread'
-
 require_relative 'infrastructure/logger'
 require_relative 'infrastructure/performance_monitor'
 require_relative 'infrastructure/perf_tracer'
@@ -211,10 +208,8 @@ module EbookReader
         resolved = normalize_toc_href(href)
         chapter_index = href_to_index[resolved]
 
-        if chapter_index && (chapter = @chapters[chapter_index])
-          if chapter.respond_to?(:title=) && (chapter.title.nil? || chapter.title.to_s.strip.empty?)
-            chapter.title = title
-          end
+        if chapter_index && (chapter = @chapters[chapter_index]) && chapter.respond_to?(:title=) && (chapter.title.nil? || chapter.title.to_s.strip.empty?)
+          chapter.title = title
         end
 
         Domain::Models::TOCEntry.new(
@@ -232,8 +227,7 @@ module EbookReader
 
       base = @opf_path ? File.dirname(@opf_path) : '.'
       core = href.to_s.split('#', 2).first
-      cleaned = File.expand_path(File.join('/', base, core), '/').sub(%r{^/}, '')
-      cleaned
+      File.expand_path(File.join('/', base, core), '/').sub(%r{^/}, '')
     end
   end
 end

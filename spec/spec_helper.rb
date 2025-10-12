@@ -35,8 +35,6 @@ SimpleCov.start do
   add_filter '/lib/ebook_reader/reader_modes/'
   add_filter '/lib/ebook_reader/terminal'
   add_filter '/lib/ebook_reader/terminal_' # buffer/input/output
-  add_filter '/lib/ebook_reader/controllers/'
-  add_filter '/lib/ebook_reader/application/'
   add_filter '/lib/ebook_reader/main_menu.rb'
   add_filter '/lib/ebook_reader/mouseable_reader.rb'
   add_filter '/lib/ebook_reader/ui/'

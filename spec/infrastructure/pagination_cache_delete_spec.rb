@@ -13,8 +13,8 @@ RSpec.describe 'Pagination cache delete' do
   let(:key) { EbookReader::Infrastructure::PaginationCache.layout_key(80, 24, :single, :normal) }
 
   before do
-    @old_home = ENV['HOME']
-    @old_cache = ENV['XDG_CACHE_HOME']
+    @old_home = Dir.home
+    @old_cache = ENV.fetch('XDG_CACHE_HOME', nil)
     ENV['HOME'] = home
     ENV['XDG_CACHE_HOME'] = cache_root
     allow(EbookReader::Infrastructure::CachePaths).to receive(:reader_root).and_return(reader_root)

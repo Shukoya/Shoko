@@ -24,34 +24,10 @@ module EbookReader
         overlay = current_overlay
         return :pass unless overlay
 
-        annotation_service = resolve_annotation_service
-        book_path = @ui_controller.current_book_path if @ui_controller.respond_to?(:current_book_path)
+        service, book_path = resolve_save_context
+        return cancel_and_pass unless service && book_path
 
-        unless annotation_service && book_path
-          cancel_annotation
-          return :pass
-        end
-
-        begin
-          if overlay.annotation_id
-            annotation_service.update(book_path, overlay.annotation_id, overlay.note)
-            @ui_controller.set_message('Annotation updated', 2)
-          else
-            annotation_service.add(book_path,
-                                   overlay.selected_text,
-                                   overlay.note,
-                                   overlay.selection_range,
-                                   overlay.chapter_index,
-                                   nil)
-            @ui_controller.set_message('Annotation saved!', 2)
-          end
-          @ui_controller.refresh_annotations if @ui_controller.respond_to?(:refresh_annotations)
-        rescue StandardError => e
-          @ui_controller.set_message("Save failed: #{e.message}", 3)
-        ensure
-          close_overlay
-          clear_selection
-        end
+        persist_annotation(overlay, service, book_path)
         :handled
       end
 
@@ -60,6 +36,11 @@ module EbookReader
         clear_selection
         @ui_controller.set_message('Annotation cancelled', 2)
         :handled
+      end
+
+      def cancel_and_pass
+        cancel_annotation
+        :pass
       end
 
       def handle_backspace
@@ -84,6 +65,49 @@ module EbookReader
 
       def current_overlay
         EbookReader::Domain::Selectors::ReaderSelectors.annotation_editor_overlay(@state)
+      end
+
+      def resolve_save_context
+        service = resolve_annotation_service
+        book_path = current_book_path
+        [service, book_path]
+      end
+
+      def current_book_path
+        return unless @ui_controller.respond_to?(:current_book_path)
+
+        @ui_controller.current_book_path
+      end
+
+      def persist_annotation(overlay, service, book_path)
+        save_overlay(overlay, service, book_path)
+        refresh_annotations
+      rescue StandardError => e
+        @ui_controller.set_message("Save failed: #{e.message}", 3)
+      ensure
+        close_overlay
+        clear_selection
+      end
+
+      def save_overlay(overlay, service, book_path)
+        if overlay.annotation_id
+          service.update(book_path, overlay.annotation_id, overlay.note)
+          @ui_controller.set_message('Annotation updated', 2)
+        else
+          service.add(book_path,
+                      overlay.selected_text,
+                      overlay.note,
+                      overlay.selection_range,
+                      overlay.chapter_index,
+                      nil)
+          @ui_controller.set_message('Annotation saved!', 2)
+        end
+      end
+
+      def refresh_annotations
+        return unless @ui_controller.respond_to?(:refresh_annotations)
+
+        @ui_controller.refresh_annotations
       end
 
       def resolve_annotation_service

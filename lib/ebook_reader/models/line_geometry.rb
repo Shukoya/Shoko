@@ -46,7 +46,7 @@ module EbookReader
           plain_text:,
           styled_text:,
           visible_width:,
-          cells: cells.map { |cell| cell.to_h }
+          cells: cells.map(&:to_h),
         }
       end
     end

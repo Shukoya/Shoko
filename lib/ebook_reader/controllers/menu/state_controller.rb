@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../mouseable_reader'
+require_relative '../../application/pagination_orchestrator'
 require_relative '../../main_menu/menu_progress_presenter'
 require_relative '../../infrastructure/background_worker'
 
@@ -12,6 +13,7 @@ module EbookReader
       class StateController
         def initialize(menu)
           @menu = menu
+          @pagination_orchestrator = Application::PaginationOrchestrator.new(menu.dependencies)
         end
 
         def open_selected_book
@@ -44,6 +46,7 @@ module EbookReader
           prior_mode = selectors.mode(state)
 
           return unless ensure_reader_document_for(path)
+
           recent_repository&.add(path)
           state.dispatch(action(:update_reader_meta, book_path: path, running: true))
           state.dispatch(action(:update_reader_mode, :read))
@@ -54,38 +57,9 @@ module EbookReader
         end
 
         def load_and_open_with_progress(path)
-          if skip_progress_overlay?
-            width, height = terminal_service.size
-            warm_launch_dependencies
-            begin
-              document = load_document_for(path)
-              register_document(document)
-              update_total_chapters(document)
-              unless document_cached?(document)
-                presenter = Object.new
-                presenter.define_singleton_method(:update) { |_payload = nil| nil }
-                build_pagination(document, width, height, presenter)
-              end
-            rescue StandardError => e
-              handle_reader_error(path, e)
-              return
-            end
-            return run_reader(path)
-          end
+          return launch_without_overlay(path) if skip_progress_overlay?
 
-          index = selectors.browse_selected(state) || 0
-          mode  = selectors.mode(state)
-          presenter = progress_presenter
-          presenter.show(path: path, index: index, mode: mode)
-
-          target_path = nil
-          begin
-            target_path = prepare_reader_launch(path, presenter)
-          ensure
-            presenter.clear
-          end
-
-          run_reader(target_path || path)
+          launch_with_overlay(path)
         end
 
         def file_not_found
@@ -235,7 +209,7 @@ module EbookReader
         def warm_launch_dependencies
           dependencies.resolve(:layout_service)
           dependencies.resolve(:wrapping_service) if dependencies.registered?(:wrapping_service)
-          dependencies.resolve(:page_calculator)
+          page_calculator
           ensure_background_worker
         end
 
@@ -279,7 +253,14 @@ module EbookReader
         end
 
         def build_pagination(document, width, height, presenter)
-          pagination_builder.build(document, width, height, presenter)
+          calculator = page_calculator
+          return unless calculator
+
+          @pagination_orchestrator.build_full_map!(document, state, calculator, [width, height]) do |done, total|
+            presenter.update(done: done, total: total)
+            menu.draw_screen
+          end
+          presenter.update(done: 1, total: 1)
         end
 
         def skip_progress_overlay?
@@ -290,8 +271,38 @@ module EbookReader
           @annotation_actions ||= AnnotationActions.new(self)
         end
 
-        def pagination_builder
-          @pagination_builder ||= PaginationBuilder.new(self)
+        def page_calculator
+          @page_calculator ||= dependencies.resolve(:page_calculator)
+        rescue StandardError
+          nil
+        end
+
+        def launch_without_overlay(path)
+          warm_launch_dependencies
+          target_path = prepare_reader_launch(path, null_presenter)
+          run_reader(target_path || path)
+        rescue StandardError => e
+          handle_reader_error(path, e)
+        end
+
+        def launch_with_overlay(path)
+          index = selectors.browse_selected(state) || 0
+          mode = selectors.mode(state)
+          presenter = progress_presenter
+          presenter.show(path: path, index: index, mode: mode)
+
+          target_path = nil
+          begin
+            target_path = prepare_reader_launch(path, presenter)
+          ensure
+            presenter.clear
+          end
+
+          run_reader(target_path || path)
+        end
+
+        def null_presenter
+          @null_presenter ||= NullProgressPresenter.new
         end
       end
     end
@@ -425,61 +436,13 @@ module EbookReader
         end
       end
 
-      # Handles pagination orchestration on behalf of StateController.
-      class PaginationBuilder
-        def initialize(controller)
-          @controller = controller
-        end
+      # No-op progress presenter used when the overlay is skipped.
+      class NullProgressPresenter
+        def show(*) end
 
-        def build(document, width, height, presenter)
-          return build_dynamic(document, width, height, presenter) if dynamic_mode?
+        def update(*) end
 
-          build_absolute(document, width, height, presenter)
-        end
-
-        private
-
-        attr_reader :controller
-
-        def build_dynamic(document, width, height, presenter)
-          page_calculator.build_page_map(width, height, document, state) do |done, total|
-            presenter.update(done: done, total: total)
-            menu.draw_screen
-          end
-          presenter.update(done: 1, total: 1)
-        end
-
-        def build_absolute(document, width, height, presenter)
-          page_map = page_calculator.build_absolute_page_map(width, height, document, state) do |done, total|
-            presenter.update(done: done, total: total)
-            menu.draw_screen
-          end
-
-          state.dispatch(
-            EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
-              page_map: page_map,
-              total_pages: page_map.sum,
-              last_width: width,
-              last_height: height
-            )
-          )
-        end
-
-        def dynamic_mode?
-          state.get(%i[config page_numbering_mode]) == :dynamic
-        end
-
-        def page_calculator
-          @page_calculator ||= controller.send(:dependencies).resolve(:page_calculator)
-        end
-
-        def state
-          controller.send(:state)
-        end
-
-        def menu
-          controller.send(:menu)
-        end
+        def clear(*) end
       end
     end
   end

@@ -38,11 +38,11 @@ module EbookReader
         Thread.current[SESSION_KEY]
       end
 
-      def measure(stage)
+      def measure(stage, &)
         session = current_session
         return yield unless session
 
-        session.measure(stage) { yield }
+        session.measure(stage, &)
       end
 
       def record(stage, duration)
@@ -54,9 +54,7 @@ module EbookReader
         session = current_session
         return unless session
 
-        if total_duration
-          session.record('open.invoke', total_duration)
-        end
+        session.record('open.invoke', total_duration) if total_duration
         session.open_type = open_type
         session.emit
       ensure

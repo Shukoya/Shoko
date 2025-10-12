@@ -131,8 +131,8 @@ module EbookReader
           level = entry[:level].to_i
 
           chapter_index = href_to_index[resolve_href_for_toc(href)]
-          if chapter_index && (chapter = chapters[chapter_index])
-            chapter.title = title if chapter.title.to_s.strip.empty?
+          if chapter_index && (chapter = chapters[chapter_index]) && chapter.title.to_s.strip.empty?
+            chapter.title = title
           end
 
           Domain::Models::TOCEntry.new(
@@ -183,8 +183,7 @@ module EbookReader
 
       def normalize_text(content)
         content.force_encoding(Encoding::UTF_8)
-        content = content.sub(/\A\uFEFF/, '')
-        content
+        content.delete_prefix('﻿')
       end
 
       def resolve_href(opf_path, href)
