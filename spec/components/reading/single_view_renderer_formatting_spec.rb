@@ -2,6 +2,7 @@
 
 require 'spec_helper'
 require 'ebook_reader/helpers/text_metrics'
+require 'ebook_reader/infrastructure/parsers/xhtml_content_parser'
 
 RSpec.describe EbookReader::Components::Reading::SingleViewRenderer do
   let(:event_bus) { EbookReader::Infrastructure::EventBus.new }
@@ -73,7 +74,16 @@ RSpec.describe EbookReader::Components::Reading::SingleViewRenderer do
     end.new(chapter)
   end
 
-  let(:formatting_service) { EbookReader::Domain::Services::FormattingService.new(nil) }
+  let(:formatting_dependencies) do
+    instance_double(EbookReader::Domain::DependencyContainer).tap do |deps|
+      parser_factory = lambda do |raw|
+        EbookReader::Infrastructure::Parsers::XHTMLContentParser.new(raw)
+      end
+      allow(deps).to receive(:resolve).with(:xhtml_parser_factory).and_return(parser_factory)
+      allow(deps).to receive(:resolve).with(:logger).and_return(nil)
+    end
+  end
+  let(:formatting_service) { EbookReader::Domain::Services::FormattingService.new(formatting_dependencies) }
 
   let(:deps) do
     container = EbookReader::Domain::DependencyContainer.new
@@ -97,6 +107,8 @@ RSpec.describe EbookReader::Components::Reading::SingleViewRenderer do
   end
 
   it 'renders headings, list markers, and code blocks with formatting cues' do
+    deps.resolve(:global_state).update({ %i[config highlight_quotes] => true })
+
     renderer = described_class.new(deps)
     output = CapturingOutput.new
     surface = EbookReader::Components::Surface.new(output)
@@ -108,7 +120,7 @@ RSpec.describe EbookReader::Components::Reading::SingleViewRenderer do
 
     heading_write = writes.find { |(_, _, text)| text.include?('Formatter Demo') }
     expect(heading_write).not_to be_nil
-    expect(heading_write[2]).to include(EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT)
+    expect(heading_write[2]).to include(EbookReader::Components::RenderStyle.color(:heading))
 
     bullet_write = writes.find { |(_, _, text)| text.include?('First bullet') }
     expect(bullet_write).not_to be_nil

@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'tmpdir'
+require 'fileutils'
 
 RSpec.describe EbookReader::Domain::Services::LibraryService do
-  include FakeFS::SpecHelpers
-
-  let(:home) { '/home/test' }
+  let(:tmp_dir) { Dir.mktmpdir }
+  let(:home) { tmp_dir }
   let(:xdg_cache) { File.join(home, '.cache') }
   let(:reader_root) { File.join(xdg_cache, 'reader') }
   let(:epub_path) { File.join(home, 'books', 'library.epub') }
@@ -69,6 +70,7 @@ RSpec.describe EbookReader::Domain::Services::LibraryService do
   after do
     ENV['HOME'] = @old_home
     ENV['XDG_CACHE_HOME'] = @old_cache
+    FileUtils.remove_entry(tmp_dir)
   end
 
   it 'lists cached books with basic metadata' do

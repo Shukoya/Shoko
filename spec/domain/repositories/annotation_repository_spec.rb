@@ -7,14 +7,25 @@ RSpec.describe EbookReader::Domain::Repositories::AnnotationRepository do
   let(:logger) { double('Logger', error: nil, debug: nil, info: nil) }
 
   class CtnAnnRepo
-    def initialize(logger) = (@logger = logger)
+    def initialize(logger, file_writer, path_service)
+      @logger = logger
+      @file_writer = file_writer
+      @path_service = path_service
+    end
 
     def resolve(name)
-      return @logger if name == :logger
-
-      nil
+      case name
+      when :logger then @logger
+      when :file_writer then @file_writer
+      when :path_service then @path_service
+      else
+        nil
+      end
     end
   end
+
+  let(:file_writer) { instance_double('FileWriter', write: true) }
+  let(:path_service) { instance_double('PathService', reader_config_path: '/tmp/annotations.json') }
 
   let(:store) do
     Class.new do
@@ -44,10 +55,12 @@ RSpec.describe EbookReader::Domain::Repositories::AnnotationRepository do
   end
 
   before do
-    allow(EbookReader::Domain::Repositories::Storage::AnnotationFileStore).to receive(:new).and_return(store)
+    allow(EbookReader::Domain::Repositories::Storage::AnnotationFileStore).to receive(:new)
+      .with(file_writer:, path_service:)
+      .and_return(store)
   end
 
-  subject(:repo) { described_class.new(CtnAnnRepo.new(logger)) }
+  subject(:repo) { described_class.new(CtnAnnRepo.new(logger, file_writer, path_service)) }
   let(:book_path) { '/tmp/book.epub' }
 
   it 'adds, lists, updates and deletes annotations' do

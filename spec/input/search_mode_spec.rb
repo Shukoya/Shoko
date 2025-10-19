@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'tmpdir'
 
 RSpec.describe 'MainMenu search mode integration' do
   before do
@@ -10,6 +11,9 @@ RSpec.describe 'MainMenu search mode integration' do
 
   def build_menu_with_books(books)
     deps = EbookReader::Domain::ContainerFactory.create_default_container
+    cache_root = File.join(Dir.tmpdir, 'reader_spec_cache')
+    FileUtils.mkdir_p(cache_root)
+    allow(EbookReader::Infrastructure::CachePaths).to receive(:reader_root).and_return(cache_root)
     menu = EbookReader::MainMenu.new(deps)
     # Inject fake scanner data
     scanner = menu.instance_variable_get(:@scanner)

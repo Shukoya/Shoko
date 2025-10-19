@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
+require 'spec_helper'
 require 'zip'
 
-RSpec.describe 'EPUB open via stdlib ZIP', :fakefs do
+RSpec.describe 'EPUB open via stdlib ZIP' do
   include ZipTestBuilder
 
   def build_minimal_epub
@@ -49,16 +50,20 @@ RSpec.describe 'EPUB open via stdlib ZIP', :fakefs do
 
   it 'parses metadata and first chapter' do
     data = build_minimal_epub
-    path = '/book.epub'
-    File.binwrite(path, data)
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, 'book.epub')
+      File.binwrite(path, data)
+      cache_root = File.join(dir, '.cache', 'reader')
+      allow(EbookReader::Infrastructure::CachePaths).to receive(:reader_root).and_return(cache_root)
 
-    doc = EbookReader::EPUBDocument.new(path)
-    expect(doc.title).to eq('Test Book')
-    expect(doc.chapter_count).to eq(1)
+      doc = EbookReader::EPUBDocument.new(path)
+      expect(doc.title).to eq('Test Book')
+      expect(doc.chapter_count).to eq(1)
 
-    ch = doc.get_chapter(0)
-    expect(ch).not_to be_nil
-    expect(ch.title).to eq('Chapter One')
-    expect(ch.lines.join("\n")).to include('Hello world')
+      ch = doc.get_chapter(0)
+      expect(ch).not_to be_nil
+      expect(ch.title).to eq('Chapter One')
+      expect(ch.lines.join("\n")).to include('Hello world')
+    end
   end
 end

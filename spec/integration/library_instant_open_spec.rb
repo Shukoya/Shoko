@@ -37,6 +37,13 @@ RSpec.describe 'Library instant open' do
       container_xml: '<c/>'
     )
     cache.write_book!(book)
+
+    doc = Struct.new(:cache_path, :canonical_path).new(cache.cache_path, epub_path)
+    key = EbookReader::Infrastructure::PaginationCache.layout_key(80, 24, :split, :normal)
+    pages = [
+      { 'chapter_index' => 0, 'page_in_chapter' => 0, 'total_pages_in_chapter' => 1, 'start_line' => 0, 'end_line' => 0 },
+    ]
+    EbookReader::Infrastructure::PaginationCache.save_for_document(doc, key, pages)
   end
 
   after do
@@ -47,12 +54,34 @@ RSpec.describe 'Library instant open' do
 
   it 'opens instantly from Library by using cache directory' do
     # Stub MouseableReader to capture open path without launching terminal
+    captured_container = nil
     reader = class_double('EbookReader::MouseableReader').as_stubbed_const
-    expect(reader).to receive(:new).with(cache.cache_path, anything, anything).and_return(double(run: true))
+    expect(reader).to receive(:new) do |path, _unused, container|
+      captured_container = container
+      instance_double('MouseableReader', run: true)
+    end
 
     mm = EbookReader::MainMenu.new
     mm.switch_to_mode(:library)
+    mm.state.update({ %i[config view_mode] => :split,
+                      %i[config line_spacing] => :normal,
+                      %i[config page_numbering_mode] => :dynamic })
     # Call selection directly to avoid terminal dispatcher differences in test env
     mm.library_select
+
+    expect(captured_container).not_to be_nil
+    calculator = captured_container.resolve(:page_calculator)
+    state = captured_container.resolve(:global_state)
+    doc = captured_container.resolve(:document)
+    preloader = EbookReader::Application::PaginationCachePreloader.new(
+      state: state,
+      page_calculator: calculator,
+      pagination_cache: captured_container.resolve(:pagination_cache)
+    )
+    key = EbookReader::Infrastructure::PaginationCache.layout_key(80, 24, :split, :normal)
+    expect(EbookReader::Infrastructure::PaginationCache.load_for_document(doc, key)).not_to be_nil
+    result = preloader.preload(doc, width: 80, height: 24)
+    expect(result.status).to eq(:hit)
+    expect(calculator.total_pages).to be_positive
   end
 end

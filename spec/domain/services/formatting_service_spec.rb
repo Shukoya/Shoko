@@ -5,7 +5,18 @@ require 'ebook_reader/domain/services/formatting_service'
 require 'ebook_reader/domain/models/content_block'
 
 RSpec.describe EbookReader::Domain::Services::FormattingService do
-  let(:service) { described_class.new(nil) }
+  let(:parser_factory) do
+    lambda do |raw|
+      EbookReader::Infrastructure::Parsers::XHTMLContentParser.new(raw)
+    end
+  end
+  let(:dependencies) do
+    instance_double(EbookReader::Domain::DependencyContainer).tap do |deps|
+      allow(deps).to receive(:resolve).with(:xhtml_parser_factory).and_return(parser_factory)
+      allow(deps).to receive(:resolve).with(:logger).and_return(nil)
+    end
+  end
+  let(:service) { described_class.new(dependencies) }
   let(:html) do
     <<~HTML
       <html><body>

@@ -18,7 +18,7 @@ module EbookReader
           SettingsItem.new(action: :cycle_line_spacing, icon: '', label: 'Line Spacing'),
           SettingsItem.new(action: :toggle_page_numbering_mode, icon: '', label: 'Page Numbering Mode'),
           SettingsItem.new(action: :toggle_page_numbers, icon: '', label: 'Page Numbers'),
-          SettingsItem.new(action: :toggle_highlight_quotes, icon: '', label: 'Highlight Quotes'),
+          SettingsItem.new(action: :toggle_highlight_quotes, icon: '', label: 'Text Highlighting'),
           SettingsItem.new(action: :wipe_cache, icon: '', label: 'Wipe Cache'),
         ].freeze
 
@@ -208,7 +208,8 @@ module EbookReader
         end
 
         def format_highlight_quotes
-          @state.get(%i[config highlight_quotes]) ? 'On' : 'Off'
+          value = @state.get(%i[config highlight_quotes])
+          (value.nil? ? true : !!value) ? 'On' : 'Off'
         end
       end
     end

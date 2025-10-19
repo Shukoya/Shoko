@@ -47,7 +47,7 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
   - Input: Popup handling is centralized via `with_popup_menu` and `process_popup_result` helpers to avoid repeated conditional branches for navigation/action/cancel.
   - UnifiedApplication: decides between menu and reader modes.
 - Domain
-  - Services: Navigation, PageCalculator, Selection, Coordinate, Layout, Clipboard, Annotation, Library.
+  - Services: Navigation, PageCalculator, Selection, Coordinate, Layout, Clipboard, Annotation, Library, Cache, Instrumentation, Path, FileWriter.
   - NavigationService: uses `dynamic_route_exec` to route dynamic vs absolute strategies and small updater helpers to apply split/alignment updates without repeated conditionals.
   - DocumentService: uses `cached_fetch` and `with_chapter` helpers to consolidate caching and chapter access.
   - Actions/Selectors: explicit state transitions and read-only projections.
@@ -89,16 +89,17 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 - Buffered output: Terminal double-buffering via `TerminalBuffer`.
 - Lazy loading: Chapters loaded on demand.
 - Caching: Library scan and chapter wrapping caches via services.
- - Cached Library: `Domain::Services::LibraryService` lists cached books by reading Marshal payloads in `.cache` files via `Infrastructure::Repositories::CachedLibraryRepository`.
+- Cached Library: `Domain::Services::LibraryService` lists cached books by querying the SQLite cache via `Infrastructure::Repositories::CachedLibraryRepository`, while `Domain::Services::CacheService` validates pointer files and resolves canonical EPUB paths before controllers launch books.
 
 ## EPUB Cache
 
 - Goal: instant subsequent opens by avoiding ZIP inflation and XML parsing.
-- Key: cache file `${XDG_CACHE_HOME:-~/.cache}/reader/<sha256>.cache`, where `<sha256>` is the SHA‑256 of the `.epub` file.
-- Implementation: `Infrastructure::BookCachePipeline` coordinates `EpubImporter` (ZIP/OPF/HTML processing) and `EpubCache` (Marshal serialization with integrity metadata + pagination layouts).
-- First open (miss): pipeline imports the EPUB, builds `BookData` (chapters, resources, metadata) and writes a single `.cache` file via `AtomicFileWriter`.
-- Subsequent opens (hit): pipeline loads the Marshal payload, validates version/digest/mtime, and hands `BookData` directly to `EPUBDocument`; no filesystem extraction is required. Pagination layouts are retrieved from the same payload when available.
-- Dependencies: Standard library only; ZIP reads handled in-house via a minimal reader using `Zlib`.
+- Key: cache pointer `${XDG_CACHE_HOME:-~/.cache}/reader/<sha256>.cache`, where `<sha256>` is the SHA‑256 of the `.epub` file, plus a shared `cache.sqlite3` database under the same directory.
+- Implementation: `Infrastructure::BookCachePipeline` coordinates `EpubImporter` (ZIP/OPF/HTML processing) and `EpubCache`. Persistence is delegated to `Infrastructure::CacheStore`, which wraps the SQLite database and writes pointer files atomically; missing or corrupt pointers now trigger cache invalidation rather than on-the-fly regeneration.
+- First open (miss): pipeline imports the EPUB, builds `BookData` (chapters, resources, metadata) and writes database rows + a pointer file via `AtomicFileWriter`.
+- Subsequent opens (hit): pipeline loads the payload from SQLite, validates version/digest/mtime, and hands `BookData` directly to `EPUBDocument`; no filesystem extraction is required. Pagination layouts are retrieved from the `layouts` table when available.
+- Dependencies: SQLite3 (via the `sqlite3` gem); ZIP reads handled in-house via a minimal reader using `Zlib`.
+- Reader startup leverages `Application::PaginationCachePreloader` to hydrate cached pagination maps before the first frame, ensuring warm opens are fully interactive immediately.
 
 ## Content Formatting Pipeline
 
@@ -111,8 +112,19 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 - Wrapping Integration: `Domain::Services::WrappingService` now defers to the formatting
   service when present so pagination and prefetching align with the styled output rendered to
   the terminal.
+- Instrumentation Bridge: `Domain::Services::InstrumentationService` wraps tracing/metrics
+  adapters so controllers can record timing without coupling to infrastructure modules.
+- File & Path Bridges: `Domain::Services::FileWriterService` and `PathService` provide
+  atomic writes and config/cache path resolution for repositories, keeping file stores from
+  referencing infrastructure helpers directly.
 - Rendering: `Components::Reading::BaseViewRenderer` prefers formatted display lines,
   applies ANSI styling per block type, and records visible bounds via
   `Helpers::TextMetrics` to keep selection/highlighting accurate.
 - Backwards Compatibility: When formatting data is unavailable (e.g., tests or truncated
   chapters) the system gracefully falls back to the legacy plain-text wrapping path.
+
+## Architecture Guards
+
+- Specs under `spec/architecture/` assert that controllers and components do not reference
+  infrastructure constants or require infrastructure files directly. Expand this suite when
+  introducing new layers or adapters to keep the Clean Architecture boundaries enforceable.

@@ -15,6 +15,7 @@ RSpec.describe EbookReader::Domain::Commands::ConditionalNavigationCommand do
     allow(container).to receive(:resolve).with(:navigation_service).and_return(nav)
     ui = double('UI', sidebar_select: nil, sidebar_up: nil, sidebar_down: nil)
     allow(container).to receive(:resolve).with(:ui_controller).and_return(ui)
+    allow(container).to receive(:resolve).with(:logger).and_return(nil)
   end
 
   it 'routes to sidebar when visible' do

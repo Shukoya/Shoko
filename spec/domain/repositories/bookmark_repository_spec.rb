@@ -3,9 +3,13 @@
 require 'spec_helper'
 
 RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
+  let(:file_writer) { instance_double('FileWriter') }
+  let(:path_service) { instance_double('PathService') }
   let(:mock_dependencies) do
     instance_double(EbookReader::Domain::DependencyContainer).tap do |deps|
       allow(deps).to receive(:resolve).with(:logger).and_return(mock_logger)
+      allow(deps).to receive(:resolve).with(:file_writer).and_return(file_writer)
+      allow(deps).to receive(:resolve).with(:path_service).and_return(path_service)
     end
   end
 
@@ -40,7 +44,9 @@ RSpec.describe EbookReader::Domain::Repositories::BookmarkRepository do
   subject { described_class.new(mock_dependencies) }
 
   before do
-    allow(EbookReader::Domain::Repositories::Storage::BookmarkFileStore).to receive(:new).and_return(mock_storage)
+    allow(EbookReader::Domain::Repositories::Storage::BookmarkFileStore).to receive(:new)
+      .with(file_writer:, path_service:)
+      .and_return(mock_storage)
   end
 
   describe '#add_for_book' do

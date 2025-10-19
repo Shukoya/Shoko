@@ -6,38 +6,20 @@ RSpec.describe EbookReader::ReaderController do
   before do
     mock_terminal(width: 80, height: 24)
 
-    stub_const('EbookReader::Infrastructure::DocumentService', Class.new do
-      FakeChapter = Struct.new(:title, :lines)
-      class FakeDoc
-        attr_reader :chapters, :toc_entries
-
-        def initialize
-          @chapters = [
-            FakeChapter.new('Chapter One', ['chapter one']),
-            FakeChapter.new('Chapter Two', ['chapter two']),
-          ]
-          @toc_entries = [
-            EbookReader::Domain::Models::TOCEntry.new(title: 'Part One', href: 'part1.xhtml', level: 0,
-                                                      chapter_index: nil, navigable: false),
-            EbookReader::Domain::Models::TOCEntry.new(title: 'Chapter One', href: 'chapter1.xhtml', level: 1,
-                                                      chapter_index: 0, navigable: true),
-            EbookReader::Domain::Models::TOCEntry.new(title: 'Chapter Two', href: 'chapter2.xhtml', level: 1,
-                                                      chapter_index: 1, navigable: true),
-          ]
-        end
-
-        def chapter_count = chapters.length
-        def get_chapter(index) = chapters[index]
-        def title = 'Demo'
-        def language = 'en'
-      end
-
-      def initialize(_path, *_args); end
-
-      def load_document
-        FakeDoc.new
-      end
-    end)
+    chapter_struct = Struct.new(:title, :lines)
+    chapters = [
+      chapter_struct.new('Chapter One', ['chapter one']),
+      chapter_struct.new('Chapter Two', ['chapter two']),
+    ]
+    toc_entries = [
+      EbookReader::Domain::Models::TOCEntry.new(title: 'Part One', href: 'part1.xhtml', level: 0,
+                                                chapter_index: nil, navigable: false),
+      EbookReader::Domain::Models::TOCEntry.new(title: 'Chapter One', href: 'chapter1.xhtml', level: 1,
+                                                chapter_index: 0, navigable: true),
+      EbookReader::Domain::Models::TOCEntry.new(title: 'Chapter Two', href: 'chapter2.xhtml', level: 1,
+                                                chapter_index: 1, navigable: true),
+    ]
+    stub_document_service(chapters:, doc_attrs: { title: 'Demo', toc_entries: toc_entries })
   end
 
   it 'skips non-navigable TOC headings when moving through TOC' do

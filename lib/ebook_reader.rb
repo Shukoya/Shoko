@@ -24,9 +24,13 @@ require_relative 'ebook_reader/infrastructure/performance_monitor'
 require_relative 'ebook_reader/infrastructure/event_bus'
 require_relative 'ebook_reader/infrastructure/state_store'
 require_relative 'ebook_reader/infrastructure/observer_state_store'
+require_relative 'ebook_reader/infrastructure/cache_database'
+require_relative 'ebook_reader/infrastructure/cache_store'
+require_relative 'ebook_reader/infrastructure/cache_pointer_manager'
 require_relative 'ebook_reader/infrastructure/document_service'
 require_relative 'ebook_reader/infrastructure/pagination_cache'
 require_relative 'ebook_reader/infrastructure/library_scanner'
+require_relative 'ebook_reader/application/pagination_cache_preloader'
 
 # Error definitions
 require_relative 'ebook_reader/errors'
@@ -205,8 +209,6 @@ require_relative 'ebook_reader/init_annotations'
 if defined?(RSpec)
   require_relative 'ebook_reader/test_support/test_mode'
   EbookReader::TestSupport::TestMode.activate!
-  require_relative 'ebook_reader/test_shims'
-  EbookReader::TestShims.run!
   require_relative 'ebook_reader/test_coverage_warmup'
   EbookReader::TestCoverageWarmup.run!
 end

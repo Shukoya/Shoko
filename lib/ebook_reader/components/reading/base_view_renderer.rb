@@ -153,15 +153,18 @@ module EbookReader
         end
 
         def renderable_line_content(line, width, context)
+          store = config_store(context&.config)
+          highlight_setting = store&.get(%i[config highlight_quotes])
+          highlight_enabled = highlight_setting.nil? ? true : !!highlight_setting
+
           if line.respond_to?(:segments) && line.respond_to?(:text)
-            plain, styled = styled_text_for_display_line(line, width)
-            return [plain, styled]
+            return styled_text_for_display_line(line, width, highlight_enabled:)
           end
 
           text = line.to_s[0, width]
-          if (store = config_store(context&.config))
+          if store
             text = highlight_keywords(text) if store.get(%i[config highlight_keywords])
-            text = highlight_quotes(text) if store.get(%i[config highlight_quotes])
+            text = highlight_quotes(text) if highlight_enabled
           end
           styled = Components::RenderStyle.primary(text)
           [text, styled]
@@ -207,8 +210,9 @@ module EbookReader
           end
         end
 
-        def styled_text_for_display_line(line, width)
-          metadata = line.metadata || {}
+        def styled_text_for_display_line(line, width, highlight_enabled: true)
+          metadata = (line.metadata || {}).dup
+          metadata[:highlight_enabled] = highlight_enabled
           plain_builder = +''
           styled_builder = +''
           remaining = width.to_i

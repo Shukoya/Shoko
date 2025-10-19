@@ -284,8 +284,16 @@ module EbookReader
         end
       end
 
+      def logger
+        @logger ||= begin
+          @dependencies.resolve(:logger)
+        rescue StandardError
+          nil
+        end
+      end
+
       def handle_dialog_error(error)
-        Infrastructure::Logger.error('Dialog error', error: error.message)
+        logger&.error('Dialog error', error: error.message)
         @catalog.scan_message = "Error: #{error.message}"
         @catalog.scan_status = :error
       end

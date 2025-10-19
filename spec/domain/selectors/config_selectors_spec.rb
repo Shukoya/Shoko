@@ -13,7 +13,7 @@ RSpec.describe EbookReader::Domain::Selectors::ConfigSelectors do
 
   it 'reads additional config flags and theme' do
     expect(described_class.line_spacing(state)).to eq(:compact)
-    expect(described_class.highlight_quotes?(state)).to be false
+    expect(described_class.highlight_quotes?(state)).to be true
     expect(described_class.highlight_keywords?(state)).to be false
     expect(%i[dark default]).to include(described_class.theme(state))
     expect(described_class.config_hash(state)).to be_a(Hash)

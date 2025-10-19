@@ -9,14 +9,15 @@ module EbookReader
         class PaginationWorkflow
           Result = Struct.new(:pages, :cached, keyword_init: true)
 
-          def initialize(metrics_calculator:, dependencies:)
-            @metrics_calculator = metrics_calculator
-            @dependencies = dependencies
-          end
+        def initialize(metrics_calculator:, dependencies:, pagination_cache: nil)
+          @metrics_calculator = metrics_calculator
+          @dependencies = dependencies
+          @pagination_cache = pagination_cache
+        end
 
           def build_dynamic(doc:, width:, height:, config:, &on_progress)
             key = dynamic_cache_key(width, height, config)
-            cached = load_cached_pages(doc, key, config)
+            cached = key ? load_cached_pages(doc, key, config) : nil
             return Result.new(pages: cached, cached: true) if cached&.any?
 
             layout = layout_for(width, height, config)
@@ -30,7 +31,7 @@ module EbookReader
               on_progress&.call(idx, total)
             end
 
-            save_cache(doc, key, pages)
+            save_cache(doc, key, pages) if key
             Result.new(pages: pages, cached: false)
           end
 
@@ -72,11 +73,15 @@ module EbookReader
           def dynamic_cache_key(width, height, config)
             view_mode = resolve_view_mode(config)
             line_spacing = resolve_line_spacing(config)
-            EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode, line_spacing)
+            return nil unless @pagination_cache
+
+            @pagination_cache.layout_key(width, height, view_mode, line_spacing)
           end
 
           def load_cached_pages(doc, key, config)
-            cached = EbookReader::Infrastructure::PaginationCache.load_for_document(doc, key)
+            return nil unless @pagination_cache
+
+            cached = @pagination_cache.load_for_document(doc, key)
             return cached if cached&.any?
 
             return nil unless config.respond_to?(:get)
@@ -84,19 +89,21 @@ module EbookReader
             view_mode_reader = config.get(%i[reader view_mode])
             return nil unless view_mode_reader
 
-            alt_key = EbookReader::Infrastructure::PaginationCache.layout_key(
+            alt_key = @pagination_cache.layout_key(
               config.get(%i[ui terminal_width]) || 0,
               config.get(%i[ui terminal_height]) || 0,
               view_mode_reader,
               resolve_line_spacing(config)
             )
-            EbookReader::Infrastructure::PaginationCache.load_for_document(doc, alt_key)
+            @pagination_cache.load_for_document(doc, alt_key)
           rescue StandardError
             nil
           end
 
           def save_cache(doc, key, pages)
-            EbookReader::Infrastructure::PaginationCache.save_for_document(doc, key, compact_pages(pages))
+            return unless @pagination_cache
+
+            @pagination_cache.save_for_document(doc, key, compact_pages(pages))
           rescue StandardError
             nil
           end

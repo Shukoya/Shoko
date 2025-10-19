@@ -7,15 +7,40 @@ RSpec.describe 'AnnotationRepository + FileStore integration' do
 
   let(:home) { '/home/test' }
   let(:config_dir) { File.join(home, '.config', 'reader') }
-  let(:deps) do
-    # Only logger is resolved
-    Class.new do
-      def resolve(name)
-        return EbookReader::Infrastructure::Logger if name == :logger
-
-        nil
+  let(:file_writer) do
+    instance_double('FileWriter').tap do |writer|
+      allow(writer).to receive(:write) do |path, payload|
+        FileUtils.mkdir_p(File.dirname(path))
+        File.write(path, payload)
       end
-    end.new
+    end
+  end
+
+  let(:path_service) do
+    instance_double('PathService').tap do |service|
+      allow(service).to receive(:reader_config_path) do |*segments|
+        File.join(config_dir, *segments)
+      end
+    end
+  end
+
+  let(:deps) do
+    Class.new do
+      def initialize(file_writer, path_service)
+        @file_writer = file_writer
+        @path_service = path_service
+      end
+
+      def resolve(name)
+        case name
+        when :logger then EbookReader::Infrastructure::Logger
+        when :file_writer then @file_writer
+        when :path_service then @path_service
+        else
+          nil
+        end
+      end
+    end.new(file_writer, path_service)
   end
 
   before do

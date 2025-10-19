@@ -6,25 +6,9 @@ RSpec.describe EbookReader::ReaderController do
   before do
     mock_terminal(width: 80, height: 24)
 
-    # Stub DocumentService to provide content
-    stub_const('EbookReader::Infrastructure::DocumentService', Class.new do
-      FakeChapter = Struct.new(:title, :lines)
-      class FakeDoc
-        def initialize(ch) = (@ch = ch)
-        def chapter_count = 1
-        def chapters = [@ch]
-        def get_chapter(_i) = @ch
-        def title = 'Doc'
-        def language = 'en'
-      end
-
-      def initialize(_path); end
-
-      def load_document
-        lines = Array.new(100) { |i| "Line #{i}" }
-        FakeDoc.new(FakeChapter.new('Ch', lines))
-      end
-    end)
+    chapter_struct = Struct.new(:title, :lines)
+    chapters = [chapter_struct.new('Ch', Array.new(100) { |i| "Line #{i}" })]
+    stub_document_service(chapters:)
   end
 
   it 'rebuilds dynamic page map on resize' do

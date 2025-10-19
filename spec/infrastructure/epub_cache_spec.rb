@@ -3,6 +3,7 @@
 require 'spec_helper'
 require 'tmpdir'
 require 'fileutils'
+require 'json'
 
 RSpec.describe EbookReader::Infrastructure::EpubCache do
   let(:tmp_dir) { Dir.mktmpdir }
@@ -50,10 +51,17 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
   it 'writes and reloads a cache payload for an EPUB source' do
     cache = described_class.new(epub_path)
     payload = cache.write_book!(book_data)
+    db_path = File.join(cache_root, EbookReader::Infrastructure::CacheDatabase::DB_FILENAME)
+
     expect(payload).to be_a(described_class::CachePayload)
     expect(File.exist?(cache.cache_path)).to be(true)
+    expect(File.exist?(db_path)).to be(true)
 
-    reloaded = cache.load_for_source(strict: true)
+    pointer = JSON.parse(File.read(cache.cache_path))
+    expect(pointer['format']).to eq(EbookReader::Infrastructure::CachePointerManager::POINTER_FORMAT)
+    expect(pointer['sha256']).to eq(cache.sha256)
+
+    reloaded = described_class.new(epub_path).load_for_source(strict: true)
     expect(reloaded.book.title).to eq('Spec Book')
     expect(reloaded.book.chapters.first.lines).to eq(['hello'])
   end
@@ -70,12 +78,28 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
     expect(layout['pages']).to eq([{ 'chapter_index' => 0 }])
   end
 
-  it 'invalidates corrupted cache files' do
+  it 'returns nil when pointer payload is corrupted' do
     cache = described_class.new(epub_path)
     cache.write_book!(book_data)
 
     File.write(cache.cache_path, 'corrupt')
-    expect(cache.read_cache(strict: true)).to be_nil
-    expect(File.exist?(cache.cache_path)).to be(false)
+    expect do
+      described_class.new(cache.cache_path).read_cache(strict: true)
+    end.to raise_error(EbookReader::CacheLoadError)
+  end
+
+  it 'repairs pointer files when loading via source path after corruption' do
+    cache = described_class.new(epub_path)
+    cache.write_book!(book_data)
+
+    pointer_path = cache.cache_path
+    File.write(pointer_path, 'broken-pointer')
+
+    restored_payload = described_class.new(epub_path).load_for_source(strict: true)
+    expect(restored_payload).not_to be_nil
+
+    pointer = JSON.parse(File.read(pointer_path))
+    expect(pointer['format']).to eq(EbookReader::Infrastructure::CachePointerManager::POINTER_FORMAT)
+    expect(pointer['sha256']).to eq(cache.sha256)
   end
 end

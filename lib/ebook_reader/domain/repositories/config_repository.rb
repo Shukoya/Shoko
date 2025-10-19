@@ -32,6 +32,7 @@ module EbookReader
           page_numbering_mode: :dynamic,
           show_page_numbers: true,
           line_spacing: :compact,
+          highlight_quotes: true,
           input_debounce_ms: 100,
           search_highlight_timeout: 2000,
           auto_save_interval: 30,

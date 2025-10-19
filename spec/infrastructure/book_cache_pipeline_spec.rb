@@ -3,6 +3,7 @@
 require 'spec_helper'
 require 'tmpdir'
 require 'fileutils'
+require 'json'
 
 RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
   let(:tmp_dir) { Dir.mktmpdir }
@@ -92,10 +93,12 @@ RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
     FileUtils.rm_rf(tmp_dir)
   end
 
-  it 'imports an EPUB and writes a Marshal cache' do
+  it 'imports an EPUB and writes a SQLite-backed cache' do
     result = pipeline.load(epub_path)
     expect(result.loaded_from_cache).to be(false)
     expect(File.exist?(result.cache_path)).to be(true)
+    db_path = File.join(File.dirname(result.cache_path), EbookReader::Infrastructure::CacheDatabase::DB_FILENAME)
+    expect(File.exist?(db_path)).to be(true)
     expect(result.book.title).to eq('Spec Book')
     expect(result.book.resources['OPS/images/pic.jpg'].bytesize).to eq(image_payload.bytesize)
   end
@@ -109,13 +112,16 @@ RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
     expect(warmed.book.chapters.first.title).to eq('Chapter 1')
   end
 
-  it 're-imports when the cache file is corrupted' do
+  it 'repairs the pointer file when it is corrupted' do
     first = pipeline.load(epub_path)
     File.write(first.cache_path, 'corrupt-data')
 
     second = pipeline.load(epub_path)
-    expect(second.loaded_from_cache).to be(false)
+    expect(second.loaded_from_cache).to be(true)
     expect(File.exist?(second.cache_path)).to be(true)
+
+    pointer = JSON.parse(File.read(second.cache_path))
+    expect(pointer['format']).to eq(EbookReader::Infrastructure::CachePointerManager::POINTER_FORMAT)
   end
 
   it 'raises a CacheLoadError when opening an invalid cache file directly' do

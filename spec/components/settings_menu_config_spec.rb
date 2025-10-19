@@ -1,8 +1,26 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'fileutils'
 
 RSpec.describe 'Settings menu configuration toggles' do
+  around do |example|
+    Dir.mktmpdir do |dir|
+      old_home = ENV['HOME']
+      old_cache = ENV.fetch('XDG_CACHE_HOME', nil)
+      ENV['HOME'] = dir
+      ENV['XDG_CACHE_HOME'] = File.join(dir, '.cache')
+      example.run
+    ensure
+      ENV['HOME'] = old_home
+      if old_cache
+        ENV['XDG_CACHE_HOME'] = old_cache
+      else
+        ENV.delete('XDG_CACHE_HOME')
+      end
+    end
+  end
+
   let(:container) { EbookReader::Domain::ContainerFactory.create_default_container }
   let(:menu) { EbookReader::MainMenu.new(container) }
   let(:dispatcher) { menu.instance_variable_get(:@dispatcher) }

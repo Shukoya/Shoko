@@ -41,7 +41,9 @@ module EbookReader
 
         def initialize(dependencies)
           super
-          @storage = Storage::ProgressFileStore.new
+          file_writer = dependencies.resolve(:file_writer)
+          path_service = dependencies.resolve(:path_service)
+          @storage = Storage::ProgressFileStore.new(file_writer:, path_service:)
         end
 
         # Save reading progress for a specific book

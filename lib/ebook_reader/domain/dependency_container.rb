@@ -1,6 +1,19 @@
 # frozen_string_literal: true
 
+require 'set'
+require_relative '../infrastructure/background_worker'
+require_relative '../infrastructure/atomic_file_writer'
+require_relative '../infrastructure/performance_monitor'
+require_relative '../infrastructure/perf_tracer'
+require_relative '../infrastructure/pagination_cache'
+require_relative '../infrastructure/cache_paths'
+require_relative '../infrastructure/epub_cache'
 require_relative '../infrastructure/repositories/cached_library_repository'
+require_relative '../infrastructure/parsers/xhtml_content_parser'
+require_relative 'services/cache_service'
+require_relative 'services/file_writer_service'
+require_relative 'services/instrumentation_service'
+require_relative 'services/path_service'
 
 module EbookReader
   module Domain
@@ -129,6 +142,21 @@ module EbookReader
         # Infrastructure services
         container.register_singleton(:event_bus) { Infrastructure::EventBus.new }
         container.register_singleton(:logger) { Infrastructure::Logger }
+        container.register(:performance_monitor, Infrastructure::PerformanceMonitor)
+        container.register(:perf_tracer, Infrastructure::PerfTracer)
+        container.register(:pagination_cache, Infrastructure::PaginationCache)
+        container.register(:cache_paths, Infrastructure::CachePaths)
+        container.register(:atomic_file_writer, Infrastructure::AtomicFileWriter)
+        container.register(:epub_cache_factory, lambda { |path| Infrastructure::EpubCache.new(path) })
+        container.register(:epub_cache_predicate, lambda { |path| Infrastructure::EpubCache.cache_file?(path) })
+        container.register(:background_worker_factory,
+                           lambda do |name: 'reader-worker'|
+                             Infrastructure::BackgroundWorker.new(name:)
+                           end)
+        container.register(:xhtml_parser_factory,
+                           lambda do |raw|
+                             Infrastructure::Parsers::XHTMLContentParser.new(raw)
+                           end)
 
         # Domain event bus (eagerly capture event_bus to avoid repeated resolves)
         eb = container.resolve(:event_bus)
@@ -160,6 +188,19 @@ module EbookReader
         container.register_singleton(:wrapping_service) { |c| Domain::Services::WrappingService.new(c) }
         container.register_singleton(:formatting_service) { |c| Domain::Services::FormattingService.new(c) }
         container.register_factory(:settings_service) { |c| Domain::Services::SettingsService.new(c) }
+
+        container.register_singleton(:cache_service) { |c| Domain::Services::CacheService.new(c) }
+        container.register_singleton(:file_writer) { |c| Domain::Services::FileWriterService.new(c) }
+        container.register_singleton(:instrumentation_service) { |c| Domain::Services::InstrumentationService.new(c) }
+        container.register_singleton(:path_service) { |c| Domain::Services::PathService.new(c) }
+
+        container.register_factory(:pagination_cache_preloader) do |c|
+          EbookReader::Application::PaginationCachePreloader.new(
+            state: c.resolve(:global_state),
+            page_calculator: c.resolve(:page_calculator),
+            pagination_cache: c.resolve(:pagination_cache)
+          )
+        end
 
         # Notifications
         container.register_singleton(:notification_service) { |c| Domain::Services::NotificationService.new(c) }
@@ -212,6 +253,13 @@ module EbookReader
                                                                   current_state: {}))
         container.register(:logger,
                            RSpec::Mocks::Double.new('Logger', info: nil, error: nil, debug: nil))
+        container.register(:atomic_file_writer, Infrastructure::AtomicFileWriter)
+        container.register(:cache_paths, Infrastructure::CachePaths)
+        container.register(:epub_cache_factory, lambda { |path| Infrastructure::EpubCache.new(path) })
+        container.register(:epub_cache_predicate, lambda { |path| Infrastructure::EpubCache.cache_file?(path) })
+        container.register(:file_writer, Domain::Services::FileWriterService.new(container))
+        container.register(:path_service, Domain::Services::PathService.new(container))
+        container.register(:instrumentation_service, Domain::Services::InstrumentationService.new(container))
 
         # Provide a domain event bus backed by the mocked infrastructure bus
         container.register(:domain_event_bus, Domain::Events::DomainEventBus.new(container.resolve(:event_bus)))

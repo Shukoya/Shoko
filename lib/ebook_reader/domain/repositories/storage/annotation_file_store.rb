@@ -4,7 +4,7 @@ require 'json'
 require 'fileutils'
 require 'time'
 require_relative '../../../constants'
-require_relative '../../../infrastructure/atomic_file_writer'
+# Domain storage helpers should operate via injected services to avoid reaching into infrastructure.
 
 module EbookReader
   module Domain
@@ -13,6 +13,11 @@ module EbookReader
         # File-backed annotation storage under Domain.
         # Persists annotations to ~/.config/reader/annotations.json
         class AnnotationFileStore
+          def initialize(file_writer:, path_service:)
+            @file_writer = file_writer
+            @path_service = path_service
+          end
+
           def all
             load_all
           rescue StandardError
@@ -81,6 +86,8 @@ module EbookReader
 
           private
 
+          attr_reader :file_writer, :path_service
+
           def load_all
             return {} unless File.exist?(file_path)
 
@@ -89,11 +96,11 @@ module EbookReader
 
           def save_all(data)
             payload = JSON.pretty_generate(data)
-            EbookReader::Infrastructure::AtomicFileWriter.write(file_path, payload)
+            file_writer.write(file_path, payload)
           end
 
           def file_path
-            File.join(File.expand_path('~/.config/reader'), 'annotations.json')
+            path_service.reader_config_path('annotations.json')
           end
         end
       end

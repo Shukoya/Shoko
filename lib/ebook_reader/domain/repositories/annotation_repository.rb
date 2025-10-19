@@ -26,7 +26,9 @@ module EbookReader
       class AnnotationRepository < BaseRepository
         def initialize(dependencies)
           super
-          @storage = Storage::AnnotationFileStore.new
+          file_writer = dependencies.resolve(:file_writer)
+          path_service = dependencies.resolve(:path_service)
+          @storage = Storage::AnnotationFileStore.new(file_writer:, path_service:)
         end
 
         # Add a new annotation for a specific book

@@ -6,27 +6,11 @@ RSpec.describe EbookReader::ReaderController do
   before do
     mock_terminal(width: 80, height: 24)
 
-    # Stub DocumentService to avoid filesystem and provide many lines
-    stub_const('EbookReader::Infrastructure::DocumentService', Class.new do
-      FakeChapter = Struct.new(:title, :lines)
-      class FakeDoc
-        def initialize(ch) = (@ch = ch)
-        def chapter_count = 1
-        def chapters = [@ch]
-        def get_chapter(_i) = @ch
-        def title = 'Doc'
-        def language = 'en'
-      end
-
-      def initialize(_path); end
-
-      def load_document
-        # generate 500 words so wrapping works
-        text = (1..500).map { |i| "word#{i}" }.each_slice(10).map { |arr| arr.join(' ') }
-        ch = FakeChapter.new('Ch1', text)
-        FakeDoc.new(ch)
-      end
-    end)
+    # generate 500 words so wrapping works
+    text = (1..500).map { |i| "word#{i}" }.each_slice(10).map { |arr| arr.join(' ') }
+    chapter_struct = Struct.new(:title, :lines)
+    chapters = [chapter_struct.new('Ch1', text)]
+    stub_document_service(chapters:)
   end
 
   it 'prefetches ±20 pages around current page when fetching window' do

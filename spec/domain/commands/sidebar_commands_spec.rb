@@ -11,6 +11,7 @@ RSpec.describe EbookReader::Domain::Commands::SidebarCommand do
     allow(container).to receive(:resolve).with(:state_store).and_return(state_store)
     ui = double('UI', sidebar_up: nil, sidebar_down: nil, sidebar_select: nil)
     allow(container).to receive(:resolve).with(:ui_controller).and_return(ui)
+    allow(container).to receive(:resolve).with(:logger).and_return(nil)
   end
 
   it 'invokes UI controller for down action' do

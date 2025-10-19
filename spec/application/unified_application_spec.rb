@@ -9,6 +9,7 @@ RSpec.describe EbookReader::Application::UnifiedApplication do
       term = instance_double(EbookReader::Domain::Services::TerminalService)
 
       allow(EbookReader::Domain::ContainerFactory).to receive(:create_default_container).and_return(deps)
+      allow(deps).to receive(:resolve).with(:instrumentation_service).and_return(nil)
       allow(deps).to receive(:resolve).with(:terminal_service).and_return(term)
       allow(term).to receive(:setup)
       allow(term).to receive(:cleanup)
@@ -26,6 +27,7 @@ RSpec.describe EbookReader::Application::UnifiedApplication do
     it 'opens menu mode and runs main menu without terminal setup' do
       deps = instance_double(EbookReader::Domain::DependencyContainer)
       allow(EbookReader::Domain::ContainerFactory).to receive(:create_default_container).and_return(deps)
+      allow(deps).to receive(:resolve).with(:instrumentation_service).and_return(nil)
 
       menu_double = instance_double('MainMenu', run: true)
       menu_class = class_double('EbookReader::MainMenu').as_stubbed_const
@@ -39,6 +41,7 @@ RSpec.describe EbookReader::Application::UnifiedApplication do
       deps = instance_double(EbookReader::Domain::DependencyContainer)
       term = instance_double(EbookReader::Domain::Services::TerminalService)
       allow(EbookReader::Domain::ContainerFactory).to receive(:create_default_container).and_return(deps)
+      allow(deps).to receive(:resolve).with(:instrumentation_service).and_return(nil)
       allow(deps).to receive(:resolve).with(:terminal_service).and_return(term)
       allow(term).to receive(:setup)
       expect(term).to receive(:cleanup).once

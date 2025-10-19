@@ -13,7 +13,8 @@ module EbookReader
       # Execute startup sequence using the controller as context
       # @param controller [EbookReader::ReaderController]
       def start(controller)
-        Infrastructure::PerformanceMonitor.time('startup.reader') do
+        instrumentation = instrumentation_service
+        wrap_with_instrumentation(instrumentation, 'startup.reader') do
           state = controller.state
           page_calculator = controller.page_calculator
           doc = controller.doc
@@ -29,22 +30,10 @@ module EbookReader
           sc = safe_resolve_state_controller
           sc&.load_progress
 
-          # For cached books in dynamic mode, try to load pagination cache synchronously
-          begin
-            if doc.respond_to?(:cached?) && doc.cached? &&
-               EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(state) == :dynamic
-              view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
-              line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
-              key = EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode,
-                                                                            line_spacing)
-              if EbookReader::Infrastructure::PaginationCache.exists_for_document?(doc, key)
-                page_calculator.build_dynamic_map!(width, height, doc, state)
-                page_calculator.apply_pending_precise_restore!(state)
-                controller.clear_defer_page_map!
-              end
-            end
-          rescue StandardError
-            # ignore; fall back to deferred build
+          if doc.respond_to?(:cached?) && doc.cached?
+            preloader = resolve_pagination_preloader(state, page_calculator)
+            result = preloader&.preload(doc, width:, height:)
+            controller.clear_defer_page_map! if result && result.status == :hit
           end
 
           # Perform initial calculations if needed
@@ -65,6 +54,22 @@ module EbookReader
       end
 
       private
+
+      def wrap_with_instrumentation(instrumentation, metric)
+        if instrumentation
+          instrumentation.time(metric) { yield }
+        else
+          yield
+        end
+      end
+
+      def instrumentation_service
+        @instrumentation_service ||= begin
+          @dependencies.resolve(:instrumentation_service)
+        rescue StandardError
+          nil
+        end
+      end
 
       def safe_resolve_state_controller
         @dependencies.resolve(:state_controller)
@@ -92,6 +97,14 @@ module EbookReader
         return nil unless @dependencies.respond_to?(:resolve)
 
         @dependencies.resolve(:background_worker)
+      rescue StandardError
+        nil
+      end
+
+      def resolve_pagination_preloader(_state, _page_calculator)
+        return nil unless @dependencies.respond_to?(:resolve)
+
+        @dependencies.resolve(:pagination_cache_preloader)
       rescue StandardError
         nil
       end

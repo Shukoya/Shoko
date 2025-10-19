@@ -174,15 +174,9 @@ module EbookReader
         action = @available_actions[index]
 
         # Colors
-        if is_selected
-          bg = POPUP_BG_SELECTED
-          fg = POPUP_FG_SELECTED
-          sel_icon = '❯'
-        else
-          bg = POPUP_BG_DEFAULT
-          fg = POPUP_FG_DEFAULT
-          sel_icon = ' '
-        end
+        sel_icon = is_selected ? '❯' : ' '
+        bg = is_selected ? POPUP_BG_SELECTED : POPUP_BG_DEFAULT
+        fg = is_selected ? POPUP_FG_SELECTED : POPUP_FG_DEFAULT
 
         # Background
         surface.write(bounds, item_y, @x, "#{bg}#{' ' * @width}#{Terminal::ANSI::RESET}")

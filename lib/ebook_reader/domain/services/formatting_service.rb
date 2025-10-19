@@ -5,7 +5,6 @@ require 'digest/sha1'
 require_relative 'base_service'
 require_relative '../models/content_block'
 require_relative '../../helpers/text_metrics'
-require_relative '../../infrastructure/parsers/xhtml_content_parser'
 
 module EbookReader
   module Domain
@@ -20,6 +19,16 @@ module EbookReader
           super
           @chapter_cache = {}
           @wrapped_cache = Hash.new { |h, k| h[k] = {} }
+          @parser_factory = begin
+            resolve(:xhtml_parser_factory)
+          rescue StandardError
+            nil
+          end
+          @logger = begin
+            resolve(:logger)
+          rescue StandardError
+            nil
+          end
         end
 
         # Ensure the provided chapter has semantic blocks + plain lines.
@@ -42,7 +51,9 @@ module EbookReader
 
           return cached unless raw
 
-          parser = EbookReader::Infrastructure::Parsers::XHTMLContentParser.new(raw)
+          parser = build_parser(raw)
+          return cached unless parser
+
           blocks = parser.parse
           formatted = FormattedChapter.new(
             blocks: blocks,
@@ -56,7 +67,7 @@ module EbookReader
         rescue EbookReader::FormattingError
           raise
         rescue StandardError => e
-          Infrastructure::Logger.error('Formatting service failed', error: e.message)
+          @logger&.error('Formatting service failed', error: e.message)
           nil
         end
 
@@ -130,6 +141,14 @@ module EbookReader
         def chapter_cache_key(document, chapter_index)
           source = document.respond_to?(:canonical_path) ? document.canonical_path : document.object_id
           "#{source}:#{chapter_index}"
+        end
+
+        def build_parser(raw)
+          return nil unless @parser_factory.respond_to?(:call)
+
+          @parser_factory.call(raw)
+        rescue StandardError
+          nil
         end
 
         def build_plain_lines(blocks)

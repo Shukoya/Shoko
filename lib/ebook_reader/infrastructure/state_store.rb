@@ -101,6 +101,12 @@ module EbookReader
                })
       end
 
+      def apply_terminal_dimensions(width, height)
+        return unless width && height
+
+        update_terminal_size(width, height)
+      end
+
       # State snapshot for persistence
       def reader_snapshot
         {
@@ -219,7 +225,7 @@ module EbookReader
             page_numbering_mode: :dynamic,
             theme: :dark,
             show_page_numbers: true,
-            highlight_quotes: false,
+            highlight_quotes: true,
             highlight_keywords: false,
             prefetch_pages: 20,
           },

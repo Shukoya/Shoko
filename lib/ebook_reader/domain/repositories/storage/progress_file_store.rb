@@ -5,7 +5,7 @@ require 'fileutils'
 require 'time'
 require_relative '../../../constants'
 require_relative 'file_store_utils'
-require_relative '../../../infrastructure/atomic_file_writer'
+# Domain storage helpers should operate via injected services to avoid reaching into infrastructure.
 
 module EbookReader
   module Domain
@@ -14,6 +14,11 @@ module EbookReader
         # File-backed progress storage under Domain.
         # Persists progress to ~/.config/reader/progress.json
         class ProgressFileStore
+          def initialize(file_writer:, path_service:)
+            @file_writer = file_writer
+            @path_service = path_service
+          end
+
           def save(path, chapter_index, line_offset)
             all = load_all
             all[path.to_s] = {
@@ -40,13 +45,15 @@ module EbookReader
 
           private
 
+          attr_reader :file_writer, :path_service
+
           def save_all(data)
             payload = JSON.pretty_generate(data)
-            EbookReader::Infrastructure::AtomicFileWriter.write(file_path, payload)
+            file_writer.write(file_path, payload)
           end
 
           def file_path
-            File.join(File.expand_path('~/.config/reader'), EbookReader::Constants::PROGRESS_FILE)
+            path_service.reader_config_path(EbookReader::Constants::PROGRESS_FILE)
           end
         end
       end

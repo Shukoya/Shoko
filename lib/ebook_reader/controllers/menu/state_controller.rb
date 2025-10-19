@@ -3,7 +3,6 @@
 require_relative '../../mouseable_reader'
 require_relative '../../application/pagination_orchestrator'
 require_relative '../../main_menu/menu_progress_presenter'
-require_relative '../../infrastructure/background_worker'
 
 module EbookReader
   module Controllers
@@ -69,25 +68,19 @@ module EbookReader
         end
 
         def handle_reader_error(path, error)
-          Infrastructure::Logger.error('Failed to open book', error: error.message, path: path)
+          logger&.error('Failed to open book', error: error.message, path: path)
           catalog.scan_message = "Failed: #{error.class}: #{error.message[0, 60]}"
           catalog.scan_status = :error
 
           return unless EPUBFinder::DEBUG_MODE
 
-          Infrastructure::Logger.debug('Reader error backtrace',
-                                       path: path,
-                                       backtrace: Array(error.backtrace).join("\n"))
+          logger&.debug('Reader error backtrace',
+                        path: path,
+                        backtrace: Array(error.backtrace).join("\n"))
         end
 
         def valid_cache_path?(path)
-          return false unless path && File.file?(path)
-          return false unless EbookReader::Infrastructure::EpubCache.cache_file?(path)
-
-          cache = EbookReader::Infrastructure::EpubCache.new(path)
-          !!cache.read_cache(strict: true)
-        rescue EbookReader::Error, StandardError
-          false
+          cache_service&.valid_cache?(path) || false
         end
 
         def sanitize_input_path(input)
@@ -105,7 +98,7 @@ module EbookReader
       def handle_file_path(path)
         return invalid_file_path unless File.exist?(path)
 
-        if path.downcase.end_with?('.epub') || EbookReader::Infrastructure::EpubCache.cache_file?(path)
+        if path.downcase.end_with?('.epub') || cache_service&.cache_file?(path)
           recent_path = canonical_recent_path(path)
           recent_repository&.add(recent_path) if recent_path
           run_reader(path)
@@ -180,24 +173,40 @@ module EbookReader
           @progress_presenter ||= EbookReader::MainMenu::MenuProgressPresenter.new(state)
         end
 
-      def recent_repository
-        @recent_repository ||= begin
-          dependencies.resolve(:recent_library_repository)
+        def cache_service
+          @cache_service ||= resolve_optional(:cache_service)
+        end
+
+        def logger
+          @logger ||= resolve_optional(:logger)
+        end
+
+        def resolve_optional(name)
+          dependencies.resolve(name)
         rescue StandardError
           nil
         end
-      end
 
-      def canonical_recent_path(path)
-        return path unless path && EbookReader::Infrastructure::EpubCache.cache_file?(path)
+        def build_background_worker(name:)
+          factory = resolve_optional(:background_worker_factory)
+          return nil unless factory.respond_to?(:call)
 
-        cache = EbookReader::Infrastructure::EpubCache.new(path)
-        payload = cache.read_cache(strict: false)
-        source = payload&.source_path
-        source && !source.empty? ? source : path
-      rescue EbookReader::Error, StandardError
-        path
-      end
+          factory.call(name:)
+        rescue StandardError
+          nil
+        end
+
+        def recent_repository
+          @recent_repository ||= begin
+            dependencies.resolve(:recent_library_repository)
+          rescue StandardError
+            nil
+          end
+        end
+
+        def canonical_recent_path(path)
+          cache_service&.canonical_source_path(path) || path
+        end
 
         def prepare_reader_launch(path, presenter)
           width, height = terminal_service.size
@@ -207,6 +216,7 @@ module EbookReader
           if document_cached?(document)
             register_document(document)
             update_total_chapters(document)
+            preload_cached_pagination(document, width, height)
             return path
           end
 
@@ -257,10 +267,10 @@ module EbookReader
         end
 
         def ensure_background_worker
-          return if dependencies.registered?(:background_worker)
+          return if resolve_optional(:background_worker)
 
-          worker = EbookReader::Infrastructure::BackgroundWorker.new(name: 'document-preload')
-          dependencies.register(:background_worker, worker)
+          worker = build_background_worker(name: 'document-preload')
+          dependencies.register(:background_worker, worker) if worker
         rescue StandardError
           nil
         end
@@ -268,6 +278,7 @@ module EbookReader
         def build_pagination(document, width, height, presenter)
           calculator = page_calculator
           return unless calculator
+          return unless width && height
 
           @pagination_orchestrator.build_full_map!(document, state, calculator, [width, height]) do |done, total|
             presenter.update(done: done, total: total)
@@ -287,6 +298,21 @@ module EbookReader
         def page_calculator
           @page_calculator ||= dependencies.resolve(:page_calculator)
         rescue StandardError
+          nil
+        end
+
+        def preload_cached_pagination(document, width, height)
+          preloader = resolve_optional(:pagination_cache_preloader)
+          return unless preloader
+
+          preloader.preload(document, width:, height:)
+        rescue StandardError => e
+          begin
+            logger&.debug('StateController: cached pagination preload failed',
+                          error: e.message, path: @path)
+          rescue StandardError
+            nil
+          end
           nil
         end
 

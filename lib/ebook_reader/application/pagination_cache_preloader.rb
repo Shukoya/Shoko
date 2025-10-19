@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative '../infrastructure/pagination_cache'
-
 module EbookReader
   module Application
     # Centralises the logic for hydrating dynamic pagination from the cache.
@@ -9,7 +7,7 @@ module EbookReader
       Result = Struct.new(:status, :key, keyword_init: true)
       private_constant :Result
 
-      def initialize(state:, page_calculator:, pagination_cache: Infrastructure::PaginationCache)
+      def initialize(state:, page_calculator:, pagination_cache:)
         @state = state
         @page_calculator = page_calculator
         @pagination_cache = pagination_cache
@@ -22,10 +20,20 @@ module EbookReader
         height = resolve_height(height)
         return Result.new(status: :no_calculator) unless page_calculator
 
-        key = layout_key(width, height)
-        return Result.new(status: :miss, key:) unless pagination_cache.exists_for_document?(doc, key)
+        key, view_mode, line_spacing = build_layout_key(width, height)
 
-        apply_layout_config(width, height)
+        unless pagination_cache.exists_for_document?(doc, key)
+          fallback = find_fallback_key(doc)
+          return Result.new(status: :miss, key:) unless fallback
+
+          width = fallback[:width]
+          height = fallback[:height]
+          view_mode = fallback[:view_mode]
+          line_spacing = fallback[:line_spacing]
+          key = fallback[:key]
+        end
+
+        apply_layout_config(width, height, view_mode, line_spacing)
 
         page_calculator.build_dynamic_map!(width, height, doc, state)
         page_calculator.apply_pending_precise_restore!(state)
@@ -51,18 +59,28 @@ module EbookReader
         EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(state) == :dynamic
       end
 
-      def layout_key(width, height)
-        view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
-        line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
-        pagination_cache.layout_key(width, height, view_mode, line_spacing)
+      def build_layout_key(width, height)
+        view_mode = current_view_mode
+        line_spacing = current_line_spacing
+        key = pagination_cache.layout_key(width, height, view_mode, line_spacing)
+        [key, view_mode, line_spacing]
       end
 
-      def apply_layout_config(width, height)
+      def apply_layout_config(width, height, view_mode, line_spacing)
         if state.respond_to?(:apply_terminal_dimensions)
           state.apply_terminal_dimensions(width, height)
         elsif state.respond_to?(:update)
           state.update({ %i[ui terminal_width] => width, %i[ui terminal_height] => height })
         end
+
+        update_config(view_mode, line_spacing)
+      end
+
+      def update_config(view_mode, line_spacing)
+        updates = {}
+        updates[%i[config view_mode]] = view_mode if view_mode
+        updates[%i[config line_spacing]] = line_spacing if line_spacing
+        state.update(updates) unless updates.empty?
       end
 
       def log_failure(error)
@@ -74,6 +92,29 @@ module EbookReader
           nil
         end
         logger&.debug('PaginationCachePreloader: failed', error: error.message)
+      end
+
+      def find_fallback_key(doc)
+        keys = pagination_cache.layout_keys_for_document(doc)
+        return nil if keys.empty?
+
+        preferred = keys.find do |candidate|
+          parsed = pagination_cache.parse_layout_key(candidate)
+          parsed && parsed[:view_mode] == current_view_mode && parsed[:line_spacing] == current_line_spacing
+        end
+        key = preferred || keys.first
+        parsed = pagination_cache.parse_layout_key(key)
+        return nil unless parsed
+
+        parsed.merge(key: key)
+      end
+
+      def current_view_mode
+        EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
+      end
+
+      def current_line_spacing
+        EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
       end
     end
   end

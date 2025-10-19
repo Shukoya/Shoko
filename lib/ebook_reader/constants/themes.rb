@@ -8,6 +8,7 @@ module EbookReader
       DEFAULT_PALETTE = {
         primary: Terminal::ANSI::WHITE,
         accent: Terminal::ANSI::BRIGHT_CYAN,
+        heading: Terminal::ANSI::BRIGHT_GREEN,
         dim: Terminal::ANSI::DIM,
         quote: Terminal::ANSI::LIGHT_GREY,
         code: Terminal::ANSI::YELLOW,

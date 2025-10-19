@@ -6,7 +6,7 @@ require_relative '../../../constants'
 require_relative '../../models/bookmark'
 require_relative '../../models/bookmark_data'
 require_relative 'file_store_utils'
-require_relative '../../../infrastructure/atomic_file_writer'
+# Domain storage helpers should operate via injected services to avoid reaching into infrastructure.
 
 module EbookReader
   module Domain
@@ -15,6 +15,11 @@ module EbookReader
         # File-backed bookmark storage isolated under Domain.
         # Persists bookmarks to ~/.config/reader/bookmarks.json
         class BookmarkFileStore
+          def initialize(file_writer:, path_service:)
+            @file_writer = file_writer
+            @path_service = path_service
+          end
+
           def add(bookmark_data)
             unless bookmark_data.is_a?(EbookReader::Domain::Models::BookmarkData)
               raise ArgumentError, 'bookmark_data must be BookmarkData'
@@ -67,6 +72,8 @@ module EbookReader
 
           private
 
+          attr_reader :file_writer, :path_service
+
           def equivalent?(h, target)
             h['chapter'] == target['chapter'] &&
               h['line_offset'] == target['line_offset'] &&
@@ -79,11 +86,11 @@ module EbookReader
 
           def save_all(data)
             payload = JSON.pretty_generate(data)
-            EbookReader::Infrastructure::AtomicFileWriter.write(file_path, payload)
+            file_writer.write(file_path, payload)
           end
 
           def file_path
-            File.join(File.expand_path('~/.config/reader'), EbookReader::Constants::BOOKMARKS_FILE)
+            path_service.reader_config_path(EbookReader::Constants::BOOKMARKS_FILE)
           end
         end
       end

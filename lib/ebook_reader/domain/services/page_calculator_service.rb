@@ -7,7 +7,6 @@ require_relative 'internal/page_hydrator'
 require_relative 'internal/pagination_workflow'
 require_relative 'internal/layout_metrics_calculator'
 require_relative '../../helpers/text_metrics'
-require_relative '../../infrastructure/perf_tracer'
 
 module EbookReader
   module Domain
@@ -30,9 +29,20 @@ module EbookReader
           @cache = {}
           @pages_data = []
           @metrics_calculator = Internal::LayoutMetricsCalculator.new(@state_store)
+          @pagination_cache = begin
+            resolve(:pagination_cache)
+          rescue StandardError
+            nil
+          end
+          @instrumentation = begin
+            resolve(:instrumentation_service)
+          rescue StandardError
+            nil
+          end
           @pagination_workflow = Internal::PaginationWorkflow.new(
             metrics_calculator: @metrics_calculator,
-            dependencies: @dependencies
+            dependencies: @dependencies,
+            pagination_cache: @pagination_cache
           )
           @page_hydrator = Internal::PageHydrator.new(
             state_store: @state_store,
@@ -65,7 +75,7 @@ module EbookReader
           return page if page[:lines]
 
           # Lazily populate lines when loaded from cache (compact format)
-          Infrastructure::PerfTracer.measure('page_map.hydrate') do
+          measure_with_instrumentation('page_map.hydrate') do
             cs = @state_store.current_state
             width  = cs.dig(:ui, :terminal_width) || 80
             height = cs.dig(:ui, :terminal_height) || 24
@@ -79,33 +89,24 @@ module EbookReader
             rescue StandardError
               nil
             end
-            doc = @doc_ref
-            if doc.nil?
-              begin
-                doc = @dependencies&.resolve(:document)
-              rescue StandardError
-                doc = nil
-              end
-            end
+            doc = resolve_document_reference
             ch_i = page[:chapter_index].to_i
-            chapter = doc&.get_chapter(ch_i)
-            raw_lines = chapter&.lines || []
-            lines = if wrapper
-                      res = wrapper.wrap_window(raw_lines, ch_i, col_width, start_i, len)
-                      # Fallback to raw slicing if wrapper unexpectedly returns empty
-                      if res.nil? || res.empty?
-                        candidate = raw_lines[start_i, len] || []
-                        if candidate.empty? && defined?(RSpec)
-                          # Synthesize deterministic lines for tests when using fake docs
-                          (start_i..end_i).map { |i| "L#{i}" }
+            formatting_lines = wrap_with_formatting(doc, ch_i, col_width, start_i, len)
+            lines = if formatting_lines && !formatting_lines.empty?
+                      formatting_lines
+                    else
+                      wrapper = resolve_wrapping_service
+                      raw_lines = (doc&.get_chapter(ch_i)&.lines) || []
+                      if wrapper
+                        res = wrapper.wrap_window(raw_lines, ch_i, col_width, start_i, len)
+                        if res.nil? || res.empty?
+                          fallback_lines(raw_lines, start_i, end_i, len)
                         else
-                          candidate
+                          res
                         end
                       else
-                        res
+                        DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[start_i, len] || []
                       end
-                    else
-                      DefaultTextWrapper.new.wrap_chapter_lines(raw_lines, col_width)[start_i, len] || []
                     end
             page.merge(lines: lines)
           rescue StandardError
@@ -351,6 +352,54 @@ module EbookReader
           }
         end
 
+        def resolve_document_reference
+          return @doc_ref if @doc_ref
+
+          @dependencies&.resolve(:document)
+        rescue StandardError
+          nil
+        end
+
+        def wrap_with_formatting(doc, chapter_index, width, offset, length)
+          return nil unless doc && width.positive? && length.positive?
+
+          formatting = resolve_formatting_service
+          return nil unless formatting
+
+          formatting.wrap_window(doc, chapter_index, width, offset, length)
+        rescue StandardError
+          nil
+        end
+
+        def resolve_formatting_service
+          return @formatting_service if defined?(@formatting_service)
+
+          @formatting_service = begin
+            @dependencies&.resolve(:formatting_service)
+          rescue StandardError
+            nil
+          end
+        end
+
+        def resolve_wrapping_service
+          return @wrapping_service if defined?(@wrapping_service)
+
+          @wrapping_service = begin
+            @dependencies&.resolve(:wrapping_service)
+          rescue StandardError
+            nil
+          end
+        end
+
+        def fallback_lines(raw_lines, start_i, end_i, len)
+          candidate = raw_lines[start_i, len] || []
+          if candidate.empty? && defined?(RSpec)
+            (start_i..end_i).map { |i| "L#{i}" }
+          else
+            candidate
+          end
+        end
+
         def calculate_line_range(page_data)
           start_line = page_data.page_idx * page_data.lines_per_page
           end_line = calculate_end_line(start_line, page_data)
@@ -442,7 +491,17 @@ module EbookReader
 
         private
 
+        def measure_with_instrumentation(metric)
+          if @instrumentation
+            @instrumentation.time(metric) { yield }
+          else
+            yield
+          end
+        end
+
         def pagination_layout_key(width, height, config)
+          return nil unless @pagination_cache
+
           view_mode = begin
             EbookReader::Domain::Selectors::ConfigSelectors.view_mode(config)
           rescue StandardError
@@ -450,8 +509,8 @@ module EbookReader
           end
           view_mode ||= (config.respond_to?(:get) ? config.get(%i[reader view_mode]) : :single)
           line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config) || EbookReader::Constants::DEFAULT_LINE_SPACING
-          EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode,
-                                                                  line_spacing)
+          @pagination_cache.layout_key(width, height, view_mode,
+                                       line_spacing)
         end
 
         def compact_pages(pages)

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_view_renderer'
+require_relative '../render_style'
 
 module EbookReader
   module Components
@@ -92,19 +93,25 @@ module EbookReader
           reset = Terminal::ANSI::RESET
           header_col = bounds.x + LEFT_MARGIN
           available = bounds.width - LEFT_MARGIN - RIGHT_MARGIN
-          surface.write(bounds, 1, header_col,
-                        EbookReader::Constants::UIConstants::COLOR_TEXT_ACCENT + info[0, available].to_s + reset)
+          heading_color = EbookReader::Components::RenderStyle.color(:heading)
+          surface.write(bounds, 1, header_col, heading_color + info[0, available].to_s + reset)
         end
 
         def render_dynamic_from_page_data(surface, bounds, context, col_width, left_start,
                                           right_start, divider_param, left_pd, right_pd)
-          render_column_lines(surface, bounds, left_pd[:lines], left_start, col_width, context,
+          left_lines = left_pd[:lines]
+          left_lines ||= fetch_wrapped_lines(context, col_width, left_pd[:start_line].to_i,
+                                             page_span_length(left_pd))
+          render_column_lines(surface, bounds, left_lines, left_start, col_width, context,
                               column_id: 0, line_offset: left_pd[:start_line].to_i,
                               page_id: context.current_page_index)
           draw_divider(surface, bounds, divider_param)
           return unless right_pd
 
-          render_column_lines(surface, bounds, right_pd[:lines], right_start, col_width, context,
+          right_lines = right_pd[:lines]
+          right_lines ||= fetch_wrapped_lines(context, col_width, right_pd[:start_line].to_i,
+                                              page_span_length(right_pd))
+          render_column_lines(surface, bounds, right_lines, right_start, col_width, context,
                               column_id: 1, line_offset: right_pd[:start_line].to_i,
                               page_id: context.current_page_index ? context.current_page_index + 1 : nil)
         end
@@ -144,6 +151,13 @@ module EbookReader
           st = context.state
           chapter_index = st.get(%i[reader current_chapter]) || 0
           super(context.document, chapter_index, col_width, offset, length)
+        end
+
+        def page_span_length(page_data)
+          start_line = page_data[:start_line].to_i
+          end_line = page_data[:end_line].to_i
+          span = end_line - start_line + 1
+          [span, 1].max
         end
 
         def split_layout(bounds, config)

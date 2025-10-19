@@ -21,9 +21,6 @@ require_relative 'input/dispatcher'
 require_relative 'application/frame_coordinator'
 require_relative 'application/render_pipeline'
 require_relative 'application/pending_jump_handler'
-require_relative 'infrastructure/performance_monitor'
-require_relative 'infrastructure/perf_tracer'
-require_relative 'infrastructure/background_worker'
 
 module EbookReader
   # Coordinator class for the reading experience.
@@ -49,7 +46,7 @@ module EbookReader
 
     attr_reader :doc, :path, :state, :page_calculator, :dependencies,
                 :terminal_service, :input_controller, :metrics_start_time,
-                :background_worker
+                :background_worker, :instrumentation
 
     # Navigation is handled via Domain::NavigationService through input commands
 
@@ -77,16 +74,11 @@ module EbookReader
       @clipboard_service = @dependencies.resolve(:clipboard_service)
       @terminal_service = @dependencies.resolve(:terminal_service)
       @wrapping_service = @dependencies.resolve(:wrapping_service) if @dependencies.registered?(:wrapping_service)
-      @background_worker = if @dependencies.registered?(:background_worker)
-                             begin
-                               @dependencies.resolve(:background_worker)
-                             rescue StandardError
-                               nil
-                             end
-                           end
+      @instrumentation = resolve_optional(:instrumentation_service)
+      @background_worker = resolve_existing(:background_worker)
       unless @background_worker
-        @background_worker = Infrastructure::BackgroundWorker.new(name: 'reader-background')
-        @dependencies.register(:background_worker, @background_worker)
+        @background_worker = build_background_worker(name: 'reader-background')
+        @dependencies.register(:background_worker, @background_worker) if @background_worker
       end
 
       # Load document before creating controllers that depend on it
@@ -136,6 +128,9 @@ module EbookReader
       if @doc.respond_to?(:cached?) && @doc.cached?
         @pending_initial_calculation = false
         @defer_page_map = true
+        if @page_calculator && @page_calculator.total_pages.to_i.positive?
+          @defer_page_map = false
+        end
       else
         @defer_page_map = false
       end
@@ -211,23 +206,22 @@ module EbookReader
     end
 
     def perform_first_paint
-      Infrastructure::PerformanceMonitor.time('render.first_paint') { draw_screen }
+      instrumentation&.time('render.first_paint') { draw_screen }
       unless metrics_start_time
-        Infrastructure::PerfTracer.cancel
+        instrumentation&.cancel_trace
         return
       end
 
       first_paint_completed_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       ttfp = first_paint_completed_at - metrics_start_time
-      Infrastructure::PerformanceMonitor.record_metric('render.first_paint.ttfp', ttfp, 0)
-
-      Infrastructure::PerfTracer.record('render.first_paint.ttfp', ttfp)
+      instrumentation&.record_metric('render.first_paint.ttfp', ttfp, 0)
+      instrumentation&.record_trace('render.first_paint.ttfp', ttfp)
       open_type = if @doc.respond_to?(:cached?) && @doc.cached?
                     'warm'
                   else
                     'cold'
                   end
-      Infrastructure::PerfTracer.complete(open_type:, total_duration: ttfp)
+      instrumentation&.complete_trace(open_type:, total_duration: ttfp)
     end
 
     def dispatch_input_keys(keys)
@@ -257,7 +251,7 @@ module EbookReader
 
     # Main application loop
     def main_loop
-      ReaderEventLoop.new(self, @state, @metrics_start_time).run
+      ReaderEventLoop.new(self, @state, @metrics_start_time, instrumentation).run
     end
 
     # Page calculation and navigation support
@@ -351,6 +345,27 @@ module EbookReader
     end
 
     private
+
+    def resolve_optional(service_name)
+      return @dependencies.resolve(service_name) if @dependencies.registered?(service_name)
+
+      nil
+    rescue StandardError
+      nil
+    end
+
+    def resolve_existing(service_name)
+      resolve_optional(service_name)
+    end
+
+    def build_background_worker(name:)
+      factory = resolve_optional(:background_worker_factory)
+      return nil unless factory.respond_to?(:call)
+
+      factory.call(name:)
+    rescue StandardError
+      nil
+    end
 
     def preload_document_from_dependencies
       return nil unless @dependencies.respond_to?(:registered?) && @dependencies.registered?(:document)
@@ -626,10 +641,11 @@ module EbookReader
 
     # Encapsulates the main reader event loop to tame ReaderController complexity.
     class ReaderEventLoop
-      def initialize(controller, state, metrics_start_time)
+      def initialize(controller, state, metrics_start_time, instrumentation)
         @controller = controller
         @state = state
         @metrics_start_time = metrics_start_time
+        @instrumentation = instrumentation
       end
 
       def run
@@ -649,7 +665,7 @@ module EbookReader
 
       private
 
-      attr_reader :controller, :state, :metrics_start_time
+      attr_reader :controller, :state, :metrics_start_time, :instrumentation
 
       def running?
         EbookReader::Domain::Selectors::ReaderSelectors.running?(state)
@@ -659,7 +675,7 @@ module EbookReader
         return true if already_recorded
         return false unless startup_reference && keys.any?
 
-        Infrastructure::PerformanceMonitor.record_metric(
+        instrumentation&.record_metric(
           'render.tti',
           Process.clock_gettime(Process::CLOCK_MONOTONIC) - startup_reference,
           0

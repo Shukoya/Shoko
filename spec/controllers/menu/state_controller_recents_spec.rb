@@ -20,11 +20,21 @@ RSpec.describe EbookReader::Controllers::Menu::StateController do
       allow(dep).to receive(:resolve) do |name|
         case name
         when :recent_library_repository then recent_repository
+        when :cache_service then cache_service
         else
           raise "Unexpected dependency resolve: #{name}"
         end
       end
       allow(dep).to receive(:registered?).and_return(false)
+    end
+  end
+  let(:cache_service) do
+    double('CacheService').tap do |svc|
+      allow(svc).to receive(:valid_cache?).and_return(true)
+      allow(svc).to receive(:cache_file?).and_return(true)
+      allow(svc).to receive(:canonical_source_path) do |path|
+        path == cache_path ? epub_path : path
+      end
     end
   end
   let(:menu) do

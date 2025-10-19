@@ -80,7 +80,7 @@ module EbookReader
 
         label = page_label(current, total)
         col = center_col(width, label.length)
-        write_colored(surface, bounds, row, col, label, ui::COLOR_TEXT_DIM + ui::COLOR_TEXT_SECONDARY)
+        write_colored(surface, bounds, row, col, label, ui::COLOR_TEXT_PRIMARY)
       end
 
       def render_split_page_info(surface, bounds, info, width, row, ui)
@@ -88,17 +88,15 @@ module EbookReader
         right = info[:right]
         return unless left
 
-        dim_secondary = ui::COLOR_TEXT_DIM + ui::COLOR_TEXT_SECONDARY
-
         left_label = page_label(left[:current].to_i, left[:total].to_i)
         left_col = quarter_center_col(width, left_label.length, :left)
-        write_colored(surface, bounds, row, left_col, left_label, dim_secondary) unless left_label.empty?
+        write_colored(surface, bounds, row, left_col, left_label, ui::COLOR_TEXT_PRIMARY) unless left_label.empty?
 
         return unless right
 
         right_label = page_label(right[:current].to_i, right[:total].to_i)
         right_col = quarter_center_col(width, right_label.length, :right)
-        write_colored(surface, bounds, row, right_col, right_label, dim_secondary) unless right_label.empty?
+        write_colored(surface, bounds, row, right_col, right_label, ui::COLOR_TEXT_PRIMARY) unless right_label.empty?
       end
 
       def render_message_overlay(surface, bounds, view_model)

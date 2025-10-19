@@ -47,8 +47,9 @@ module EbookReader
 
           codes = []
           block_type = metadata && metadata[:block_type]
+          highlight_allowed = metadata.key?(:highlight_enabled) ? metadata[:highlight_enabled] : true
 
-          color_code = color_for(styles, block_type)
+          color_code = color_for(styles, block_type, highlight_allowed)
           codes << color_code if color_code
 
           codes << Terminal::ANSI::BOLD if styles[:bold] || block_type == :heading
@@ -60,13 +61,13 @@ module EbookReader
 
         private
 
-        def color_for(styles, block_type)
+        def color_for(styles, block_type, highlight_allowed)
           if styles[:code] || block_type == :code
             color(:code)
           elsif block_type == :heading
-            color(:accent)
+            highlight_allowed ? color(:heading) : color(:primary)
           elsif block_type == :quote || styles[:quote]
-            color(:quote)
+            highlight_allowed ? color(:quote) : color(:primary)
           elsif block_type == :separator
             color(:separator)
           elsif styles[:prefix]

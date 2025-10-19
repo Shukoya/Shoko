@@ -6,11 +6,13 @@ RSpec.describe EbookReader::Domain::Commands::NavigationCommand do
   let(:navigation_service) { instance_double(EbookReader::Domain::Services::NavigationService) }
   let(:state_store) { instance_double(EbookReader::Infrastructure::StateStore) }
   let(:dependencies) { create_test_dependencies }
+  let(:logger) { instance_double('Logger', error: nil, debug: nil) }
   let(:context) { double('Context', dependencies: dependencies) }
 
   before do
     dependencies.register(:navigation_service, navigation_service)
     dependencies.register(:state_store, state_store)
+    dependencies.register(:logger, logger)
   end
 
   describe '#execute' do
@@ -60,7 +62,7 @@ RSpec.describe EbookReader::Domain::Commands::NavigationCommand do
       let(:command) { described_class.new(:invalid_action) }
 
       it 'handles error gracefully' do
-        expect(EbookReader::Infrastructure::Logger).to receive(:error)
+        expect(logger).to receive(:error)
 
         result = command.execute(context)
 

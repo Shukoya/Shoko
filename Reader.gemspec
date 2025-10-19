@@ -33,6 +33,7 @@ Gem::Specification.new do |spec|
   # Runtime dependencies
   spec.add_dependency 'rexml', '~> 3.2'
   spec.add_dependency 'unicode-display_width', '>= 2.4', '< 4.0'
+  spec.add_dependency 'sqlite3', '>= 1.6', '< 2.0'
 
   # Development dependencies are managed in the Gemfile
   spec.metadata['rubygems_mfa_required'] = 'true'

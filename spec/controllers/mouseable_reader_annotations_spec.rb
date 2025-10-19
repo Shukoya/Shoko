@@ -6,25 +6,9 @@ RSpec.describe EbookReader::MouseableReader do
   before do
     mock_terminal(width: 80, height: 24)
 
-    # Stub DocumentService to avoid filesystem
-    stub_const('EbookReader::Infrastructure::DocumentService', Class.new do
-      FakeChapter = Struct.new(:title, :lines)
-      class FakeDoc
-        def initialize(ch) = (@ch = ch)
-        def chapter_count = 1
-        def chapters = [@ch]
-        def get_chapter(_i) = @ch
-        def title = 'Doc'
-        def language = 'en'
-      end
-
-      def initialize(_path); end
-
-      def load_document
-        ch = FakeChapter.new('Ch1', ['l1'])
-        FakeDoc.new(ch)
-      end
-    end)
+    chapter_struct = Struct.new(:title, :lines)
+    chapters = [chapter_struct.new('Ch1', ['l1'])]
+    stub_document_service(chapters: chapters)
   end
 
   it 'uses AnnotationService to refresh annotations during init' do

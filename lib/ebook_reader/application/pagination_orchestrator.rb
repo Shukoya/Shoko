@@ -9,6 +9,11 @@ module EbookReader
         @dependencies = dependencies
         @terminal_service = @dependencies.resolve(:terminal_service)
         @frame_coordinator = Application::FrameCoordinator.new(@dependencies)
+        @pagination_cache = begin
+          @dependencies.resolve(:pagination_cache)
+        rescue StandardError
+          nil
+        end
       end
 
       # Performs the initial pagination calculation with a loading overlay.
@@ -67,16 +72,15 @@ module EbookReader
       # @return [Symbol] :deleted when cache entry removed, :missing when no entry existed,
       #   :error when removal fails.
       def invalidate_cache(doc, state, width:, height:)
-        return :missing unless doc
+        return :missing unless doc && @pagination_cache
 
         view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
         line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
-        key = EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode,
-                                                                      line_spacing)
-        cache = EbookReader::Infrastructure::PaginationCache
-        return :missing unless cache.exists_for_document?(doc, key)
+        key = @pagination_cache.layout_key(width, height, view_mode,
+                                           line_spacing)
+        return :missing unless key && @pagination_cache.exists_for_document?(doc, key)
 
-        cache.delete_for_document(doc, key)
+        @pagination_cache.delete_for_document(doc, key)
         :deleted
       rescue StandardError
         :error
@@ -154,7 +158,11 @@ module EbookReader
       def build_absolute_cache_entry(page_map, state, width, height)
         view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
         line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
-        key = EbookReader::Infrastructure::PaginationCache.layout_key(width, height, view_mode, line_spacing)
+        key = if @pagination_cache
+                @pagination_cache.layout_key(width, height, view_mode, line_spacing)
+              else
+                nil
+              end
         {
           key: key,
           map: page_map,

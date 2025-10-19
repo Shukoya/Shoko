@@ -1,8 +1,26 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'fileutils'
 
 RSpec.describe 'Settings key bindings' do
+  around do |example|
+    Dir.mktmpdir do |dir|
+      old_home = ENV['HOME']
+      old_cache = ENV.fetch('XDG_CACHE_HOME', nil)
+      ENV['HOME'] = dir
+      ENV['XDG_CACHE_HOME'] = File.join(dir, '.cache')
+      example.run
+    ensure
+      ENV['HOME'] = old_home
+      if old_cache
+        ENV['XDG_CACHE_HOME'] = old_cache
+      else
+        ENV.delete('XDG_CACHE_HOME')
+      end
+    end
+  end
+
   it 'calls wipe_cache when confirming the wipe cache option' do
     container = EbookReader::Domain::ContainerFactory.create_default_container
     settings_service = instance_double('SettingsService',

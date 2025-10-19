@@ -43,6 +43,8 @@ module EbookReader
       BG_BLUE = "\e[44m"
       BG_CYAN = "\e[46m"
       BG_GREY = "\e[48;5;240m"
+      BG_SLATE = "\e[48;5;238m"
+      BG_SOFT_GREEN = "\e[48;5;65m"
       BG_BRIGHT_GREEN = "\e[102m"
       BG_BRIGHT_YELLOW = "\e[103m"
       BG_BRIGHT_WHITE = "\e[107m"

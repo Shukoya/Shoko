@@ -1,19 +1,22 @@
 # frozen_string_literal: true
 
 require 'digest'
-require 'fileutils'
 require 'time'
 
+require_relative '../domain/models/chapter'
+require_relative '../domain/models/toc_entry'
+require_relative '../domain/models/content_block'
+require_relative '../errors'
 require_relative 'cache_paths'
-require_relative 'atomic_file_writer'
+require_relative 'cache_store'
+require_relative 'cache_pointer_manager'
 require_relative 'logger'
 
 module EbookReader
   module Infrastructure
-    # EpubCache manages reading and writing Marshal-based cache files that contain
-    # the complete representation of an imported book plus any derived data
-    # (pagination layouts, etc). Each EPUB is stored as a single file located at
-    # `${XDG_CACHE_HOME:-~/.cache}/reader/<sha256>.cache`.
+    # SQLite-backed cache for imported EPUB data and derived pagination layouts.
+    # Pointer files keep backwards-compatible `.cache` discovery while the bulk
+    # payload lives in `cache.sqlite3`.
     class EpubCache
       CACHE_VERSION   = 2
       CACHE_EXTENSION = '.cache'
@@ -45,14 +48,6 @@ module EbookReader
         keyword_init: true
       )
 
-      CacheLoad = Struct.new(
-        :payload,
-        :cache_path,
-        :source_path,
-        :loaded_from_cache,
-        keyword_init: true
-      )
-
       class << self
         def cache_extension = CACHE_EXTENSION
 
@@ -67,109 +62,111 @@ module EbookReader
 
       attr_reader :cache_path, :source_path
 
-      def initialize(path, cache_root: CachePaths.reader_root)
+      def initialize(path, cache_root: CachePaths.reader_root, store: nil)
         @cache_root = cache_root
-        @raw_path   = path
-        @source_path = File.expand_path(path)
+        @cache_store = store || CacheStore.new(cache_root:)
+        @raw_path = File.expand_path(path)
         @payload_cache = nil
-        @payload_signature = nil
-        @payload_signature = nil
+        @layout_cache = {}
+        @pointer_metadata = nil
+        setup_source_reference
+      end
 
-        if self.class.cache_file?(@source_path)
-          @cache_path = @source_path
-          @source_type = :cache_file
-          @source_sha = nil
+      # Load pointer payload without validating source. Used by cached-library
+      # direct opens.
+      def read_cache(strict: false)
+        payload = load_payload
+        return nil unless payload
+
+        return payload unless strict
+        payload_valid?(payload) ? payload : invalidate_and_nil
+      rescue EbookReader::CacheLoadError
+        nil
+      end
+
+      # Load payload and ensure it matches the original EPUB file.
+      def load_for_source(strict: false)
+        payload = load_payload
+        return nil unless payload
+
+        if payload_valid?(payload) && payload_matches_source?(payload, strict:)
+          payload
         else
-          raise EbookReader::FileNotFoundError, @source_path unless File.file?(@source_path)
-
-          @source_type = :epub
-          @source_sha = Digest::SHA256.file(@source_path).hexdigest
-          @cache_path = self.class.cache_path_for_sha(@source_sha, cache_root: @cache_root)
+          invalidate_and_nil
         end
       end
 
-      # Load the cache payload without applying source validation. Intended for
-      # direct cache-file access (opening `.cache` files from the library).
-      def read_cache(strict: false)
-        payload = load_payload_from_disk
-        return nil unless payload
-
-        return payload if strict == false || payload_valid?(payload)
-
-        invalidate!
-        nil
-      end
-
-      # Load and validate the payload for the associated EPUB source. Returns nil
-      # when the cache is missing, corrupt, or outdated.
-      def load_for_source(strict: false)
-        payload = load_payload_from_disk
-        return nil unless payload
-        return payload if payload_valid?(payload) && payload_matches_source?(payload, strict: strict)
-
-        invalidate!
-        nil
-      end
-
-      # Writes the provided book data to disk, producing a fresh payload.
       def write_book!(book_data)
         ensure_sha!
+        generated_at = Time.now.utc
+        source_mtime = safe_mtime(@source_path)
+
+        persist_payload(@source_sha, @source_path, source_mtime, generated_at, book_data, {})
+
         payload = CachePayload.new(
           version: CACHE_VERSION,
           source_sha256: @source_sha,
           source_path: @source_path,
-          source_mtime: safe_mtime(@source_path),
-          generated_at: Time.now.utc,
+          source_mtime: source_mtime,
+          generated_at: generated_at,
           book: book_data,
           layouts: {}
         )
-        write_payload(payload)
+        @payload_cache = payload
+        @layout_cache = {}
         payload
       rescue StandardError => e
         Logger.debug('EpubCache: failed to write cache', path: @cache_path, error: e.message)
         nil
       end
 
-      # Returns a deep copy of the layout entry associated with the provided key,
-      # or nil when not present/invalid.
       def load_layout(key)
-        payload = load_payload_from_disk
+        key_str = key.to_s
+        if @layout_cache.key?(key_str)
+          return deep_dup(@layout_cache[key_str])
+        end
+
+        payload = @cache_store.load_layout(@source_sha, key_str)
         return nil unless payload
 
-        layouts = payload.layouts || {}
-        entry = layouts[key] || layouts[key.to_s] || layouts[key.to_sym]
-        return nil unless entry
-
-        deep_dup(entry)
+        cache_layout!(key_str, payload)
+        deep_dup(payload)
       rescue StandardError
         nil
       end
 
-      # Persistently mutates the layout map. The provided block receives the
-      # mutable layout hash and is expected to set or delete entries as needed.
       def mutate_layouts!
-        payload = load_payload_from_disk
-        return false unless payload
-
-        payload.layouts ||= {}
-        yield(payload.layouts)
-        write_payload(payload)
-        true
+        ensure_sha!
+        mutated = nil
+        success = @cache_store.mutate_layouts(@source_sha) do |layouts|
+          mutated = {}
+          yield layouts
+          layouts.each { |k, v| mutated[k.to_s] = deep_dup(v) }
+        end
+        if success
+          @layout_cache = mutated || {}
+          if @payload_cache
+            @payload_cache.layouts = @layout_cache.transform_values { |value| deep_dup(value) }
+          end
+        end
+        success
       rescue StandardError => e
         Logger.debug('EpubCache: failed to update layouts', path: @cache_path, error: e.message)
         false
       end
 
       def invalidate!
-        FileUtils.rm_f(@cache_path)
+        ensure_sha!
+        @cache_store.delete_payload(@source_sha) if @source_sha
+        FileUtils.rm_f(@cache_path) if @cache_path && File.exist?(@cache_path)
+      ensure
         @payload_cache = nil
-        @payload_signature = nil
-      rescue StandardError
-        nil
+        @layout_cache = {}
+        @pointer_metadata = nil
       end
 
       def cache_file?
-        @source_type == :cache_file
+        @source_type == :cache_pointer
       end
 
       def sha256
@@ -177,68 +174,107 @@ module EbookReader
         @source_sha
       end
 
+      def layout_keys
+        ensure_sha!
+        keys = @cache_store.fetch_layouts(@source_sha).keys
+        keys |= @layout_cache.keys
+        keys
+      rescue StandardError
+        []
+      end
+
       private
+
+      def setup_source_reference
+        if self.class.cache_file?(@raw_path)
+          @cache_path = @raw_path
+          @pointer_manager = CachePointerManager.new(@cache_path)
+          pointer = @pointer_manager.read
+          if pointer
+            @source_type = :cache_pointer
+            @pointer_metadata = pointer
+            @source_sha = pointer['sha256']
+            @source_path = pointer['source_path']
+          else
+            raise EbookReader::CacheLoadError.new(@raw_path, 'invalid pointer file')
+          end
+        else
+          raise EbookReader::FileNotFoundError, @raw_path unless File.file?(@raw_path)
+
+          @source_type = :epub
+          @source_path = @raw_path
+          @source_sha = Digest::SHA256.file(@source_path).hexdigest
+          @cache_path = self.class.cache_path_for_sha(@source_sha, cache_root: @cache_root)
+          @pointer_manager = CachePointerManager.new(@cache_path)
+          @pointer_metadata = @pointer_manager.read
+        end
+      end
 
       def ensure_sha!
         return if @source_sha
 
-        @source_sha = Digest::SHA256.file(@source_path).hexdigest if @source_type == :epub
+        if @source_type == :epub
+          @source_sha = Digest::SHA256.file(@source_path).hexdigest
+        elsif @pointer_metadata
+          @source_sha = @pointer_metadata['sha256']
+        end
       end
 
-      def load_payload_from_disk
-        if @payload_cache && File.exist?(@cache_path)
-          current_sig = file_signature(@cache_path)
-          return @payload_cache if @payload_signature && current_sig && current_sig == @payload_signature
+      def load_payload
+        return @payload_cache if @payload_cache
+
+        ensure_sha!
+        payload = load_payload_from_store(@source_sha)
+
+        if payload
+          @payload_cache = payload
+          layouts = payload.layouts || {}
+          @layout_cache = layouts.transform_values { |value| deep_dup(value) }
         end
-        return nil unless File.exist?(@cache_path)
-
-        raw = File.binread(@cache_path)
-        obj = Marshal.load(raw)
-        payload = coerce_payload(obj)
-        return nil unless payload
-
-        payload.layouts ||= {}
-        @payload_cache = payload
-        @payload_signature = file_signature(@cache_path)
         payload
+      end
+
+      def load_payload_from_store(sha)
+        return nil unless sha
+
+        raw = @cache_store.fetch_payload(sha)
+        return nil unless raw
+
+        ensure_pointer_from_metadata(raw.metadata_row)
+        Serializer.build_payload_from_store(raw)
       rescue StandardError => e
-        Logger.debug('EpubCache: failed to load cache', path: @cache_path, error: e.message)
-        invalidate!
+        Logger.debug('EpubCache: failed to load cache', sha:, error: e.message)
         nil
       end
 
-      def write_payload(payload)
-        AtomicFileWriter.write_using(@cache_path, binary: true) do |io|
-          io.write(Marshal.dump(payload))
-        end
-        @payload_cache = payload
-        @payload_signature = file_signature(@cache_path)
-      end
+      def persist_payload(sha, source_path, source_mtime, generated_at, book_data, layouts_hash)
+        pointer_metadata = {
+          'format' => CachePointerManager::POINTER_FORMAT,
+          'version' => CachePointerManager::POINTER_VERSION,
+          'sha256' => sha,
+          'source_path' => source_path,
+          'generated_at' => (generated_at || Time.now.utc).iso8601
+        }
 
-      def coerce_payload(obj)
-        case obj
-        when CachePayload
-          obj
-        when Hash
-          book = obj[:book] || obj['book']
-          unless book.is_a?(BookData)
-            Logger.debug('EpubCache: invalid book payload type', type: book.class.name)
-            return nil
-          end
+        serialized = Serializer.serialize(book_data)
+        layouts_serialized = Serializer.serialize_layouts(layouts_hash)
 
-          CachePayload.new(
-            version: obj[:version] || obj['version'],
-            source_sha256: obj[:source_sha256] || obj['source_sha256'],
-            source_path: obj[:source_path] || obj['source_path'],
-            source_mtime: obj[:source_mtime] || obj['source_mtime'],
-            generated_at: obj[:generated_at] || obj['generated_at'],
-            book: book,
-            layouts: obj[:layouts] || obj['layouts'] || {}
-          )
-        else
-          Logger.debug('EpubCache: unexpected payload object', klass: obj.class.name)
-          nil
-        end
+        success = @cache_store.write_payload(
+          sha: sha,
+          source_path: source_path,
+          source_mtime: source_mtime,
+          generated_at: generated_at,
+          serialized_book: serialized[:book],
+          serialized_chapters: serialized[:chapters],
+          serialized_resources: serialized[:resources],
+          serialized_layouts: layouts_serialized
+        )
+        return unless success
+
+        @pointer_manager ||= CachePointerManager.new(@cache_path)
+        @pointer_manager.write(pointer_metadata)
+        @pointer_metadata = pointer_metadata
+        @source_type = :cache_pointer
       end
 
       def payload_valid?(payload)
@@ -248,10 +284,9 @@ module EbookReader
       end
 
       def payload_matches_source?(payload, strict:)
-        return true if cache_file?
+        return true if cache_file? && !payload.source_path
 
         ensure_sha!
-
         return false unless payload.source_sha256 == @source_sha
 
         source_mtime = safe_mtime(@source_path)
@@ -259,7 +294,7 @@ module EbookReader
         return true unless source_mtime && payload_mtime
 
         tolerance = strict ? 1e-3 : 1.0
-        (source_mtime - payload_mtime).abs <= tolerance
+        (source_mtime.to_f - payload_mtime.to_f).abs <= tolerance
       end
 
       def safe_mtime(path)
@@ -268,16 +303,243 @@ module EbookReader
         nil
       end
 
-      def file_signature(path)
-        return nil unless File.exist?(path)
-
-        [safe_mtime(path)&.to_f, File.size?(path)]
-      rescue StandardError
-        nil
+      def cache_layout!(key, payload)
+        @layout_cache ||= {}
+        @layout_cache[key] = deep_dup(payload)
+        if @payload_cache
+          @payload_cache.layouts ||= {}
+          @payload_cache.layouts[key] = deep_dup(payload)
+        end
       end
 
       def deep_dup(obj)
         Marshal.load(Marshal.dump(obj))
+      end
+
+      def invalidate_and_nil
+        invalidate!
+        nil
+      end
+
+      def ensure_pointer_from_metadata(record)
+        return unless record
+        ensure_sha!
+        pointer_metadata = {
+          'format' => CachePointerManager::POINTER_FORMAT,
+          'version' => CachePointerManager::POINTER_VERSION,
+          'sha256' => record['source_sha'],
+          'source_path' => record['source_path'],
+          'generated_at' => Serializer.coerce_time(record['generated_at'])&.iso8601 || Time.now.utc.iso8601
+        }
+
+        current = @pointer_manager&.read
+        return if current && current['sha256'] == pointer_metadata['sha256']
+
+        @pointer_manager ||= CachePointerManager.new(@cache_path)
+        @pointer_manager.write(pointer_metadata)
+        @pointer_metadata = pointer_metadata
+        @source_type = :cache_pointer
+      end
+
+      module Serializer
+        module_function
+
+        def serialize(book_data)
+          {
+            book: serialize_book(book_data),
+            chapters: serialize_chapters(book_data.chapters),
+            resources: serialize_resources(book_data.resources)
+          }
+        end
+
+        def serialize_layouts(layouts_hash)
+          result = {}
+          Array(layouts_hash).each do |key, payload|
+            result[key.to_s] = payload
+          end
+          result
+        end
+
+        def serialize_book(book)
+          {
+            payload_version: CACHE_VERSION,
+            cache_version: CACHE_VERSION,
+            title: book.title,
+            language: book.language,
+            authors_json: JSON.generate(Array(book.authors)),
+            metadata_json: JSON.generate(book.metadata || {}),
+            opf_path: book.opf_path,
+            spine_json: JSON.generate(Array(book.spine)),
+            chapter_hrefs_json: JSON.generate(Array(book.chapter_hrefs)),
+            toc_json: JSON.generate(Array(book.toc_entries).map { |entry| serialize_toc_entry(entry) }),
+            container_path: book.container_path,
+            container_xml: book.container_xml.to_s
+          }
+        end
+
+        def serialize_chapters(chapters)
+          Array(chapters).each_with_index.map do |chapter, idx|
+            {
+              position: idx,
+              number: chapter.number,
+              title: chapter.title,
+              lines_json: JSON.generate(Array(chapter.lines)),
+              metadata_json: JSON.generate(chapter.metadata || {}),
+              blocks_json: JSON.generate(serialize_blocks(chapter.blocks)),
+              raw_content: chapter.raw_content
+            }
+          end
+        end
+
+        def serialize_blocks(blocks)
+          Array(blocks).map do |block|
+            {
+              type: value_for(block, :type),
+              level: value_for(block, :level),
+              metadata: value_for(block, :metadata),
+              segments: Array(value_for(block, :segments)).map do |segment|
+                {
+                  text: value_for(segment, :text),
+                  styles: value_for(segment, :styles)
+                }
+              end
+            }
+          end
+        end
+
+        def serialize_resources(resources)
+          return [] unless resources
+
+          resources.map do |path, data|
+            data = String(data).dup
+            data.force_encoding(Encoding::BINARY)
+            {
+              path: path.to_s,
+              data: data
+            }
+          end
+        end
+
+        def serialize_toc_entry(entry)
+          {
+            title: value_for(entry, :title),
+            href: value_for(entry, :href),
+            level: value_for(entry, :level),
+            chapter_index: value_for(entry, :chapter_index),
+            navigable: value_for(entry, :navigable)
+          }
+        end
+
+        def build_payload_from_store(raw_payload)
+          metadata = raw_payload.metadata_row
+          book = deserialize_book(metadata, raw_payload.chapters, raw_payload.resources)
+          layouts = {}
+          Array(raw_payload.layouts).each do |row|
+            key = row['key'] || row[:key]
+            payload_json = row['payload_json'] || row[:payload_json]
+            layouts[key] = JSON.parse(payload_json)
+          end
+
+          CachePayload.new(
+            version: metadata['cache_version'] || CACHE_VERSION,
+            source_sha256: metadata['source_sha'],
+            source_path: metadata['source_path'],
+            source_mtime: coerce_time(metadata['source_mtime']),
+            generated_at: coerce_time(metadata['generated_at']),
+            book: book,
+            layouts: layouts
+          )
+        end
+
+        def deserialize_book(book_row, chapter_rows, resource_rows)
+          BookData.new(
+            title: book_row['title'],
+            language: book_row['language'],
+            authors: JSON.parse(book_row['authors_json'] || '[]'),
+            chapters: deserialize_chapters(chapter_rows),
+            toc_entries: deserialize_toc(book_row['toc_json']),
+            opf_path: book_row['opf_path'],
+            spine: JSON.parse(book_row['spine_json'] || '[]'),
+            chapter_hrefs: JSON.parse(book_row['chapter_hrefs_json'] || '[]'),
+            resources: deserialize_resources(resource_rows),
+            metadata: JSON.parse(book_row['metadata_json'] || '{}'),
+            container_path: book_row['container_path'],
+            container_xml: book_row['container_xml']
+          )
+        end
+
+        def deserialize_chapters(rows)
+          Array(rows).map do |row|
+            lines = JSON.parse(row['lines_json'] || '[]')
+            lines = [] unless lines.is_a?(Array)
+            EbookReader::Domain::Models::Chapter.new(
+              number: row['number'],
+              title: row['title'],
+              lines: lines,
+              metadata: JSON.parse(row['metadata_json'] || '{}'),
+              blocks: deserialize_blocks(row['blocks_json']),
+              raw_content: row['raw_content']
+            )
+          end
+        end
+
+        def deserialize_blocks(json)
+          return nil unless json
+
+          data = JSON.parse(json)
+          return nil unless data.is_a?(Array)
+
+          data.map do |block|
+            EbookReader::Domain::Models::ContentBlock.new(
+              type: block['type'],
+              level: block['level'],
+              metadata: block['metadata'],
+              segments: Array(block['segments']).map do |seg|
+                EbookReader::Domain::Models::TextSegment.new(
+                  text: seg['text'],
+                  styles: seg['styles'] || {}
+                )
+              end
+            )
+          end
+        end
+
+        def deserialize_toc(json)
+          Array(JSON.parse(json || '[]')).map do |entry|
+            EbookReader::Domain::Models::TOCEntry.new(
+              title: entry['title'],
+              href: entry['href'],
+              level: entry['level'],
+              chapter_index: entry['chapter_index'],
+              navigable: entry.fetch('navigable', true)
+            )
+          end
+        end
+
+        def deserialize_resources(rows)
+          Array(rows).each_with_object({}) do |row, acc|
+            data = row['data']
+            data = data.to_s.dup
+            data.force_encoding(Encoding::BINARY)
+            acc[row['path']] = data
+          end
+        end
+
+        def coerce_time(raw)
+          return nil unless raw
+
+          Time.at(raw.to_f).utc
+        rescue StandardError
+          nil
+        end
+
+        def value_for(obj, key)
+          if obj.respond_to?(key)
+            obj.public_send(key)
+          elsif obj.respond_to?(:[])
+            obj[key] || obj[key.to_s]
+          end
+        end
       end
     end
   end

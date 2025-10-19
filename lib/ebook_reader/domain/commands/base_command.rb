@@ -21,9 +21,10 @@ module EbookReader
 
         attr_reader :name, :description
 
-        def initialize(name: nil, description: nil)
+        def initialize(name: nil, description: nil, logger: nil)
           @name = name || self.class.name.split('::').last
           @description = description || @name
+          @logger = logger
         end
 
         # Execute command with full error handling and validation
@@ -109,7 +110,8 @@ module EbookReader
         private
 
         def log_success(context, result)
-          Infrastructure::Logger.debug(
+          logger = resolve_logger(context)
+          logger&.debug(
             'Command executed successfully',
             command: name,
             context: context.class.name,
@@ -118,7 +120,8 @@ module EbookReader
         end
 
         def log_error(context, error, params)
-          Infrastructure::Logger.error(
+          logger = resolve_logger(context)
+          logger&.error(
             'Command execution failed',
             command: name,
             context: context.class.name,
@@ -126,6 +129,23 @@ module EbookReader
             params: params,
             backtrace: error.backtrace.first(5)
           )
+        end
+
+        def resolve_logger(context)
+          return @logger if defined?(@logger) && @logger
+
+          candidate = begin
+            if context.respond_to?(:dependencies)
+              deps = context.dependencies
+              deps.resolve(:logger) if deps.respond_to?(:resolve)
+            elsif context.respond_to?(:logger)
+              context.logger
+            end
+          rescue StandardError
+            nil
+          end
+          @logger = candidate if candidate
+          candidate
         end
 
         def user_friendly_error_message(error)

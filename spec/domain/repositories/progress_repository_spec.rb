@@ -5,12 +5,32 @@ require 'spec_helper'
 RSpec.describe EbookReader::Domain::Repositories::ProgressRepository do
   let(:logger) { double('Logger', error: nil, debug: nil, info: nil) }
   class CtnProg
-    def initialize(logger) = (@logger = logger)
+    def initialize(logger, file_writer, path_service)
+      @logger = logger
+      @file_writer = file_writer
+      @path_service = path_service
+    end
 
     def resolve(name)
-      return @logger if name == :logger
+      case name
+      when :logger then @logger
+      when :file_writer then @file_writer
+      when :path_service then @path_service
+      else
+        nil
+      end
+    end
+  end
 
-      nil
+  let(:file_writer) do
+    instance_double('FileWriter').tap do |writer|
+      allow(writer).to receive(:write) { |_path, _payload| true }
+    end
+  end
+
+  let(:path_service) do
+    instance_double('PathService').tap do |service|
+      allow(service).to receive(:reader_config_path).and_return('/tmp/progress.json')
     end
   end
 
@@ -36,10 +56,12 @@ RSpec.describe EbookReader::Domain::Repositories::ProgressRepository do
   end
 
   before do
-    allow(EbookReader::Domain::Repositories::Storage::ProgressFileStore).to receive(:new).and_return(store)
+    allow(EbookReader::Domain::Repositories::Storage::ProgressFileStore).to receive(:new)
+      .with(file_writer:, path_service:)
+      .and_return(store)
   end
 
-  subject(:repo) { described_class.new(CtnProg.new(logger)) }
+  subject(:repo) { described_class.new(CtnProg.new(logger, file_writer, path_service)) }
   let(:book_path) { '/tmp/p.epub' }
 
   it 'saves, loads, checks existence and lists recent' do

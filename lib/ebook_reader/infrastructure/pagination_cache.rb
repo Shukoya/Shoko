@@ -15,6 +15,23 @@ module EbookReader
         "#{width}x#{height}_#{view_mode}_#{line_spacing}"
       end
 
+      def parse_layout_key(key)
+        return nil unless key
+
+        dims, view_mode, line_spacing = key.to_s.split('_', 3)
+        width_str, height_str = dims.to_s.split('x', 2)
+        return nil unless width_str && height_str && view_mode && line_spacing
+
+        {
+          width: width_str.to_i,
+          height: height_str.to_i,
+          view_mode: view_mode.to_sym,
+          line_spacing: line_spacing.to_sym,
+        }
+      rescue StandardError
+        nil
+      end
+
       def load_for_document(doc, key)
         cache = cache_for(doc)
         return nil unless cache
@@ -52,6 +69,15 @@ module EbookReader
         false
       end
 
+      def layout_keys_for_document(doc)
+        cache = cache_for(doc)
+        return [] unless cache
+
+        cache.layout_keys
+      rescue StandardError
+        []
+      end
+
       def extract_pages(data)
         return nil unless data.is_a?(Hash)
 
@@ -83,11 +109,6 @@ module EbookReader
 
       def resolve_cache_path(doc)
         return doc.cache_path if doc.respond_to?(:cache_path) && doc.cache_path && !doc.cache_path.to_s.empty?
-
-        if doc.respond_to?(:cache_dir) && doc.cache_dir && !doc.cache_dir.to_s.empty?
-          legacy = Dir.children(doc.cache_dir).find { |name| name.end_with?(EpubCache.cache_extension) }
-          return File.join(doc.cache_dir, legacy) if legacy
-        end
 
         if doc.respond_to?(:canonical_path) && doc.canonical_path && File.exist?(doc.canonical_path)
           cache = EbookReader::Infrastructure::EpubCache.new(doc.canonical_path)

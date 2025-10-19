@@ -5,7 +5,6 @@ require 'fileutils'
 require_relative 'base_service'
 require_relative '../actions/update_config_action'
 require_relative '../selectors/config_selectors'
-require_relative '../../infrastructure/cache_paths'
 
 module EbookReader
   module Domain
@@ -20,6 +19,11 @@ module EbookReader
           @terminal_service = resolve(:terminal_service)
           @wrapping_service = resolve(:wrapping_service) if registered?(:wrapping_service)
           @recent_repository = resolve(:recent_library_repository) if registered?(:recent_library_repository)
+          @path_service = begin
+            resolve(:path_service)
+          rescue StandardError
+            nil
+          end
         end
 
         # Toggle split/single view mode and persist the change.
@@ -89,8 +93,8 @@ module EbookReader
         end
 
         def remove_epub_cache_on_disk
-          reader_cache = EbookReader::Infrastructure::CachePaths.reader_root
-          return unless File.directory?(reader_cache)
+          reader_cache = @path_service&.cache_root
+          return unless reader_cache && File.directory?(reader_cache)
 
           reader_real = safe_realpath(reader_cache)
           return unless reader_real

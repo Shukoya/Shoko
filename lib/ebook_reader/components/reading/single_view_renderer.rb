@@ -40,6 +40,15 @@ module EbookReader
 
           if page_calculator && (pd = page_calculator.get_page(context.current_page_index))
             dyn_lines = pd[:lines]
+            if dyn_lines.nil? || dyn_lines.empty?
+              start_line = pd[:start_line].to_i
+              end_line = pd[:end_line].to_i
+              span_length = end_line - start_line + 1
+              span_length = [span_length, displayable].max
+              chapter_index = st&.get(%i[reader current_chapter]) || 0
+              dyn_lines = fetch_wrapped_lines(context.document, chapter_index, col_width,
+                                              start_line, span_length)
+            end
             start_row = calculate_center_start_row(content_height, dyn_lines.size, spacing)
             params = Models::RenderParams.new(start_row: start_row, col_start: col_start,
                                               col_width: col_width, context: context,
