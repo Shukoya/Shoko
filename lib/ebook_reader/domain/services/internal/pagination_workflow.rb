@@ -15,15 +15,18 @@ module EbookReader
           @pagination_cache = pagination_cache
         end
 
-          def build_dynamic(doc:, width:, height:, config:, &on_progress)
-            key = dynamic_cache_key(width, height, config)
-            cached = key ? load_cached_pages(doc, key, config) : nil
-            return Result.new(pages: cached, cached: true) if cached&.any?
+        def build_dynamic(doc:, width:, height:, config:, &on_progress)
+          key = dynamic_cache_key(width, height, config)
+          cached = key ? load_cached_pages(doc, key, config) : nil
+          if cached&.any?
+            annotate_profile(pagination_cache: 'hit')
+            return Result.new(pages: cached, cached: true)
+          end
 
-            layout = layout_for(width, height, config)
-            return Result.new(pages: [], cached: false) if layout[:lines_per_page] <= 0
+          layout = layout_for(width, height, config)
+          return Result.new(pages: [], cached: false) if layout[:lines_per_page] <= 0
 
-            pages = Internal::DynamicPageMapBuilder.build(
+          pages = Internal::DynamicPageMapBuilder.build(
               doc,
               layout[:col_width],
               layout[:lines_per_page]
@@ -31,7 +34,10 @@ module EbookReader
               on_progress&.call(idx, total)
             end
 
-            save_cache(doc, key, pages) if key
+            if key
+              save_cache(doc, key, pages)
+              annotate_profile(pagination_cache: 'miss')
+            end
             Result.new(pages: pages, cached: false)
           end
 
@@ -104,6 +110,14 @@ module EbookReader
             return unless @pagination_cache
 
             @pagination_cache.save_for_document(doc, key, compact_pages(pages))
+          rescue StandardError
+            nil
+          end
+
+          def annotate_profile(payload)
+            return unless defined?(EbookReader::Infrastructure::PerfTracer)
+
+            EbookReader::Infrastructure::PerfTracer.annotate(payload)
           rescue StandardError
             nil
           end

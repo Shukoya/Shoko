@@ -76,16 +76,16 @@ module EbookReader
         overlay.render(surface, bounds)
       end
 
-      def render_annotation_editor_overlay(surface, bounds)
-        overlay = @controller.state.get(%i[reader annotation_editor_overlay])
-        return unless overlay.respond_to?(:visible?) && overlay.visible?
+    def render_annotation_editor_overlay(surface, bounds)
+      overlay = @controller.state.get(%i[reader annotation_editor_overlay])
+      return unless overlay.respond_to?(:visible?) && overlay.visible?
 
-        overlay.render(surface, bounds)
-      end
+      overlay.render(surface, bounds)
+    end
 
-      def render_text_highlight(surface, bounds, range, color)
-        rendered_lines = @controller.state.get(%i[reader rendered_lines]) || {}
-        return if rendered_lines.empty?
+    def render_text_highlight(surface, bounds, range, color)
+      rendered_lines = Domain::Selectors::ReaderSelectors.rendered_lines(@controller.state)
+      return if rendered_lines.empty?
 
         normalized_range = @coordinate_service.normalize_selection_range(range, rendered_lines)
         return unless normalized_range

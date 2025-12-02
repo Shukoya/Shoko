@@ -25,7 +25,7 @@ module EbookReader
       end
 
       def default_options
-        { debug: false, log_path: nil, log_level: nil }
+        { debug: false, log_path: nil, log_level: nil, profile_path: nil }
       end
 
       def configure_parser(parser, options)
@@ -37,6 +37,9 @@ module EbookReader
         parser.on('--log-level LEVEL', 'Set log level (debug, info, warn, error, fatal)') do |level|
           options[:log_level] = level
         end
+        parser.on('--profile PATH', 'Write a concise performance profile to PATH') do |path|
+          options[:profile_path] = path
+        end
         parser.on('-h', '--help', 'Prints this help') do
           puts parser
           exit
@@ -47,6 +50,9 @@ module EbookReader
         debug = debug_enabled?(options)
         log_path = options[:log_path] || env_log_path
         log_level = options[:log_level] || env_log_level
+
+        profile_path = options[:profile_path] || ENV['READER_PROFILE_PATH']
+        Infrastructure::PerfTracer.profile_path = profile_path if profile_path && !profile_path.empty?
 
         output, log_file = logger_output(debug, log_path)
         Infrastructure::Logger.output = output

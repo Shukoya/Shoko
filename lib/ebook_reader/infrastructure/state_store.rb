@@ -26,6 +26,12 @@ module EbookReader
         @mutex = Mutex.new
       end
 
+      # Cheap, read-only reference to the current state (no deep copy).
+      # Callers must not mutate the returned object.
+      def peek
+        @mutex.synchronize { @state }
+      end
+
       # Get current state snapshot (immutable)
       #
       # @return [Hash] Current state
@@ -239,14 +245,25 @@ module EbookReader
       end
 
       def apply_updates(state, updates)
-        new_state = deep_dup(state, false)
+        # Copy only the branches we need to touch instead of duplicating the entire tree.
+        clones = {}
+        new_root = duplicate_node(state, clones)
 
         updates.each do |path, value|
           validate_update(path, value)
-          set_nested(new_state, Array(path), value)
+          keys = Array(path)
+          target = new_root
+          keys[0...-1].each do |key|
+            existing = target[key]
+            duplicated = duplicate_node(existing, clones)
+            duplicated = {} if duplicated.nil?
+            target[key] = duplicated
+            target = duplicated
+          end
+          target[keys.last] = value
         end
 
-        new_state
+        new_root
       end
 
       def validate_update(path, value)
@@ -277,6 +294,17 @@ module EbookReader
           end
           target[last_key] = value
         end
+      end
+
+      def duplicate_node(node, clones)
+        return node unless node.is_a?(Hash)
+        return clones[node.object_id] if clones.key?(node.object_id)
+
+        duped = node.dup
+        clones[node.object_id] = duped
+        duped
+      rescue StandardError
+        node
       end
 
       def deep_dup(obj, freeze_result = false)

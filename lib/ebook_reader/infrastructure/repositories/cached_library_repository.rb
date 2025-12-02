@@ -6,6 +6,7 @@ require 'time'
 require_relative '../atomic_file_writer'
 require_relative '../cache_paths'
 require_relative '../cache_store'
+require_relative '../marshal_cache_store'
 require_relative '../cache_pointer_manager'
 require_relative '../epub_cache'
 
@@ -20,7 +21,8 @@ module EbookReader
         end
 
         def list_entries
-          rows = fetch_rows
+          rows = fetch_manifest_rows
+          rows = fetch_rows if rows.empty?
           return [] if rows.empty?
 
           rows.map { |row| build_entry_from_row(row) }
@@ -30,6 +32,10 @@ module EbookReader
 
         def fetch_rows
           @cache_store.list_books
+        end
+
+        def fetch_manifest_rows
+          Infrastructure::MarshalCacheStore.manifest_rows(@cache_root)
         end
 
         def build_entry_from_row(row)

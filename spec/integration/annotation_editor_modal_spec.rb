@@ -45,11 +45,12 @@ RSpec.describe 'Annotation editor modal integration' do
   let(:ui) { reader.instance_variable_get(:@ui_controller) }
   let(:input) { reader.instance_variable_get(:@input_controller) }
   let(:dispatcher) { input.instance_variable_get(:@dispatcher) }
+  let(:render_registry) { container.resolve(:render_registry) }
 
   def selection_range
     @selection_range ||= begin
       ensure_geometry!
-      rendered = state.get(%i[reader rendered_lines]) || {}
+      rendered = render_registry.lines
       geometry = rendered.values.first[:geometry]
       start_anchor = EbookReader::Models::SelectionAnchor.new(
         page_id: geometry.page_id,
@@ -74,8 +75,8 @@ RSpec.describe 'Annotation editor modal integration' do
   end
 
   def ensure_geometry!
-    rendered = state.get(%i[reader rendered_lines]) || {}
-    return unless rendered.empty?
+    rendered = render_registry.lines
+    return unless rendered.nil? || rendered.empty?
 
     reader.draw_screen
   end

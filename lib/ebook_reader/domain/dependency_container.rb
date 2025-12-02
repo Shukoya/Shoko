@@ -10,6 +10,7 @@ require_relative '../infrastructure/cache_paths'
 require_relative '../infrastructure/epub_cache'
 require_relative '../infrastructure/repositories/cached_library_repository'
 require_relative '../infrastructure/parsers/xhtml_content_parser'
+require_relative '../infrastructure/render_registry'
 require_relative 'services/cache_service'
 require_relative 'services/file_writer_service'
 require_relative 'services/instrumentation_service'
@@ -215,6 +216,9 @@ module EbookReader
             instantiate_document_service(klass, path, wrapper, formatting, worker)
           end
         end
+
+        # Render registry keeps large per-frame geometry out of state store
+        container.register_singleton(:render_registry) { |_c| Infrastructure::RenderRegistry.current }
 
         # Focused controllers replacing god class
 

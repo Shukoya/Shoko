@@ -26,6 +26,7 @@ RSpec.describe 'Render geometry integration' do
 
   let(:container) { EbookReader::Domain::ContainerFactory.create_default_container }
   let(:state) { container.resolve(:global_state) }
+  let(:render_registry) { container.resolve(:render_registry) }
 
   before do
     doc = GeometryFixtureDoc.new([
@@ -47,7 +48,7 @@ RSpec.describe 'Render geometry integration' do
     EbookReader::TestSupport::TerminalDouble.reset!
     renderer.render(surface, bounds)
 
-    rendered = state.get(%i[reader rendered_lines])
+    rendered = render_registry.lines
     expect(rendered).not_to be_empty
 
     geometry = rendered.values.first[:geometry]

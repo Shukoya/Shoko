@@ -28,6 +28,7 @@ module EbookReader
           @text_wrapper = DefaultTextWrapper.new
           @cache = {}
           @pages_data = []
+          @chapter_page_index = {}
           @metrics_calculator = Internal::LayoutMetricsCalculator.new(@state_store)
           @pagination_cache = begin
             resolve(:pagination_cache)
@@ -63,6 +64,7 @@ module EbookReader
                                                       &)
           @doc_ref = doc
           @pages_data = result.pages
+          rebuild_page_index!
         end
 
         # Get page data by index (PageManager compatibility)
@@ -76,7 +78,11 @@ module EbookReader
 
           # Lazily populate lines when loaded from cache (compact format)
           measure_with_instrumentation('page_map.hydrate') do
-            cs = @state_store.current_state
+            cs = if @state_store.respond_to?(:peek)
+                   @state_store.peek
+                 else
+                   @state_store.current_state
+                 end
             width  = cs.dig(:ui, :terminal_width) || 80
             height = cs.dig(:ui, :terminal_height) || 24
             config = @state_store
@@ -116,11 +122,13 @@ module EbookReader
 
         # Find page index for chapter and line offset (PageManager compatibility)
         def find_page_index(chapter_index, line_offset)
-          @pages_data.find_index do |page|
-            page[:chapter_index] == chapter_index &&
-              line_offset >= page[:start_line] &&
-              line_offset <= page[:end_line]
-          end || 0
+          pages = @chapter_page_index[chapter_index]
+          return 0 unless pages && !pages.empty?
+
+          match = pages.bsearch { |page| line_offset <= page[:end_line].to_i }
+          return match[:global_index] if match && match[:global_index]
+
+          pages.last[:global_index] || 0
         end
 
         # Total pages built in map (PageManager compatibility)
@@ -133,7 +141,11 @@ module EbookReader
         # @param chapter_index [Integer] Chapter index
         # @return [Integer] Number of pages in chapter
         def calculate_pages_for_chapter(chapter_index)
-          current_state = @state_store.current_state
+          current_state = if @state_store.respond_to?(:peek)
+                            @state_store.peek
+                          else
+                            @state_store.current_state
+                          end
           cache_key = build_cache_key(chapter_index, current_state)
 
           @cache[cache_key] ||= perform_page_calculation(chapter_index, current_state)
@@ -229,6 +241,7 @@ module EbookReader
         # Build dynamic (lazy) page map and sync total to state. Accepts optional progress callback.
         def build_dynamic_map!(width, height, doc, state, &)
           build_page_map(width, height, doc, state, &)
+          rebuild_page_index!
           state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
                            total_pages: total_pages
                          ))
@@ -477,6 +490,33 @@ module EbookReader
         def append_current(context)
           context.wrapped << context.current
           context.word
+        end
+
+        def rebuild_page_index!
+          @chapter_page_index = Hash.new { |h, k| h[k] = [] }
+          @pages_data.each_with_index do |page, idx|
+            ch = page[:chapter_index] || 0
+            entry = page.merge(global_index: idx)
+            @chapter_page_index[ch] << entry
+          end
+          @chapter_page_index.each_value { |arr| arr.sort_by! { |p| p[:end_line].to_i } }
+        end
+
+        # Hydrate from cached pagination without recomputation
+        def hydrate_from_cache(pages, state: nil, width: nil, height: nil)
+          return false unless pages.is_a?(Array)
+
+          @pages_data = pages
+          rebuild_page_index!
+          total = @pages_data.size
+          if state
+            state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
+                             total_pages: total,
+                             last_width: width,
+                             last_height: height
+                           ))
+          end
+          total.positive?
         end
 
         protected

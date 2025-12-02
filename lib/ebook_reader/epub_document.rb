@@ -90,6 +90,11 @@ module EbookReader
 
     def apply_pipeline_result(result)
       book = result.book
+      Infrastructure::PerfTracer.annotate(
+        cache_hit: result.loaded_from_cache,
+        chapters: Array(book&.chapters).size,
+        book: result.source_path || @open_path
+      ) if defined?(Infrastructure::PerfTracer)
       @cache_path = result.cache_path
       @source_path = result.source_path || @open_path
       @loaded_from_cache = result.loaded_from_cache
@@ -186,7 +191,9 @@ module EbookReader
     end
 
     def format_chapter_sync(index, chapter, raise_on_error:)
-      @formatting_service.ensure_formatted!(self, index, chapter)
+      Infrastructure::PerfTracer.measure('formatting.ensure') do
+        @formatting_service.ensure_formatted!(self, index, chapter)
+      end
     rescue EbookReader::FormattingError => e
       Infrastructure::Logger.error('Formatting error', error: e.message, chapter: index + 1)
       raise if raise_on_error

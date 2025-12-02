@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../domain/selectors/reader_selectors'
+
 module EbookReader
   module Application
     # Applies a pending jump payload captured in state before reader starts.
@@ -71,7 +73,7 @@ module EbookReader
         coord = resolve_optional(:coordinate_service)
         return range unless coord
 
-        rendered = state.get(%i[reader rendered_lines]) || {}
+        rendered = EbookReader::Domain::Selectors::ReaderSelectors.rendered_lines(state)
         coord.normalize_selection_range(range, rendered)
       rescue StandardError
         nil

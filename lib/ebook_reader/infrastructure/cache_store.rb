@@ -12,6 +12,7 @@ module EbookReader
     # Centralised persistence API for EPUB caches.
     # Responsible for talking to the SQLite database and keeping basic statistics.
     class CacheStore
+      ENGINE = 'sqlite'
       Payload = Struct.new(
         :metadata_row,
         :chapters,
@@ -24,6 +25,10 @@ module EbookReader
       def initialize(cache_root: CachePaths.reader_root, database: nil)
         @cache_root = cache_root
         @database = database || CacheDatabase.new(cache_root:)
+      end
+
+      def engine
+        ENGINE
       end
 
       attr_reader :database

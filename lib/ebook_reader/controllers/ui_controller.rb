@@ -388,7 +388,7 @@ module EbookReader
         if selection_service.respond_to?(:extract_from_state)
           selection_service.extract_from_state(@state, selection_range)
         else
-          rendered_lines = @state.get(%i[reader rendered_lines]) || {}
+          rendered_lines = EbookReader::Domain::Selectors::ReaderSelectors.rendered_lines(@state)
           selection_service.extract_text(selection_range, rendered_lines)
         end
       end

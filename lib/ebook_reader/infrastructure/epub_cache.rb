@@ -9,6 +9,7 @@ require_relative '../domain/models/content_block'
 require_relative '../errors'
 require_relative 'cache_paths'
 require_relative 'cache_store'
+require_relative 'marshal_cache_store'
 require_relative 'cache_pointer_manager'
 require_relative 'logger'
 
@@ -64,7 +65,7 @@ module EbookReader
 
       def initialize(path, cache_root: CachePaths.reader_root, store: nil)
         @cache_root = cache_root
-        @cache_store = store || CacheStore.new(cache_root:)
+        @cache_store = build_cache_store(store)
         @raw_path = File.expand_path(path)
         @payload_cache = nil
         @layout_cache = {}
@@ -195,6 +196,7 @@ module EbookReader
             @pointer_metadata = pointer
             @source_sha = pointer['sha256']
             @source_path = pointer['source_path']
+            @cache_store = build_cache_store(nil, pointer_engine: pointer['engine'])
           else
             raise EbookReader::CacheLoadError.new(@raw_path, 'invalid pointer file')
           end
@@ -253,10 +255,12 @@ module EbookReader
           'version' => CachePointerManager::POINTER_VERSION,
           'sha256' => sha,
           'source_path' => source_path,
-          'generated_at' => (generated_at || Time.now.utc).iso8601
+          'generated_at' => (generated_at || Time.now.utc).iso8601,
+          'engine' => cache_engine
         }
 
-        serialized = Serializer.serialize(book_data)
+        json_store = cache_engine == 'sqlite'
+        serialized = Serializer.serialize(book_data, json: json_store)
         layouts_serialized = Serializer.serialize_layouts(layouts_hash)
 
         success = @cache_store.write_payload(
@@ -329,7 +333,8 @@ module EbookReader
           'version' => CachePointerManager::POINTER_VERSION,
           'sha256' => record['source_sha'],
           'source_path' => record['source_path'],
-          'generated_at' => Serializer.coerce_time(record['generated_at'])&.iso8601 || Time.now.utc.iso8601
+          'generated_at' => Serializer.coerce_time(record['generated_at'])&.iso8601 || Time.now.utc.iso8601,
+          'engine' => record['engine'] || cache_engine
         }
 
         current = @pointer_manager&.read
@@ -341,13 +346,35 @@ module EbookReader
         @source_type = :cache_pointer
       end
 
+      def build_cache_store(store, pointer_engine: nil)
+        return store if store
+
+        engine = pointer_engine || ENV.fetch('READER_CACHE_ENGINE', 'marshal')
+        case engine&.downcase
+        when 'marshal'
+          MarshalCacheStore.new(cache_root: @cache_root)
+        else
+          CacheStore.new(cache_root: @cache_root)
+        end
+      end
+
+      def cache_engine
+        if @cache_store.respond_to?(:engine)
+          @cache_store.engine
+        else
+          'marshal'
+        end
+      rescue StandardError
+        'marshal'
+      end
+
       module Serializer
         module_function
 
-        def serialize(book_data)
+        def serialize(book_data, json: true)
           {
-            book: serialize_book(book_data),
-            chapters: serialize_chapters(book_data.chapters),
+            book: serialize_book(book_data, json:),
+            chapters: serialize_chapters(book_data.chapters, json:),
             resources: serialize_resources(book_data.resources)
           }
         end
@@ -360,38 +387,54 @@ module EbookReader
           result
         end
 
-        def serialize_book(book)
+        def serialize_book(book, json: true)
+          authors = Array(book.authors)
+          metadata = book.metadata || {}
+          spine = Array(book.spine)
+          hrefs = Array(book.chapter_hrefs)
+          toc = Array(book.toc_entries).map { |entry| serialize_toc_entry(entry, json:) }
+          authors_field = json ? JSON.generate(authors) : authors
+          metadata_field = json ? JSON.generate(metadata) : metadata
+          spine_field = json ? JSON.generate(spine) : spine
+          hrefs_field = json ? JSON.generate(hrefs) : hrefs
+          toc_field = json ? JSON.generate(toc) : toc
           {
             payload_version: CACHE_VERSION,
             cache_version: CACHE_VERSION,
             title: book.title,
             language: book.language,
-            authors_json: JSON.generate(Array(book.authors)),
-            metadata_json: JSON.generate(book.metadata || {}),
+            authors_json: authors_field,
+            metadata_json: metadata_field,
             opf_path: book.opf_path,
-            spine_json: JSON.generate(Array(book.spine)),
-            chapter_hrefs_json: JSON.generate(Array(book.chapter_hrefs)),
-            toc_json: JSON.generate(Array(book.toc_entries).map { |entry| serialize_toc_entry(entry) }),
+            spine_json: spine_field,
+            chapter_hrefs_json: hrefs_field,
+            toc_json: toc_field,
             container_path: book.container_path,
             container_xml: book.container_xml.to_s
           }
         end
 
-        def serialize_chapters(chapters)
+        def serialize_chapters(chapters, json: true)
           Array(chapters).each_with_index.map do |chapter, idx|
+            lines = Array(chapter.lines)
+            metadata = chapter.metadata || {}
+            blocks = serialize_blocks(chapter.blocks, json:)
+            lines_field = json ? JSON.generate(lines) : lines
+            metadata_field = json ? JSON.generate(metadata) : metadata
+            blocks_field = json ? JSON.generate(blocks) : blocks
             {
               position: idx,
               number: chapter.number,
               title: chapter.title,
-              lines_json: JSON.generate(Array(chapter.lines)),
-              metadata_json: JSON.generate(chapter.metadata || {}),
-              blocks_json: JSON.generate(serialize_blocks(chapter.blocks)),
+              lines_json: lines_field,
+              metadata_json: metadata_field,
+              blocks_json: blocks_field,
               raw_content: chapter.raw_content
             }
           end
         end
 
-        def serialize_blocks(blocks)
+        def serialize_blocks(blocks, json: true)
           Array(blocks).map do |block|
             {
               type: value_for(block, :type),
@@ -420,7 +463,7 @@ module EbookReader
           end
         end
 
-        def serialize_toc_entry(entry)
+        def serialize_toc_entry(entry, json: true)
           {
             title: value_for(entry, :title),
             href: value_for(entry, :href),
@@ -437,7 +480,7 @@ module EbookReader
           Array(raw_payload.layouts).each do |row|
             key = row['key'] || row[:key]
             payload_json = row['payload_json'] || row[:payload_json]
-            layouts[key] = JSON.parse(payload_json)
+            layouts[key] = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
           end
 
           CachePayload.new(
@@ -452,17 +495,27 @@ module EbookReader
         end
 
         def deserialize_book(book_row, chapter_rows, resource_rows)
+          authors = book_row['authors_json']
+          authors = JSON.parse(authors || '[]') if authors.is_a?(String)
+          metadata = book_row['metadata_json']
+          metadata = JSON.parse(metadata || '{}') if metadata.is_a?(String)
+          spine = book_row['spine_json']
+          spine = JSON.parse(spine || '[]') if spine.is_a?(String)
+          hrefs = book_row['chapter_hrefs_json']
+          hrefs = JSON.parse(hrefs || '[]') if hrefs.is_a?(String)
+          toc = book_row['toc_json']
+          toc = JSON.parse(toc || '[]') if toc.is_a?(String)
           BookData.new(
             title: book_row['title'],
             language: book_row['language'],
-            authors: JSON.parse(book_row['authors_json'] || '[]'),
+            authors: Array(authors),
             chapters: deserialize_chapters(chapter_rows),
-            toc_entries: deserialize_toc(book_row['toc_json']),
+            toc_entries: deserialize_toc(toc),
             opf_path: book_row['opf_path'],
-            spine: JSON.parse(book_row['spine_json'] || '[]'),
-            chapter_hrefs: JSON.parse(book_row['chapter_hrefs_json'] || '[]'),
+            spine: Array(spine),
+            chapter_hrefs: Array(hrefs),
             resources: deserialize_resources(resource_rows),
-            metadata: JSON.parse(book_row['metadata_json'] || '{}'),
+            metadata: metadata || {},
             container_path: book_row['container_path'],
             container_xml: book_row['container_xml']
           )
@@ -470,13 +523,16 @@ module EbookReader
 
         def deserialize_chapters(rows)
           Array(rows).map do |row|
-            lines = JSON.parse(row['lines_json'] || '[]')
+            lines = row['lines_json']
+            lines = JSON.parse(lines || '[]') if lines.is_a?(String)
             lines = [] unless lines.is_a?(Array)
+            metadata = row['metadata_json']
+            metadata = JSON.parse(metadata || '{}') if metadata.is_a?(String)
             EbookReader::Domain::Models::Chapter.new(
               number: row['number'],
               title: row['title'],
               lines: lines,
-              metadata: JSON.parse(row['metadata_json'] || '{}'),
+              metadata: metadata || {},
               blocks: deserialize_blocks(row['blocks_json']),
               raw_content: row['raw_content']
             )
@@ -486,7 +542,7 @@ module EbookReader
         def deserialize_blocks(json)
           return nil unless json
 
-          data = JSON.parse(json)
+          data = json.is_a?(String) ? JSON.parse(json) : json
           return nil unless data.is_a?(Array)
 
           data.map do |block|
@@ -505,7 +561,8 @@ module EbookReader
         end
 
         def deserialize_toc(json)
-          Array(JSON.parse(json || '[]')).map do |entry|
+          data = json.is_a?(String) ? JSON.parse(json || '[]') : json
+          Array(data).map do |entry|
             EbookReader::Domain::Models::TOCEntry.new(
               title: entry['title'],
               href: entry['href'],

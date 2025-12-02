@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../infrastructure/render_registry'
+
 module EbookReader
   module Domain
     module Selectors
@@ -118,6 +120,19 @@ module EbookReader
 
         # UI state selectors
         def self.rendered_lines(state)
+          registry = begin
+            state.resolve(:render_registry)
+          rescue StandardError
+            nil
+          end
+          registry ||= begin
+            EbookReader::Infrastructure::RenderRegistry.current
+          rescue StandardError
+            nil
+          end
+          lines = registry&.lines
+          return lines if lines && !lines.empty?
+
           state.get(%i[reader rendered_lines]) || {}
         end
 

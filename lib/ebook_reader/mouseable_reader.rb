@@ -139,7 +139,7 @@ module EbookReader
       return unless selection
 
       # Use enhanced popup menu with coordinate service
-      rendered = @state.get(%i[reader rendered_lines]) || {}
+      rendered = EbookReader::Domain::Selectors::ReaderSelectors.rendered_lines(@state)
       popup_menu = Components::EnhancedPopupMenu.new(selection, nil, @coordinate_service,
                                                      @clipboard_service, rendered)
       @state.dispatch(Domain::Actions::UpdatePopupMenuAction.new(popup_menu))
@@ -177,7 +177,7 @@ module EbookReader
       if selection_service.respond_to?(:extract_from_state)
         selection_service.extract_from_state(@state, range)
       else
-        rendered = @state.get(%i[reader rendered_lines]) || {}
+        rendered = EbookReader::Domain::Selectors::ReaderSelectors.rendered_lines(@state)
         selection_service.extract_text(range, rendered)
       end
     end
@@ -194,7 +194,7 @@ module EbookReader
     def anchor_range_from_mouse(mouse_range)
       return nil unless mouse_range
 
-      rendered = @state.get(%i[reader rendered_lines]) || {}
+      rendered = EbookReader::Domain::Selectors::ReaderSelectors.rendered_lines(@state)
       return nil if rendered.empty?
 
       start_anchor = @coordinate_service.anchor_from_point(mouse_range[:start], rendered, bias: :leading)

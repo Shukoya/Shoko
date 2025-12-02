@@ -88,6 +88,9 @@ RSpec.configure do |config|
       EbookReader::Infrastructure::Logger.output = null_io if null_io
       EbookReader::Infrastructure::Logger.level = :fatal
     end
+    if defined?(EbookReader::Infrastructure::RenderRegistry)
+      EbookReader::Infrastructure::RenderRegistry.current.clear
+    end
   end
 
   # Include FakeFS for file system tests

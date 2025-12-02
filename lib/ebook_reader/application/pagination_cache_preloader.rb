@@ -35,9 +35,14 @@ module EbookReader
 
         apply_layout_config(width, height, view_mode, line_spacing)
 
-        page_calculator.build_dynamic_map!(width, height, doc, state)
-        page_calculator.apply_pending_precise_restore!(state)
-        Result.new(status: :hit, key:)
+        cached_pages = pagination_cache.load_for_document(doc, key)
+        if cached_pages && cached_pages.any?
+          page_calculator.hydrate_from_cache(cached_pages, state:, width:, height:)
+          page_calculator.apply_pending_precise_restore!(state)
+          Result.new(status: :hit, key:)
+        else
+          Result.new(status: :miss, key:)
+        end
       rescue StandardError => e
         log_failure(e)
         Result.new(status: :error)

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_action'
+require_relative '../../infrastructure/render_registry'
 
 module EbookReader
   module Domain
@@ -12,7 +13,21 @@ module EbookReader
         end
 
         def apply(state)
-          state.update({ %i[reader rendered_lines] => payload[:rendered_lines] })
+          registry = begin
+            if state.respond_to?(:resolve)
+              state.resolve(:render_registry)
+            end
+          rescue StandardError
+            nil
+          end
+          registry ||= begin
+            EbookReader::Infrastructure::RenderRegistry.current
+          rescue StandardError
+            nil
+          end
+          registry&.write(payload[:rendered_lines])
+          # Keep state entry lightweight for observers; avoid storing the large hash
+          state.update({ %i[reader rendered_lines] => :render_registry })
         end
       end
 

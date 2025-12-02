@@ -107,16 +107,20 @@ module EbookReader
 
       def perform_dynamic_build(doc, state, page_calculator, dimensions, &block)
         width, height = dimensions
-        page_calculator.build_dynamic_map!(width, height, doc, state) do |done, total|
-          block&.call(done, total)
+        Infrastructure::PerfTracer.measure('pagination.build') do
+          page_calculator.build_dynamic_map!(width, height, doc, state) do |done, total|
+            block&.call(done, total)
+          end
         end
         page_calculator.apply_pending_precise_restore!(state)
       end
 
       def perform_absolute_build(doc, state, page_calculator, dimensions, &block)
         width, height = dimensions
-        page_calculator.build_absolute_map!(width, height, doc, state) do |done, total|
-          block&.call(done, total)
+        Infrastructure::PerfTracer.measure('pagination.build') do
+          page_calculator.build_absolute_map!(width, height, doc, state) do |done, total|
+            block&.call(done, total)
+          end
         end
       end
 

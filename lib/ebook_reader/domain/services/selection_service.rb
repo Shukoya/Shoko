@@ -2,6 +2,7 @@
 
 require_relative 'base_service'
 require_relative '../../models/selection_anchor'
+require_relative '../selectors/reader_selectors'
 
 module EbookReader
   module Domain
@@ -15,7 +16,7 @@ module EbookReader
           return '' unless state
 
           range = selection_range || state.get(%i[reader selection])
-          rendered = state.get(%i[reader rendered_lines]) || {}
+          rendered = EbookReader::Domain::Selectors::ReaderSelectors.rendered_lines(state)
           extract_text(range, rendered)
         end
 
@@ -71,7 +72,7 @@ module EbookReader
           return selection_range if anchor_range?(selection_range)
 
           coordinate_service = resolve(:coordinate_service)
-          rendered = state.get(%i[reader rendered_lines]) || {}
+          rendered = EbookReader::Domain::Selectors::ReaderSelectors.rendered_lines(state)
           coordinate_service.normalize_selection_range(selection_range, rendered)
         rescue StandardError
           nil
