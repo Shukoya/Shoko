@@ -9,7 +9,7 @@ require_relative 'logger'
 module EbookReader
   module Infrastructure
     # Minimal marshal-backed cache store for EPUB payloads and layouts.
-    # Avoids JSON and SQLite round-trips for hot paths.
+    # Avoids external databases and keeps payloads in simple binary files.
     class MarshalCacheStore
       ENGINE = 'marshal'
       Payload = Struct.new(:metadata_row, :chapters, :resources, :layouts, keyword_init: true)
@@ -34,7 +34,7 @@ module EbookReader
           metadata_row: data[:metadata_row],
           chapters: data[:chapters] || [],
           resources: data[:resources] || [],
-          layouts: load_layout_rows(sha)
+          layouts: fetch_layouts(sha)
         )
       rescue StandardError => e
         Logger.debug('MarshalCacheStore: fetch failed', sha:, error: e.message)
@@ -147,16 +147,14 @@ module EbookReader
       def write_layouts(sha, layouts_hash)
         dir = layouts_dir(sha)
         FileUtils.mkdir_p(dir)
+        existing = Dir.exist?(dir) ? Dir.children(dir).select { |entry| entry.end_with?('.marshal') } : []
+
         layouts_hash.each do |key, payload|
           File.binwrite(layout_file(sha, key), Marshal.dump(payload))
         end
-      end
 
-      def load_layout_rows(sha)
-        layouts = fetch_layouts(sha)
-        layouts.map do |key, payload|
-          { 'key' => key, 'payload_json' => JSON.generate(payload) }
-        end
+        stale = existing - layouts_hash.keys.map { |key| "#{key}.marshal" }
+        stale.each { |entry| FileUtils.rm_f(File.join(dir, entry)) }
       end
 
       def manifest_path

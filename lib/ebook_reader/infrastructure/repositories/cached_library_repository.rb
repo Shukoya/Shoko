@@ -5,7 +5,6 @@ require 'time'
 
 require_relative '../atomic_file_writer'
 require_relative '../cache_paths'
-require_relative '../cache_store'
 require_relative '../marshal_cache_store'
 require_relative '../cache_pointer_manager'
 require_relative '../epub_cache'
@@ -17,7 +16,7 @@ module EbookReader
       class CachedLibraryRepository
         def initialize(cache_root: Infrastructure::CachePaths.reader_root, store: nil)
           @cache_root = cache_root
-          @cache_store = store || Infrastructure::CacheStore.new(cache_root:)
+          @cache_store = store || Infrastructure::MarshalCacheStore.new(cache_root:)
         end
 
         def list_entries
@@ -70,7 +69,8 @@ module EbookReader
             'version' => Infrastructure::CachePointerManager::POINTER_VERSION,
             'sha256' => row['source_sha'],
             'source_path' => row['source_path'],
-            'generated_at' => generated_at
+            'generated_at' => generated_at,
+            'engine' => Infrastructure::MarshalCacheStore::ENGINE
           }
 
           Infrastructure::CachePointerManager.new(path).write(metadata)
@@ -81,19 +81,21 @@ module EbookReader
 
         def parse_json_object(value)
           return {} unless value
+          return value if value.is_a?(Hash)
 
           parsed = JSON.parse(value)
           parsed.is_a?(Hash) ? parsed : {}
-        rescue JSON::ParserError
+        rescue JSON::ParserError, TypeError
           {}
         end
 
         def parse_json_array(value)
           return [] unless value
+          return value if value.is_a?(Array)
 
           parsed = JSON.parse(value)
           parsed.is_a?(Array) ? parsed : []
-        rescue JSON::ParserError
+        rescue JSON::ParserError, TypeError
           []
         end
 

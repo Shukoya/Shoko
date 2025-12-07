@@ -51,14 +51,15 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
   it 'writes and reloads a cache payload for an EPUB source' do
     cache = described_class.new(epub_path)
     payload = cache.write_book!(book_data)
-    db_path = File.join(cache_root, EbookReader::Infrastructure::CacheDatabase::DB_FILENAME)
+    payload_path = File.join(cache_root, "#{cache.sha256}.marshal")
 
     expect(payload).to be_a(described_class::CachePayload)
     expect(File.exist?(cache.cache_path)).to be(true)
-    expect(File.exist?(db_path)).to be(true)
+    expect(File.exist?(payload_path)).to be(true)
 
     pointer = JSON.parse(File.read(cache.cache_path))
     expect(pointer['format']).to eq(EbookReader::Infrastructure::CachePointerManager::POINTER_FORMAT)
+    expect(pointer['engine']).to eq(EbookReader::Infrastructure::MarshalCacheStore::ENGINE)
     expect(pointer['sha256']).to eq(cache.sha256)
 
     reloaded = described_class.new(epub_path).load_for_source(strict: true)

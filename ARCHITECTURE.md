@@ -89,16 +89,16 @@ Note: Legacy ReaderModes are replaced by screen components. The former `ReaderMo
 - Buffered output: Terminal double-buffering via `TerminalBuffer`.
 - Lazy loading: Chapters loaded on demand.
 - Caching: Library scan and chapter wrapping caches via services.
-- Cached Library: `Domain::Services::LibraryService` lists cached books by querying the SQLite cache via `Infrastructure::Repositories::CachedLibraryRepository`, while `Domain::Services::CacheService` validates pointer files and resolves canonical EPUB paths before controllers launch books.
+- Cached Library: `Domain::Services::LibraryService` lists cached books via the Marshal cache manifest through `Infrastructure::Repositories::CachedLibraryRepository`, while `Domain::Services::CacheService` validates pointer files and resolves canonical EPUB paths before controllers launch books.
 
 ## EPUB Cache
 
 - Goal: instant subsequent opens by avoiding ZIP inflation and XML parsing.
-- Key: cache pointer `${XDG_CACHE_HOME:-~/.cache}/reader/<sha256>.cache`, where `<sha256>` is the SHA‑256 of the `.epub` file, plus a shared `cache.sqlite3` database under the same directory.
-- Implementation: `Infrastructure::BookCachePipeline` coordinates `EpubImporter` (ZIP/OPF/HTML processing) and `EpubCache`. Persistence is delegated to `Infrastructure::CacheStore`, which wraps the SQLite database and writes pointer files atomically; missing or corrupt pointers now trigger cache invalidation rather than on-the-fly regeneration.
-- First open (miss): pipeline imports the EPUB, builds `BookData` (chapters, resources, metadata) and writes database rows + a pointer file via `AtomicFileWriter`.
-- Subsequent opens (hit): pipeline loads the payload from SQLite, validates version/digest/mtime, and hands `BookData` directly to `EPUBDocument`; no filesystem extraction is required. Pagination layouts are retrieved from the `layouts` table when available.
-- Dependencies: SQLite3 (via the `sqlite3` gem); ZIP reads handled in-house via a minimal reader using `Zlib`.
+- Key: cache pointer `${XDG_CACHE_HOME:-~/.cache}/reader/<sha256>.cache`, where `<sha256>` is the SHA‑256 of the `.epub` file, plus Marshal payloads at the same root (`<sha256>.marshal`) and per-layout files under `layouts/<sha256>/`.
+- Implementation: `Infrastructure::BookCachePipeline` coordinates `EpubImporter` (ZIP/OPF/HTML processing) and `EpubCache`. Persistence is delegated to `Infrastructure::MarshalCacheStore`, which writes Marshal blobs and pointer files atomically; missing or corrupt pointers trigger cache invalidation rather than on-the-fly regeneration.
+- First open (miss): pipeline imports the EPUB, builds `BookData` (chapters, resources, metadata) and writes Marshal payloads + a pointer file via `AtomicFileWriter`.
+- Subsequent opens (hit): pipeline loads the payload from disk, validates version/digest/mtime, and hands `BookData` directly to `EPUBDocument`; no filesystem extraction is required. Pagination layouts are retrieved from per-layout Marshal files when available.
+- Dependencies: ZIP reads handled in-house via a minimal reader using `Zlib`.
 - Reader startup leverages `Application::PaginationCachePreloader` to hydrate cached pagination maps before the first frame, ensuring warm opens are fully interactive immediately.
 
 ## Content Formatting Pipeline

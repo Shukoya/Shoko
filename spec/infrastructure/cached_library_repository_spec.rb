@@ -38,7 +38,7 @@ RSpec.describe EbookReader::Infrastructure::Repositories::CachedLibraryRepositor
     FileUtils.remove_entry(tmp_dir)
   end
 
-  it 'lists entries stored in the SQLite cache' do
+  it 'lists entries stored in the cache manifest' do
     results = repository.list_entries
     expect(results.length).to eq(1)
     entry = results.first
@@ -58,5 +58,6 @@ RSpec.describe EbookReader::Infrastructure::Repositories::CachedLibraryRepositor
 
     pointer = JSON.parse(File.read(recreated))
     expect(pointer['sha256']).not_to be_nil
+    expect(pointer['engine']).to eq(EbookReader::Infrastructure::MarshalCacheStore::ENGINE)
   end
 end

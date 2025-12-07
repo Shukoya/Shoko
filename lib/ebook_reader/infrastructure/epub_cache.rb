@@ -8,16 +8,15 @@ require_relative '../domain/models/toc_entry'
 require_relative '../domain/models/content_block'
 require_relative '../errors'
 require_relative 'cache_paths'
-require_relative 'cache_store'
 require_relative 'marshal_cache_store'
 require_relative 'cache_pointer_manager'
 require_relative 'logger'
 
 module EbookReader
   module Infrastructure
-    # SQLite-backed cache for imported EPUB data and derived pagination layouts.
-    # Pointer files keep backwards-compatible `.cache` discovery while the bulk
-    # payload lives in `cache.sqlite3`.
+    # Marshal-backed cache for imported EPUB data and derived pagination layouts.
+    # Pointer files keep lightweight `.cache` discovery while the bulk payload
+    # lives in `.marshal` blobs.
     class EpubCache
       CACHE_VERSION   = 2
       CACHE_EXTENSION = '.cache'
@@ -65,7 +64,7 @@ module EbookReader
 
       def initialize(path, cache_root: CachePaths.reader_root, store: nil)
         @cache_root = cache_root
-        @cache_store = build_cache_store(store)
+        @cache_store = store || MarshalCacheStore.new(cache_root: @cache_root)
         @raw_path = File.expand_path(path)
         @payload_cache = nil
         @layout_cache = {}
@@ -196,7 +195,6 @@ module EbookReader
             @pointer_metadata = pointer
             @source_sha = pointer['sha256']
             @source_path = pointer['source_path']
-            @cache_store = build_cache_store(nil, pointer_engine: pointer['engine'])
           else
             raise EbookReader::CacheLoadError.new(@raw_path, 'invalid pointer file')
           end
@@ -250,17 +248,17 @@ module EbookReader
       end
 
       def persist_payload(sha, source_path, source_mtime, generated_at, book_data, layouts_hash)
+        engine = cache_engine
         pointer_metadata = {
           'format' => CachePointerManager::POINTER_FORMAT,
           'version' => CachePointerManager::POINTER_VERSION,
           'sha256' => sha,
           'source_path' => source_path,
           'generated_at' => (generated_at || Time.now.utc).iso8601,
-          'engine' => cache_engine
+          'engine' => engine
         }
 
-        json_store = cache_engine == 'sqlite'
-        serialized = Serializer.serialize(book_data, json: json_store)
+        serialized = Serializer.serialize(book_data, json: false)
         layouts_serialized = Serializer.serialize_layouts(layouts_hash)
 
         success = @cache_store.write_payload(
@@ -328,13 +326,14 @@ module EbookReader
       def ensure_pointer_from_metadata(record)
         return unless record
         ensure_sha!
+        record_engine = Serializer.value_for(record, :engine) || cache_engine
         pointer_metadata = {
           'format' => CachePointerManager::POINTER_FORMAT,
           'version' => CachePointerManager::POINTER_VERSION,
-          'sha256' => record['source_sha'],
-          'source_path' => record['source_path'],
-          'generated_at' => Serializer.coerce_time(record['generated_at'])&.iso8601 || Time.now.utc.iso8601,
-          'engine' => record['engine'] || cache_engine
+          'sha256' => Serializer.value_for(record, :source_sha),
+          'source_path' => Serializer.value_for(record, :source_path),
+          'generated_at' => Serializer.coerce_time(Serializer.value_for(record, :generated_at))&.iso8601 || Time.now.utc.iso8601,
+          'engine' => record_engine
         }
 
         current = @pointer_manager&.read
@@ -346,32 +345,17 @@ module EbookReader
         @source_type = :cache_pointer
       end
 
-      def build_cache_store(store, pointer_engine: nil)
-        return store if store
-
-        engine = pointer_engine || ENV.fetch('READER_CACHE_ENGINE', 'marshal')
-        case engine&.downcase
-        when 'marshal'
-          MarshalCacheStore.new(cache_root: @cache_root)
-        else
-          CacheStore.new(cache_root: @cache_root)
-        end
-      end
-
       def cache_engine
-        if @cache_store.respond_to?(:engine)
-          @cache_store.engine
-        else
-          'marshal'
-        end
+        engine = @cache_store&.respond_to?(:engine) ? @cache_store.engine : nil
+        engine || MarshalCacheStore::ENGINE
       rescue StandardError
-        'marshal'
+        MarshalCacheStore::ENGINE
       end
 
       module Serializer
         module_function
 
-        def serialize(book_data, json: true)
+        def serialize(book_data, json: false)
           {
             book: serialize_book(book_data, json:),
             chapters: serialize_chapters(book_data.chapters, json:),
@@ -474,67 +458,62 @@ module EbookReader
         end
 
         def build_payload_from_store(raw_payload)
-          metadata = raw_payload.metadata_row
+          metadata = raw_payload.metadata_row || {}
           book = deserialize_book(metadata, raw_payload.chapters, raw_payload.resources)
-          layouts = {}
-          Array(raw_payload.layouts).each do |row|
-            key = row['key'] || row[:key]
-            payload_json = row['payload_json'] || row[:payload_json]
-            layouts[key] = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
-          end
+          layouts = normalize_layouts(raw_payload.layouts)
 
           CachePayload.new(
-            version: metadata['cache_version'] || CACHE_VERSION,
-            source_sha256: metadata['source_sha'],
-            source_path: metadata['source_path'],
-            source_mtime: coerce_time(metadata['source_mtime']),
-            generated_at: coerce_time(metadata['generated_at']),
+            version: value_for(metadata, :cache_version) || CACHE_VERSION,
+            source_sha256: value_for(metadata, :source_sha),
+            source_path: value_for(metadata, :source_path),
+            source_mtime: coerce_time(value_for(metadata, :source_mtime)),
+            generated_at: coerce_time(value_for(metadata, :generated_at)),
             book: book,
             layouts: layouts
           )
         end
 
         def deserialize_book(book_row, chapter_rows, resource_rows)
-          authors = book_row['authors_json']
+          authors = value_for(book_row, :authors_json)
           authors = JSON.parse(authors || '[]') if authors.is_a?(String)
-          metadata = book_row['metadata_json']
+          metadata = value_for(book_row, :metadata_json)
           metadata = JSON.parse(metadata || '{}') if metadata.is_a?(String)
-          spine = book_row['spine_json']
+          spine = value_for(book_row, :spine_json)
           spine = JSON.parse(spine || '[]') if spine.is_a?(String)
-          hrefs = book_row['chapter_hrefs_json']
+          hrefs = value_for(book_row, :chapter_hrefs_json)
           hrefs = JSON.parse(hrefs || '[]') if hrefs.is_a?(String)
-          toc = book_row['toc_json']
+          toc = value_for(book_row, :toc_json)
           toc = JSON.parse(toc || '[]') if toc.is_a?(String)
           BookData.new(
-            title: book_row['title'],
-            language: book_row['language'],
+            title: value_for(book_row, :title),
+            language: value_for(book_row, :language),
             authors: Array(authors),
             chapters: deserialize_chapters(chapter_rows),
             toc_entries: deserialize_toc(toc),
-            opf_path: book_row['opf_path'],
+            opf_path: value_for(book_row, :opf_path),
             spine: Array(spine),
             chapter_hrefs: Array(hrefs),
             resources: deserialize_resources(resource_rows),
             metadata: metadata || {},
-            container_path: book_row['container_path'],
-            container_xml: book_row['container_xml']
+            container_path: value_for(book_row, :container_path),
+            container_xml: value_for(book_row, :container_xml)
           )
         end
 
         def deserialize_chapters(rows)
           Array(rows).map do |row|
-            lines = row['lines_json']
+            lines = value_for(row, :lines_json)
             lines = JSON.parse(lines || '[]') if lines.is_a?(String)
             lines = [] unless lines.is_a?(Array)
-            metadata = row['metadata_json']
+            metadata = value_for(row, :metadata_json)
             metadata = JSON.parse(metadata || '{}') if metadata.is_a?(String)
             EbookReader::Domain::Models::Chapter.new(
-              number: row['number'],
-              title: row['title'],
+              number: value_for(row, :number),
+              title: value_for(row, :title),
               lines: lines,
               metadata: metadata || {},
-              blocks: deserialize_blocks(row['blocks_json']),
-              raw_content: row['raw_content']
+              blocks: deserialize_blocks(value_for(row, :blocks_json)),
+              raw_content: value_for(row, :raw_content)
             )
           end
         end
@@ -547,13 +526,13 @@ module EbookReader
 
           data.map do |block|
             EbookReader::Domain::Models::ContentBlock.new(
-              type: block['type'],
-              level: block['level'],
-              metadata: block['metadata'],
-              segments: Array(block['segments']).map do |seg|
+              type: value_for(block, :type),
+              level: value_for(block, :level),
+              metadata: value_for(block, :metadata),
+              segments: Array(value_for(block, :segments)).map do |seg|
                 EbookReader::Domain::Models::TextSegment.new(
-                  text: seg['text'],
-                  styles: seg['styles'] || {}
+                  text: value_for(seg, :text),
+                  styles: value_for(seg, :styles) || {}
                 )
               end
             )
@@ -563,30 +542,60 @@ module EbookReader
         def deserialize_toc(json)
           data = json.is_a?(String) ? JSON.parse(json || '[]') : json
           Array(data).map do |entry|
+            navigable = value_for(entry, :navigable)
+            navigable = true if navigable.nil?
             EbookReader::Domain::Models::TOCEntry.new(
-              title: entry['title'],
-              href: entry['href'],
-              level: entry['level'],
-              chapter_index: entry['chapter_index'],
-              navigable: entry.fetch('navigable', true)
+              title: value_for(entry, :title),
+              href: value_for(entry, :href),
+              level: value_for(entry, :level),
+              chapter_index: value_for(entry, :chapter_index),
+              navigable: navigable
             )
           end
         end
 
         def deserialize_resources(rows)
           Array(rows).each_with_object({}) do |row, acc|
-            data = row['data']
+            data = value_for(row, :data)
             data = data.to_s.dup
             data.force_encoding(Encoding::BINARY)
-            acc[row['path']] = data
+            path = value_for(row, :path)
+            acc[path] = data if path
           end
         end
 
         def coerce_time(raw)
+          return raw if raw.is_a?(Time)
           return nil unless raw
 
           Time.at(raw.to_f).utc
         rescue StandardError
+          nil
+        end
+
+        def normalize_layouts(raw_layouts)
+          return {} unless raw_layouts
+
+          if raw_layouts.is_a?(Hash)
+            raw_layouts.each_with_object({}) do |(key, payload), acc|
+              normalized = normalize_layout_payload(payload)
+              acc[key.to_s] = normalized if normalized
+            end
+          else
+            Array(raw_layouts).each_with_object({}) do |row, acc|
+              key = value_for(row, :key)
+              payload = value_for(row, :payload_json) || value_for(row, :payload)
+              normalized = normalize_layout_payload(payload)
+              acc[key.to_s] = normalized if key && normalized
+            end
+          end
+        end
+
+        def normalize_layout_payload(payload)
+          return nil unless payload
+
+          payload.is_a?(String) ? JSON.parse(payload) : payload
+        rescue JSON::ParserError
           nil
         end
 

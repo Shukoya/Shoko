@@ -65,6 +65,7 @@ module EbookReader
           @doc_ref = doc
           @pages_data = result.pages
           rebuild_page_index!
+          @pages_data
         end
 
         # Get page data by index (PageManager compatibility)

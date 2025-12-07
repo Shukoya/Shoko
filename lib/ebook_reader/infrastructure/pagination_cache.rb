@@ -5,7 +5,7 @@ require_relative 'perf_tracer'
 
 module EbookReader
   module Infrastructure
-    # Persists dynamic pagination layouts inside the SQLite cache for a book.
+    # Persists dynamic pagination layouts inside the on-disk cache for a book.
     module PaginationCache
       module_function
 

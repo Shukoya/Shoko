@@ -5,14 +5,6 @@ require 'tmpdir'
 require 'json'
 
 RSpec.describe EbookReader::Infrastructure::MarshalCacheStore do
-  around do |example|
-    original = ENV['READER_CACHE_ENGINE']
-    ENV['READER_CACHE_ENGINE'] = 'marshal'
-    example.run
-  ensure
-    ENV['READER_CACHE_ENGINE'] = original
-  end
-
   let(:tmp_dir) { Dir.mktmpdir }
   let(:cache_root) { File.join(tmp_dir, 'cache') }
   let(:epub_path) { File.join(tmp_dir, 'book.epub') }
@@ -55,7 +47,7 @@ RSpec.describe EbookReader::Infrastructure::MarshalCacheStore do
     expect(read_payload).not_to be_nil
     expect(read_payload.book.title).to eq('Marshal Book')
     pointer = JSON.parse(File.read(cache.cache_path))
-    expect(pointer['engine']).to eq('marshal')
+    expect(pointer['engine']).to eq(EbookReader::Infrastructure::MarshalCacheStore::ENGINE)
 
     manifest_rows = described_class.manifest_rows(cache_root)
     expect(manifest_rows.length).to eq(1)

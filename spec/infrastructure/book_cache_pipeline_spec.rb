@@ -93,12 +93,12 @@ RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
     FileUtils.rm_rf(tmp_dir)
   end
 
-  it 'imports an EPUB and writes a SQLite-backed cache' do
+  it 'imports an EPUB and writes a Marshal-backed cache' do
     result = pipeline.load(epub_path)
     expect(result.loaded_from_cache).to be(false)
     expect(File.exist?(result.cache_path)).to be(true)
-    db_path = File.join(File.dirname(result.cache_path), EbookReader::Infrastructure::CacheDatabase::DB_FILENAME)
-    expect(File.exist?(db_path)).to be(true)
+    marshal_path = File.join(File.dirname(result.cache_path), "#{result.payload.source_sha256}.marshal")
+    expect(File.exist?(marshal_path)).to be(true)
     expect(result.book.title).to eq('Spec Book')
     expect(result.book.resources['OPS/images/pic.jpg'].bytesize).to eq(image_payload.bytesize)
   end

@@ -7,11 +7,12 @@ require_relative 'logger'
 
 module EbookReader
   module Infrastructure
-    # Manages pointer files that reference entries in cache.sqlite3.
+    # Manages pointer files that reference serialized cache payloads on disk.
     class CachePointerManager
-      POINTER_FORMAT  = 'reader-sqlite-cache'
-      POINTER_VERSION = 1
-      POINTER_KEYS    = %w[format version sha256 source_path generated_at].freeze
+      POINTER_FORMAT  = 'reader-marshal-cache'
+      POINTER_VERSION = 2
+      POINTER_ENGINE  = 'marshal'
+      POINTER_KEYS    = %w[format version sha256 source_path generated_at engine].freeze
 
       def initialize(path)
         @path = path
@@ -47,6 +48,7 @@ module EbookReader
       def valid_pointer?(data)
         POINTER_KEYS.all? { |key| data.key?(key) } &&
           data['format'] == POINTER_FORMAT &&
+          data['engine'].to_s == POINTER_ENGINE &&
           data['version'].to_i == POINTER_VERSION
       end
     end

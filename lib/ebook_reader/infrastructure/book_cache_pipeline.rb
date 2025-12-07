@@ -7,7 +7,7 @@ require_relative 'logger'
 
 module EbookReader
   module Infrastructure
-    # Coordinates importing EPUB files and storing/loading SQLite-backed caches.
+    # Coordinates importing EPUB files and storing/loading Marshal-backed caches.
     # Provides a single entry point that ensures cache integrity, re-importing
     # whenever a cache is missing, corrupted, or outdated.
     class BookCachePipeline
