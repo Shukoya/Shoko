@@ -163,6 +163,9 @@ module EbookReader
             when :paragraph
               lines << block.text
               lines << ''
+            when :image
+              lines << block.text
+              lines << ''
             when :list_item
               indent = '  ' * [block.level.to_i - 1, 0].max
               marker = (block.metadata && block.metadata[:marker]) || '•'
@@ -198,6 +201,9 @@ module EbookReader
               when :paragraph
                 append_wrapped_block(block, metadata_for(block))
                 append_blank_line_if_needed(blocks, index)
+              when :image
+                append_wrapped_block(block, metadata_for(block))
+                append_blank_line_if_needed(blocks, index, force: true)
               when :heading
                 append_wrapped_block(block, metadata_for(block), prefix: '', continuation_prefix: '')
                 append_blank_line_if_needed(blocks, index)

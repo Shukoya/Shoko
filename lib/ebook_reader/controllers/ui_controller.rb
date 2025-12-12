@@ -110,7 +110,10 @@ module EbookReader
         updates = { active_tab: tab, visible: true }
         case tab
         when :toc
-          updates[:toc_selected] = @state.get(%i[reader current_chapter])
+          doc = safe_resolve(:document)
+          entries = toc_entries_for(doc)
+          current_chapter = (@state.get(%i[reader current_chapter]) || 0).to_i
+          updates[:toc_selected] = toc_index_for_chapter(entries, current_chapter)
         when :annotations
           updates[:annotations_selected] =
             @state.get(%i[reader sidebar_annotations_selected]) || 0
@@ -120,6 +123,15 @@ module EbookReader
         end
 
         @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(updates))
+        if tab == :toc
+          selected = updates[:toc_selected].to_i
+          @state.dispatch(
+            EbookReader::Domain::Actions::UpdateSelectionsAction.new(
+              toc_selected: selected,
+              sidebar_toc_selected: selected
+            )
+          )
+        end
         @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
         set_message("#{tab.to_s.capitalize} opened", 1)
       end
@@ -173,10 +185,15 @@ module EbookReader
 
         case @state.get(%i[reader sidebar_active_tab])
         when :toc
-          index = @state.get(%i[reader sidebar_toc_selected]) || 0
-          # Use domain navigation service consistently
+          doc = safe_resolve(:document)
+          entries = toc_entries_for(doc)
+          selected_entry_index = (@state.get(%i[reader sidebar_toc_selected]) || 0).to_i
+          selected_entry_index = selected_entry_index.clamp(0, [entries.length - 1, 0].max)
+          chapter_index = entries[selected_entry_index]&.chapter_index
+          return unless chapter_index
+
           nav_service = @dependencies.resolve(:navigation_service)
-          nav_service.jump_to_chapter(index)
+          nav_service.jump_to_chapter(chapter_index)
 
           # Close the sidebar and restore previous view mode if it was stored
           prev_mode = @state.get(%i[reader sidebar_prev_view_mode])
@@ -302,9 +319,10 @@ module EbookReader
         tab = @state.get(%i[reader sidebar_active_tab])
         key, action_key, max = case tab
                                when :toc
-                                 doc = @dependencies.resolve(:document)
-                                 indices = navigable_toc_indices_for(doc)
-                                 cur = @state.get(%i[reader sidebar_toc_selected]) || indices.first || 0
+                                 doc = safe_resolve(:document)
+                                 entries = toc_entries_for(doc)
+                                 indices = navigable_toc_entry_indices(entries)
+                                 cur = (@state.get(%i[reader sidebar_toc_selected]) || indices.first || 0).to_i
                                  target = if delta.positive?
                                             indices.find { |idx| idx > cur } || indices.last || cur
                                           elsif delta.negative?
@@ -312,8 +330,12 @@ module EbookReader
                                           else
                                             cur
                                           end
-                                 updates = { sidebar_toc_selected: target, toc_selected: target }
-                                 @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(updates))
+                                 @state.dispatch(
+                                   EbookReader::Domain::Actions::UpdateSelectionsAction.new(
+                                     sidebar_toc_selected: target,
+                                     toc_selected: target
+                                   )
+                                 )
                                  return
                                when :annotations
                                  cur = @state.get(%i[reader sidebar_annotations_selected]) || 0
@@ -334,19 +356,42 @@ module EbookReader
         @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(action_key => new_val))
       end
 
-      def navigable_toc_indices_for(doc)
-        entries = if doc.respond_to?(:toc_entries)
-                    Array(doc.toc_entries)
-                  else
-                    []
-                  end
-        indices = entries.filter_map(&:chapter_index).uniq.sort
-        if indices.empty?
-          chapters_count = doc&.chapters&.length.to_i
-          (0...chapters_count).to_a
-        else
-          indices
+      def toc_entries_for(doc)
+        entries = doc.respond_to?(:toc_entries) ? Array(doc.toc_entries) : []
+        return entries unless entries.empty?
+
+        chapters = doc.respond_to?(:chapters) ? Array(doc.chapters) : []
+        chapters.each_with_index.map do |chapter, idx|
+          title = chapter.respond_to?(:title) ? chapter.title.to_s : ''
+          title = "Chapter #{idx + 1}" if title.strip.empty?
+          Domain::Models::TOCEntry.new(
+            title: title,
+            href: nil,
+            level: 0,
+            chapter_index: idx,
+            navigable: true
+          )
         end
+      end
+
+      def navigable_toc_entry_indices(entries)
+        indices = []
+        Array(entries).each_with_index do |entry, idx|
+          indices << idx if entry&.chapter_index
+        end
+        return indices unless indices.empty?
+
+        (0...Array(entries).length).to_a
+      end
+
+      def toc_index_for_chapter(entries, chapter_index)
+        Array(entries).find_index { |entry| entry&.chapter_index == chapter_index } || 0
+      end
+
+      def safe_resolve(name)
+        @dependencies.resolve(name)
+      rescue StandardError
+        nil
       end
 
       def handle_create_annotation_action(action_data)

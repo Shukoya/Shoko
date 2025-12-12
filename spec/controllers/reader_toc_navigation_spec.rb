@@ -28,8 +28,10 @@ RSpec.describe EbookReader::ReaderController do
     expect(controller.state.get(%i[reader toc_selected])).to eq(1)
     expect(controller.state.get(%i[reader sidebar_toc_selected])).to eq(1)
 
+    controller.state.set(%i[reader toc_selected], 2)
+    controller.state.set(%i[reader sidebar_toc_selected], 2)
     controller.toc_up
-    expect(controller.state.get(%i[reader toc_selected])).to eq(0)
-    expect(controller.state.get(%i[reader sidebar_toc_selected])).to eq(0)
+    expect(controller.state.get(%i[reader toc_selected])).to eq(1)
+    expect(controller.state.get(%i[reader sidebar_toc_selected])).to eq(1)
   end
 end

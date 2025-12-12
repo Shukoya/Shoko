@@ -40,6 +40,55 @@ RSpec.describe EbookReader::Infrastructure::Parsers::XHTMLContentParser do
     expect(italic_segment.text).to include('emphasis')
   end
 
+  it 'preserves whitespace around inline tags' do
+    paragraph = blocks.find { |block| block.type == :paragraph }
+    expect(paragraph.text).to eq('First paragraph with emphasis.')
+  end
+
+  it 'does not flatten container divs containing block children' do
+    html = <<~HTML
+      <html>
+        <body>
+          <div>
+            <p>One</p>
+            <p>Two</p>
+          </div>
+        </body>
+      </html>
+    HTML
+
+    blocks = described_class.new(html).parse
+    expect(blocks.map(&:text)).to include('One', 'Two')
+    expect(blocks.count { |b| b.type == :paragraph }).to be >= 2
+  end
+
+  it 'creates placeholders for images' do
+    html = <<~HTML
+      <html>
+        <body>
+          <img src="cover.png" alt="Cover image" />
+        </body>
+      </html>
+    HTML
+
+    blocks = described_class.new(html).parse
+    expect(blocks.any? { |b| b.type == :image }).to be(true)
+    expect(blocks.map(&:text).join("\n")).to include('[Image: Cover image]')
+  end
+
+  it 'decodes common HTML entities (e.g. &nbsp; and &mdash;)' do
+    html = <<~HTML
+      <html>
+        <body>
+          <p>A&nbsp;B &mdash; C</p>
+        </body>
+      </html>
+    HTML
+
+    blocks = described_class.new(html).parse
+    expect(blocks.map(&:text).join(' ')).to include('A B — C')
+  end
+
   it 'annotates list items with markers and levels' do
     list_items = blocks.select { |block| block.type == :list_item }
     expect(list_items.count).to eq(2)

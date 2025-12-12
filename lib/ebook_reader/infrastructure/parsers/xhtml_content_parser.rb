@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
+require 'cgi'
 require 'rexml/document'
 require 'rexml/parsers/pullparser'
 
 require_relative '../../domain/models/content_block'
+require_relative '../../helpers/html_processor'
 require_relative '../../errors'
 require_relative '../logger'
 
@@ -22,9 +24,23 @@ module EbookReader
         PRE = 'pre'
         HR = 'hr'
         BR = 'br'
+        IMG = 'img'
         TABLE = 'table'
 
         WHITESPACE_PATTERN = /\s+/
+        XML_ENTITY_NAMES = %w[amp lt gt apos quot].freeze
+        BLOCK_LEVEL_ELEMENTS = (
+          BLOCK_TYPES +
+          HEADING_TYPES +
+          LIST_TYPES +
+          [
+            LIST_ITEM,
+            BLOCKQUOTE,
+            PRE,
+            HR,
+            TABLE,
+          ]
+        ).freeze
 
         def initialize(html)
           @html = html.to_s
@@ -57,7 +73,7 @@ module EbookReader
           compacted
         rescue REXML::ParseException => e
           Infrastructure::Logger.error('Failed to parse chapter HTML', error: e.message)
-          []
+          fallback_blocks
         end
 
         private
@@ -69,16 +85,26 @@ module EbookReader
         private_constant :ListContext
 
         def parse_document(text)
-          REXML::Document.new(text, ignore_whitespace_nodes: :all)
-        rescue REXML::ParseException => e
-          raise e
+          sanitized = sanitize_for_xml(text.to_s)
+          REXML::Document.new(sanitized, ignore_whitespace_nodes: :all)
+        end
+
+        def sanitize_for_xml(text)
+          text.gsub(/&([A-Za-z][A-Za-z0-9]+);/) do |match|
+            name = Regexp.last_match(1)
+            next match if XML_ENTITY_NAMES.include?(name)
+
+            decoded = EbookReader::Helpers::HTMLProcessor.decode_entities(match)
+            decoded == match ? "&amp;#{name};" : decoded
+          end
         end
 
         def find_body(document)
           return nil unless document&.root
 
-          body = document.root.elements['body']
-          body || document.root.elements['BODY']
+          document.root.elements['*[local-name()="body"]'] ||
+            document.root.elements['body'] ||
+            document.root.elements['BODY']
         end
 
         def traverse_children(node, blocks, context)
@@ -102,6 +128,9 @@ module EbookReader
           elsif name == BLOCKQUOTE
             block = build_quote_block(element, context)
             blocks << block if block
+          elsif name == IMG
+            block = build_image_block(element, context)
+            blocks << block if block
           elsif LIST_TYPES.include?(name)
             traverse_list(element, blocks, context, ordered: name == 'ol')
           elsif name == LIST_ITEM
@@ -114,8 +143,12 @@ module EbookReader
           elsif name == TABLE
             blocks.concat(build_table_blocks(element, context))
           elsif BLOCK_TYPES.include?(name) || block_via_style?(element)
-            paragraph = build_paragraph(element, context)
-            blocks << paragraph if paragraph
+            if contains_block_children?(element)
+              traverse_children(element, blocks, context)
+            else
+              paragraph = build_paragraph(element, context)
+              blocks << paragraph if paragraph
+            end
           elsif name == BR
             blocks << build_break_block
           else
@@ -132,12 +165,13 @@ module EbookReader
           return if content.to_s.strip.empty?
 
           segment = text_segment(content)
-          blocks << build_paragraph_from_segments([segment], context)
+          paragraph = build_paragraph_from_segments(finalize_segments([segment]), context)
+          blocks << paragraph if paragraph
         end
 
         def build_heading(element, name, context)
           level = name.delete('h').to_i
-          segments = collect_segments(element, {}, context)
+          segments = finalize_segments(collect_segments(element, {}, context))
           metadata = { level: level }
           metadata[:quoted] = true if context.in_blockquote
           EbookReader::Domain::Models::ContentBlock.new(
@@ -150,7 +184,7 @@ module EbookReader
 
         def build_quote_block(element, context)
           inner_context = Context.new(list_stack: context.list_stack.dup, in_blockquote: true)
-          segments = collect_segments(element, {}, inner_context)
+          segments = finalize_segments(collect_segments(element, {}, inner_context))
           return nil if segments.empty?
 
           EbookReader::Domain::Models::ContentBlock.new(
@@ -171,7 +205,7 @@ module EbookReader
 
         def build_list_item(element, context)
           list_context = context.list_stack.last
-          segments = collect_segments(element, {}, context)
+          segments = finalize_segments(collect_segments(element, {}, context))
           marker = list_context&.ordered ? "#{list_context.index}." : '•'
           list_context.index += 1 if list_context&.ordered
 
@@ -245,7 +279,7 @@ module EbookReader
         end
 
         def build_paragraph(element, context)
-          segments = collect_segments(element, {}, context)
+          segments = finalize_segments(collect_segments(element, {}, context))
           return nil if segments.empty?
 
           metadata = {}
@@ -258,6 +292,8 @@ module EbookReader
         end
 
         def build_paragraph_from_segments(segments, context)
+          return nil if segments.nil? || segments.empty?
+
           metadata = {}
           metadata[:quoted] = true if context&.in_blockquote
           EbookReader::Domain::Models::ContentBlock.new(
@@ -274,13 +310,16 @@ module EbookReader
             case child
             when REXML::Text
               text = child.value
-              next if text.strip.empty?
-
-              segments << text_segment(text, inherited_styles)
+              segment = text_segment(text, inherited_styles)
+              segments << segment if segment.text && !segment.text.empty?
             when REXML::Element
               name = child.name.downcase
               if name == BR
                 segments << text_segment(INLINE_NEWLINE, inherited_styles.merge(break: true))
+                next
+              end
+              if name == IMG
+                segments << image_placeholder_segment(child, inherited_styles)
                 next
               end
 
@@ -329,13 +368,14 @@ module EbookReader
         end
 
         def normalize_text(text, styles)
-          return text if styles[:code] || styles[:preserve_whitespace]
+          decoded = EbookReader::Helpers::HTMLProcessor.decode_entities(text.to_s)
+          return decoded if styles[:code] || styles[:preserve_whitespace]
 
           if styles[:break]
             return text == INLINE_NEWLINE ? INLINE_NEWLINE : text
           end
 
-          text.gsub(/\r?\n/, ' ').gsub(WHITESPACE_PATTERN, ' ').strip
+          decoded.delete("\r").gsub(/\n/, ' ').gsub(WHITESPACE_PATTERN, ' ')
         end
 
         def extract_raw_text(element)
@@ -344,6 +384,8 @@ module EbookReader
 
         def compact_blocks(blocks)
           blocks.reject do |block|
+            next false if block&.type == :break
+
             block.nil? || block.segments.empty? || block.text.strip.empty?
           end
         end
@@ -353,6 +395,113 @@ module EbookReader
           return true if /display\s*:\s*(block|list-item)/i.match?(style)
 
           false
+        end
+
+        def contains_block_children?(element)
+          element.children.any? do |child|
+            next false unless child.is_a?(REXML::Element)
+
+            name = child.name.to_s.downcase
+            BLOCK_LEVEL_ELEMENTS.include?(name) || block_via_style?(child)
+          end
+        end
+
+        def build_image_block(element, context)
+          segment = image_placeholder_segment(element, {})
+          segments = finalize_segments([segment])
+          return nil if segments.empty?
+
+          src = element.attributes['src']
+          alt = element.attributes['alt']
+          metadata = { image: { src: src, alt: alt } }
+          metadata[:quoted] = true if context.in_blockquote
+
+          EbookReader::Domain::Models::ContentBlock.new(
+            type: :image,
+            segments: segments,
+            metadata: metadata
+          )
+        end
+
+        def build_break_block
+          EbookReader::Domain::Models::ContentBlock.new(
+            type: :break,
+            segments: [],
+            metadata: { spacer: true }
+          )
+        end
+
+        def image_placeholder_segment(element, inherited_styles)
+          src = element.attributes['src'].to_s
+          alt = element.attributes['alt'].to_s.strip
+          label = alt.empty? ? image_label_from_src(src) : alt
+          text = label.empty? ? '[Image]' : "[Image: #{label}]"
+          text_segment(" #{text} ", inherited_styles.merge(dim: true))
+        end
+
+        def image_label_from_src(src)
+          return '' if src.nil? || src.empty?
+
+          path = src.split('?', 2).first.to_s
+          File.basename(path)
+        rescue StandardError
+          ''
+        end
+
+        def finalize_segments(segments)
+          segs = Array(segments).compact
+          segs = segs.reject { |seg| seg.text.to_s.empty? }
+          return [] if segs.empty?
+
+          segs = collapse_boundary_spaces(segs)
+          segs = trim_edge_whitespace(segs)
+          segs.reject { |seg| seg.text.to_s.empty? }
+        end
+
+        def collapse_boundary_spaces(segments)
+          out = [segments.first]
+          segments.drop(1).each do |seg|
+            prev = out.last
+            prev_text = prev.text.to_s
+            cur_text = seg.text.to_s
+            if prev_text.end_with?(' ') && cur_text.start_with?(' ')
+              cur_text = cur_text.sub(/\A +/, '')
+              seg = EbookReader::Domain::Models::TextSegment.new(text: cur_text, styles: seg.styles)
+            end
+            out << seg unless seg.text.to_s.empty?
+          end
+          out
+        end
+
+        def trim_edge_whitespace(segments)
+          segs = segments.dup
+          return [] if segs.empty?
+
+          first = segs.first
+          first_text = first.text.to_s.sub(/\A\s+/, '')
+          segs[0] = EbookReader::Domain::Models::TextSegment.new(text: first_text, styles: first.styles)
+
+          last = segs.last
+          last_text = last.text.to_s.sub(/\s+\z/, '')
+          segs[-1] = EbookReader::Domain::Models::TextSegment.new(text: last_text, styles: last.styles)
+
+          segs.reject { |seg| seg.text.to_s.empty? }
+        end
+
+        def fallback_blocks
+          text = EbookReader::Helpers::HTMLProcessor.html_to_text(@html)
+          return [] if text.to_s.strip.empty?
+
+          paragraphs = text.split(/\n{2,}/).map(&:strip).reject(&:empty?)
+          paragraphs.map do |para|
+            EbookReader::Domain::Models::ContentBlock.new(
+              type: :paragraph,
+              segments: [text_segment(para, {})],
+              metadata: {}
+            )
+          end
+        rescue StandardError
+          []
         end
       end
     end

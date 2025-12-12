@@ -60,7 +60,7 @@ module EbookReader
           when :down
             navigate(state_store, deps, context, direction: :down)
           when :select
-            select_chapter(state_store, deps)
+            select_chapter(state_store, deps, context)
           else
             raise ExecutionError.new("Unknown reader TOC action: #{@action}", command_name: name)
           end
@@ -115,29 +115,51 @@ module EbookReader
           state_store.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(updates))
         end
 
-        def select_chapter(state_store, deps)
+        def select_chapter(state_store, deps, context)
           navigation = resolve_navigation_service(deps)
           return :pass unless navigation
 
-          index = state_store.get(%i[reader toc_selected]) || 0
-          navigation.jump_to_chapter(index)
+          doc = resolve_document(deps, context)
+          entries = toc_entries_for(doc)
+          selected_entry_index = (state_store.get(%i[reader toc_selected]) || 0).to_i
+          selected_entry_index = selected_entry_index.clamp(0, [entries.length - 1, 0].max)
+          chapter_index = entries[selected_entry_index]&.chapter_index
+          return :pass unless chapter_index
+
+          navigation.jump_to_chapter(chapter_index)
         end
 
         def navigable_indices(doc)
           return @cached_indices if defined?(@cached_indices) && @cached_indices
 
-          entries = if doc.respond_to?(:toc_entries)
-                      Array(doc.toc_entries)
-                    else
-                      []
-                    end
+          entries = toc_entries_for(doc)
 
-          indices = entries.filter_map(&:chapter_index).uniq.sort
+          indices = []
+          entries.each_with_index do |entry, idx|
+            indices << idx if entry&.chapter_index
+          end
+
           if indices.empty?
-            chapters_count = doc&.chapters&.length.to_i
-            @cached_indices = (0...chapters_count).to_a
+            fallback_count = entries.empty? ? doc&.chapters&.length.to_i : entries.length
+            @cached_indices = (0...fallback_count).to_a
           else
             @cached_indices = indices
+          end
+        end
+
+        def toc_entries_for(doc)
+          entries = doc.respond_to?(:toc_entries) ? Array(doc.toc_entries) : []
+          return entries unless entries.empty?
+
+          chapters = doc.respond_to?(:chapters) ? Array(doc.chapters) : []
+          chapters.each_with_index.map do |chapter, idx|
+            Domain::Models::TOCEntry.new(
+              title: chapter&.title || "Chapter #{idx + 1}",
+              href: nil,
+              level: 0,
+              chapter_index: idx,
+              navigable: true
+            )
           end
         end
       end

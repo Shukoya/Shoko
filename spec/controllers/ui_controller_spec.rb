@@ -18,7 +18,7 @@ RSpec.describe EbookReader::Controllers::UIController do
   let(:selection_service) { double('SelectionService', extract_text: 'txt') }
   let(:clipboard) { double('Clipboard', available?: true, copy_with_feedback: true) }
   let(:document) do
-    double('Doc', chapters: Array.new(5) { |i| double("Ch#{i}") })
+    double('Doc', chapters: Array.new(5) { |i| double("Ch#{i}") }, toc_entries: [])
   end
   let(:container) do
     FakeContainer.new(

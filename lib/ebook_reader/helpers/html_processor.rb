@@ -34,6 +34,64 @@ module EbookReader
 
       private_constant :BLOCK_REPLACEMENTS
 
+      HTML_ENTITY_MAP = {
+        'nbsp' => ' ',
+        'ensp' => ' ',
+        'emsp' => ' ',
+        'thinsp' => ' ',
+        'shy' => '',
+        'mdash' => '—',
+        'ndash' => '–',
+        'hellip' => '…',
+        'ldquo' => '“',
+        'rdquo' => '”',
+        'lsquo' => '‘',
+        'rsquo' => '’',
+        'laquo' => '«',
+        'raquo' => '»',
+        'bull' => '•',
+        'middot' => '·',
+        'times' => '×',
+        'divide' => '÷',
+        'deg' => '°',
+        'copy' => '©',
+        'reg' => '®',
+        'trade' => '™',
+        'frac14' => '¼',
+        'frac12' => '½',
+        'frac34' => '¾',
+        'sup1' => '¹',
+        'sup2' => '²',
+        'sup3' => '³',
+      }.freeze
+
+      private_constant :HTML_ENTITY_MAP
+
+      def self.decode_entities(text)
+        str = text.to_s
+        return str if str.empty?
+
+        decoded = str
+          .gsub(/&#x([0-9A-Fa-f]+);/) do |match|
+            [Regexp.last_match(1).to_i(16)].pack('U')
+          rescue StandardError
+            match
+          end
+          .gsub(/&#(\d+);/) do |match|
+            [Regexp.last_match(1).to_i].pack('U')
+          rescue StandardError
+            match
+          end
+          .gsub(/&([A-Za-z][A-Za-z0-9]+);/) do |match|
+            name = Regexp.last_match(1)
+            replacement = HTML_ENTITY_MAP[name] || HTML_ENTITY_MAP[name.downcase]
+            replacement.nil? ? match : replacement
+          end
+
+        # Decode the built-in XML entities (amp/lt/gt/quot/apos) last.
+        CGI.unescapeHTML(decoded).tr("\u00A0", ' ')
+      end
+
       private_class_method def self.normalize_html(html)
         text = html.dup
         # Handle CDATA sections BEFORE removing other tags
@@ -41,7 +99,7 @@ module EbookReader
         text = remove_scripts_and_styles(text)
         text = replace_block_elements(text)
         text = strip_tags(text)
-        text = CGI.unescapeHTML(text)
+        text = decode_entities(text)
         clean_whitespace(text)
       end
 
@@ -74,7 +132,7 @@ module EbookReader
       end
 
       def self.clean_html(text)
-        CGI.unescapeHTML(text.strip)
+        decode_entities(text.to_s.strip)
       end
     end
   end

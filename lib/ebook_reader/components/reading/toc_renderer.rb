@@ -15,21 +15,20 @@ module EbookReader
           doc = context&.document
           return unless st && doc
 
-          selected_chapter_index = st.get(%i[reader toc_selected]) || 0
+          selected_entry_index = (st.get(%i[reader toc_selected]) || 0).to_i
           entries = doc.respond_to?(:toc_entries) ? doc.toc_entries : []
           entries = fallback_entries(doc.chapters) if entries.nil? || entries.empty?
 
-          selected_entry_index = find_entry_index(entries, selected_chapter_index)
+          selected_entry_index = selected_entry_index.clamp(0, [entries.length - 1, 0].max)
 
           render_header(surface, bounds)
-          render_entries_list(surface, bounds, entries, selected_entry_index,
-                              selected_chapter_index)
+          render_entries_list(surface, bounds, entries, selected_entry_index)
           render_footer(surface, bounds)
         end
 
         private
 
-        EntryCtx = Struct.new(:entry, :index, :selected_entry_index, :selected_chapter_index, :y,
+        EntryCtx = Struct.new(:entry, :index, :selected_entry_index, :y,
                               keyword_init: true)
 
         def render_header(surface, bounds)
@@ -41,7 +40,7 @@ module EbookReader
                         "#{EbookReader::Constants::UIConstants::COLOR_TEXT_DIM}[t/ESC] Back to Reading#{reset}")
         end
 
-        def render_entries_list(surface, bounds, entries, selected_entry_index, selected_chapter_index)
+        def render_entries_list(surface, bounds, entries, selected_entry_index)
           return if entries.empty?
 
           list_start = 4
@@ -56,7 +55,6 @@ module EbookReader
             ctx = EntryCtx.new(entry: entry,
                                index: idx,
                                selected_entry_index: selected_entry_index,
-                               selected_chapter_index: selected_chapter_index,
                                y: y)
             render_entry(surface, bounds, ctx)
           end
@@ -70,7 +68,7 @@ module EbookReader
           indent = '  ' * [entry.level, 0].max
           (indent + title)[0, width - 6]
 
-          selected = entry.chapter_index && entry.chapter_index == ctx.selected_chapter_index
+          selected = ctx.index == ctx.selected_entry_index
           pointer = if selected
                       EbookReader::Constants::UIConstants::SELECTION_POINTER_COLOR + EbookReader::Constants::UIConstants::SELECTION_POINTER + reset
                     else
@@ -108,15 +106,11 @@ module EbookReader
           entry.level.zero? ? title.upcase : title
         end
 
-        def find_entry_index(entries, chapter_index)
-          entries.find_index { |entry| entry.chapter_index == chapter_index } || 0
-        end
-
         def fallback_entries(chapters)
           chapters.each_with_index.map do |chapter, idx|
             Domain::Models::TOCEntry.new(title: chapter.title || "Chapter #{idx + 1}",
                                          href: nil,
-                                         level: 1,
+                                         level: 0,
                                          chapter_index: idx,
                                          navigable: true)
           end

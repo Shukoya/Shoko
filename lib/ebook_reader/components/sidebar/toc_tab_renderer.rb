@@ -31,11 +31,14 @@ module EbookReader
           entries_full = fallback_entries(chapters) if entries_full.nil? || entries_full.empty?
           return render_empty_message(surface, bounds, metrics) if entries_full.empty?
 
-          selected_chapter = state.get(%i[reader sidebar_toc_selected]) || 0
+          selected_full_index = (state.get(%i[reader sidebar_toc_selected]) || 0).to_i
+          selected_full_index = selected_full_index.clamp(0, [entries_full.length - 1, 0].max)
 
           # Handle filtering if active
           entries = get_filtered_entries(entries_full, state)
-          selected_entry_index = find_entry_index(entries, selected_chapter)
+          selected_entry = entries_full[selected_full_index]
+          selected_entry_index = selected_entry ? entries.index(selected_entry) : 0
+          selected_entry_index ||= 0
 
           by = metrics.y
           content_start_y = render_header(surface, bounds, metrics, doc, entries_full.length)
@@ -49,7 +52,7 @@ module EbookReader
           available_height = metrics.height - (content_start_y - by) - footer_height
           available_height = [available_height, 0].max
 
-          render_entries_list(surface, bounds, metrics, entries, selected_entry_index, selected_chapter,
+          render_entries_list(surface, bounds, metrics, entries, selected_entry_index,
                               content_start_y, available_height)
 
           render_footer(surface, bounds, metrics)
@@ -168,7 +171,7 @@ module EbookReader
           by + 2
         end
 
-        def render_entries_list(surface, bounds, metrics, entries, selected_entry_index, selected_chapter_index,
+        def render_entries_list(surface, bounds, metrics, entries, selected_entry_index,
                                 start_y, height)
           return if entries.empty? || height <= 0
 
@@ -181,7 +184,7 @@ module EbookReader
             ctx = ItemCtx.new(entries: entries,
                               entry: entry,
                               index: idx,
-                              selected_index: selected_chapter_index,
+                              selected_index: selected_entry_index,
                               y: y_pos)
             render_chapter_item(surface, bounds, metrics, ctx)
           end
@@ -195,7 +198,7 @@ module EbookReader
           entry = ctx.entry
           entries = ctx.entries
           max_width = [bw - 2, 0].max
-          selected = navigable?(entry) && entry.chapter_index == ctx.selected_index
+          selected = ctx.index == ctx.selected_index
 
           gutter = selected ? "#{COLOR_TEXT_ACCENT}▎#{reset}" : "#{COLOR_TEXT_DIM}│#{reset}"
           surface.write(bounds, y, bx, gutter)
@@ -210,10 +213,6 @@ module EbookReader
           segments = build_segments(prefix_plain, icon_plain, icon_color, title_plain, entry)
           line = compose_line(segments, selected)
           surface.write(bounds, y, bx + 2, line)
-        end
-
-        def find_entry_index(entries, chapter_index)
-          entries.find_index { |entry| entry.chapter_index == chapter_index } || 0
         end
 
         def fallback_entries(chapters)

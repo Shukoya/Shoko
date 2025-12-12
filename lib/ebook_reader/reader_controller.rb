@@ -295,7 +295,31 @@ module EbookReader
     end
 
     def toc_select
-      jump_to_chapter(@state.get(%i[reader toc_selected]))
+      doc = @doc
+      return unless doc
+
+      entries = doc.respond_to?(:toc_entries) ? Array(doc.toc_entries) : []
+      entries = if entries.empty?
+                  Array(doc.chapters).each_with_index.map do |chapter, idx|
+                    Domain::Models::TOCEntry.new(
+                      title: chapter&.title || "Chapter #{idx + 1}",
+                      href: nil,
+                      level: 0,
+                      chapter_index: idx,
+                      navigable: true
+                    )
+                  end
+                else
+                  entries
+                end
+
+      selected = (@state.get(%i[reader toc_selected]) || 0).to_i
+      selected = selected.clamp(0, [entries.length - 1, 0].max)
+      chapter_index = entries[selected]&.chapter_index
+      return unless chapter_index
+
+      nav = @dependencies.resolve(:navigation_service)
+      nav.jump_to_chapter(chapter_index)
     end
 
     def bookmark_down
@@ -593,10 +617,14 @@ module EbookReader
                 else
                   []
                 end
-      indices = entries.filter_map(&:chapter_index).uniq.sort
+      indices = []
+      entries.each_with_index do |entry, idx|
+        indices << idx if entry&.chapter_index
+      end
+
       if indices.empty?
-        chapters_count = @doc&.chapters&.length.to_i
-        @navigable_toc_indices = (0...chapters_count).to_a
+        fallback_count = entries.empty? ? @doc&.chapters&.length.to_i : entries.length
+        @navigable_toc_indices = (0...fallback_count).to_a
       else
         @navigable_toc_indices = indices
       end

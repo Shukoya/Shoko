@@ -25,7 +25,7 @@ RSpec.describe EbookReader::Controllers::UIController do
   it 'toggles TOC sidebar and restores previous view mode' do
     # Initial setup
     state.update({ %i[config view_mode] => :split })
-    doc = instance_double('Doc', chapters: Array.new(3) { |i| double("c#{i}") })
+    doc = instance_double('Doc', chapters: Array.new(3) { |i| double("c#{i}") }, toc_entries: [])
     controller = described_class.new(state, DepsUI.new(doc: doc))
 
     # Open TOC sidebar
@@ -45,7 +45,8 @@ RSpec.describe EbookReader::Controllers::UIController do
     state.update({ %i[reader sidebar_visible] => true, %i[reader sidebar_active_tab] => :toc,
                    %i[reader sidebar_toc_selected] => 2 })
     nav = instance_double('Nav', jump_to_chapter: true)
-    controller = described_class.new(state, DepsUI.new(nav: nav))
+    doc = instance_double('Doc', chapters: Array.new(3) { |i| double("c#{i}") }, toc_entries: [])
+    controller = described_class.new(state, DepsUI.new(doc: doc, nav: nav))
 
     expect(nav).to receive(:jump_to_chapter).with(2)
     controller.sidebar_select

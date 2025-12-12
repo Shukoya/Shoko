@@ -42,7 +42,7 @@ module EbookReader
           chapter_hrefs = chapters_data[:hrefs]
           spine         = chapters_data[:spine]
 
-          toc_entries = build_toc_entries(chapters, processor.toc_entries, chapter_hrefs)
+          toc_entries = build_toc_entries(chapters, processor.toc_entries, chapter_hrefs, opf_path)
           resources   = extract_resources(zip, opf_path, manifest)
 
           EpubCache::BookData.new(
@@ -119,7 +119,7 @@ module EbookReader
         { chapters:, hrefs:, spine: }
       end
 
-      def build_toc_entries(chapters, toc_entries, chapter_hrefs)
+      def build_toc_entries(chapters, toc_entries, chapter_hrefs, opf_path)
         href_to_index = {}
         chapter_hrefs.each_with_index do |href, idx|
           href_to_index[href] = idx if href
@@ -130,7 +130,8 @@ module EbookReader
           href  = entry[:href]
           level = entry[:level].to_i
 
-          chapter_index = href_to_index[resolve_href_for_toc(href)]
+          target = resolve_toc_target(opf_path, entry)
+          chapter_index = href_to_index[target]
           if chapter_index && (chapter = chapters[chapter_index]) && chapter.title.to_s.strip.empty?
             chapter.title = title
           end
@@ -145,21 +146,33 @@ module EbookReader
         end
       end
 
-      def resolve_href_for_toc(href)
+      def resolve_toc_target(opf_path, entry)
+        return nil unless entry
+
+        if entry.is_a?(Hash) && entry[:target]
+          return entry[:target].to_s
+        end
+
+        href = entry.is_a?(Hash) ? entry[:href] : nil
         return nil unless href
 
-        href.split('#', 2).first
+        core = href.to_s.split('#', 2).first.to_s
+        return nil if core.empty?
+
+        source_path = entry.is_a?(Hash) ? entry[:source_path] : nil
+        base_path = (source_path || opf_path).to_s
+        base_dir = File.dirname(base_path)
+        File.expand_path(File.join('/', base_dir, core), '/').sub(%r{^/}, '')
       end
 
       def extract_resources(zip, opf_path, manifest)
-        base_dir = File.dirname(opf_path)
         resources = {}
 
         manifest.each_value do |href|
           rel = href.to_s
           next if rel.empty?
 
-          path = File.join(base_dir, rel).sub(%r{^\./}, '')
+          path = resolve_href(opf_path, rel)
           next unless zip.find_entry(path)
 
           resources[path] = read_binary_entry(zip, path)
