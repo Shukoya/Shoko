@@ -51,7 +51,7 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
   it 'writes and reloads a cache payload for an EPUB source' do
     cache = described_class.new(epub_path)
     payload = cache.write_book!(book_data)
-    payload_path = File.join(cache_root, "#{cache.sha256}.marshal")
+    payload_path = File.join(cache_root, "#{cache.sha256}.json")
 
     expect(payload).to be_a(described_class::CachePayload)
     expect(File.exist?(cache.cache_path)).to be(true)
@@ -59,7 +59,7 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
 
     pointer = JSON.parse(File.read(cache.cache_path))
     expect(pointer['format']).to eq(EbookReader::Infrastructure::CachePointerManager::POINTER_FORMAT)
-    expect(pointer['engine']).to eq(EbookReader::Infrastructure::MarshalCacheStore::ENGINE)
+    expect(pointer['engine']).to eq(EbookReader::Infrastructure::JsonCacheStore::ENGINE)
     expect(pointer['sha256']).to eq(cache.sha256)
 
     reloaded = described_class.new(epub_path).load_for_source(strict: true)
@@ -88,7 +88,7 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
     end
 
     expect(success).to be(false)
-    expect(File.exist?(File.join(cache_root, 'evil.marshal'))).to be(false)
+    expect(File.exist?(File.join(cache_root, 'layouts', 'evil.json'))).to be(false)
   end
 
   it 'returns nil when pointer payload is corrupted' do
@@ -112,7 +112,7 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
           'sha256' => '../evil',
           'source_path' => epub_path,
           'generated_at' => Time.now.utc.iso8601,
-          'engine' => EbookReader::Infrastructure::MarshalCacheStore::ENGINE
+          'engine' => EbookReader::Infrastructure::JsonCacheStore::ENGINE
         }
       )
     )

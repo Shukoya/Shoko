@@ -58,6 +58,6 @@ RSpec.describe EbookReader::Infrastructure::Repositories::CachedLibraryRepositor
 
     pointer = JSON.parse(File.read(recreated))
     expect(pointer['sha256']).not_to be_nil
-    expect(pointer['engine']).to eq(EbookReader::Infrastructure::MarshalCacheStore::ENGINE)
+    expect(pointer['engine']).to eq(EbookReader::Infrastructure::JsonCacheStore::ENGINE)
   end
 end

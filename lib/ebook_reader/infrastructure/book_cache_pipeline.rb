@@ -4,10 +4,11 @@ require_relative '../errors'
 require_relative 'epub_cache'
 require_relative 'epub_importer'
 require_relative 'logger'
+require 'fileutils'
 
 module EbookReader
   module Infrastructure
-    # Coordinates importing EPUB files and storing/loading Marshal-backed caches.
+    # Coordinates importing EPUB files and storing/loading JSON-backed caches.
     # Provides a single entry point that ensures cache integrity, re-importing
     # whenever a cache is missing, corrupted, or outdated.
     class BookCachePipeline
@@ -42,7 +43,12 @@ module EbookReader
           )
         end
 
-        raise EbookReader::CacheLoadError, cache.cache_path if cache.cache_file?
+        if cache.cache_file?
+          rebuilt = rebuild_from_pointer(cache, formatting_service)
+          return rebuilt if rebuilt
+
+          raise EbookReader::CacheLoadError, cache.cache_path
+        end
 
         importer = EpubImporter.new(formatting_service:)
         book_data = importer.import(cache.source_path)
@@ -80,6 +86,26 @@ module EbookReader
         book_data = importer.import(cache.source_path)
         cache.write_book!(book_data)
         cache.load_for_source(strict: true) || cache.load_for_source(strict: false)
+      end
+
+      def rebuild_from_pointer(cache, formatting_service)
+        source = cache.source_path
+        return nil if source.nil? || source.to_s.empty?
+        return nil if @cache_class.cache_file?(source)
+        return nil unless File.file?(source)
+
+        rebuilt = load(source, formatting_service: formatting_service)
+        begin
+          if rebuilt && rebuilt.cache_path && File.expand_path(rebuilt.cache_path) != File.expand_path(cache.cache_path)
+            FileUtils.rm_f(cache.cache_path)
+          end
+        rescue StandardError
+          nil
+        end
+        rebuilt
+      rescue StandardError => e
+        Logger.error('Pointer cache rebuild failed', cache: cache.cache_path, source: source, error: e.message)
+        nil
       end
     end
   end

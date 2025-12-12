@@ -3,9 +3,8 @@
 require 'json'
 require 'time'
 
-require_relative '../atomic_file_writer'
 require_relative '../cache_paths'
-require_relative '../marshal_cache_store'
+require_relative '../json_cache_store'
 require_relative '../cache_pointer_manager'
 require_relative '../epub_cache'
 
@@ -16,7 +15,7 @@ module EbookReader
       class CachedLibraryRepository
         def initialize(cache_root: Infrastructure::CachePaths.reader_root, store: nil)
           @cache_root = cache_root
-          @cache_store = store || Infrastructure::MarshalCacheStore.new(cache_root:)
+          @cache_store = store || Infrastructure::JsonCacheStore.new(cache_root:)
         end
 
         def list_entries
@@ -34,7 +33,7 @@ module EbookReader
         end
 
         def fetch_manifest_rows
-          Infrastructure::MarshalCacheStore.manifest_rows(@cache_root)
+          Infrastructure::JsonCacheStore.manifest_rows(@cache_root)
         end
 
         def build_entry_from_row(row)
@@ -73,7 +72,7 @@ module EbookReader
             'sha256' => row['source_sha'],
             'source_path' => row['source_path'],
             'generated_at' => generated_at,
-            'engine' => Infrastructure::MarshalCacheStore::ENGINE
+            'engine' => Infrastructure::JsonCacheStore::ENGINE
           }
 
           Infrastructure::CachePointerManager.new(path).write(metadata)

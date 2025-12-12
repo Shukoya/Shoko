@@ -9,10 +9,12 @@ module EbookReader
   module Infrastructure
     # Manages pointer files that reference serialized cache payloads on disk.
     class CachePointerManager
-      POINTER_FORMAT  = 'reader-marshal-cache'
+      POINTER_FORMAT  = 'reader-cache'
+      LEGACY_POINTER_FORMAT = 'reader-marshal-cache'
       POINTER_VERSION = 2
-      POINTER_ENGINE  = 'marshal'
       POINTER_KEYS    = %w[format version sha256 source_path generated_at engine].freeze
+      SUPPORTED_FORMATS = [POINTER_FORMAT, LEGACY_POINTER_FORMAT].freeze
+      SUPPORTED_ENGINES = %w[json marshal].freeze
       SHA256_HEX_PATTERN = /\A[0-9a-f]{64}\z/i
 
       def initialize(path)
@@ -48,8 +50,8 @@ module EbookReader
 
       def valid_pointer?(data)
         POINTER_KEYS.all? { |key| data.key?(key) } &&
-          data['format'] == POINTER_FORMAT &&
-          data['engine'].to_s == POINTER_ENGINE &&
+          SUPPORTED_FORMATS.include?(data['format'].to_s) &&
+          SUPPORTED_ENGINES.include?(data['engine'].to_s) &&
           data['version'].to_i == POINTER_VERSION &&
           data['sha256'].to_s.match?(SHA256_HEX_PATTERN)
       end

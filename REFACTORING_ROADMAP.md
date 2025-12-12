@@ -3,7 +3,7 @@
 ## Status Snapshot – Q4 2024
 
 - Clean architecture boundaries are now enforced in code and tests. Controllers and components resolve infrastructure collaborators through the container, and an architecture spec guards against future cross-layer leaks.
-- Legacy EPUB cache migrations (Marshal-based `.cache` files and pointer rebuilders) have been removed. The cache layer now assumes the SQLite-backed store and fails fast when pointers are invalid.
+- Legacy EPUB cache migrations (Marshal payloads) have been removed. The cache layer now uses a JSON-backed store and rebuilds from the source EPUB when pointers/payloads are missing or corrupt.
 - Dependency container exposes explicit registrations for instrumentation, pagination cache access, background worker factories, and the new `Domain::Services::CacheService` so presentation code never instantiates infrastructure types.
 - Test-only monkey patches (`TestShims`) were deleted; specs no longer intercept global classes and must declare their own collaborators explicitly.
 
@@ -44,7 +44,7 @@
 
 ## Decision Log
 
-- 2024-11-XX — Removed Marshal cache migrations and pointer rebuilders; cache regeneration now requires the SQLite pipeline.
+- 2024-11-XX — Removed Marshal cache migrations; cache persistence now uses the JSON-backed store with pointer-based rebuilds from the source EPUB when available.
 - 2024-11-XX — Introduced `Domain::Services::CacheService` and architecture spec; controllers/components must resolve infrastructure dependencies through DI.
 - 2024-11-XX — Added `Domain::Services::InstrumentationService` bridge and normalized controller specs to use shared document stubs, eliminating cross-spec constant leaks.
 - 2024-11-XX — Deleted `TestShims` monkey patches; specs must stub collaborators directly.

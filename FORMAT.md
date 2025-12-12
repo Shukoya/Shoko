@@ -1,18 +1,19 @@
 # Reader Data & Pipeline Reference
 
 ## Data Artifacts
-- **Cache payloads** (`~/.cache/reader/<sha256>.marshal`)
+- **Cache payloads** (`~/.cache/reader/<sha256>.json`)
   - Produced by `EbookReader::Infrastructure::BookCachePipeline` on first import.
-  - Stores book metadata, chapters, binary resources, and cache statistics as Marshal-serialized blobs.
-  - Surface API: `EbookReader::Infrastructure::MarshalCacheStore` via `EpubCache`.
+  - Stores book metadata, chapters, and cache statistics as JSON.
+  - Binary resources are stored as blobs under `~/.cache/reader/resources/<sha256>/` and indexed from the payload JSON.
+  - Surface API: `EbookReader::Infrastructure::JsonCacheStore` via `EpubCache`.
 - **Cache pointer files** (`~/.cache/reader/<sha256>.cache`)
-  - Lightweight JSON files containing `{format:"reader-marshal-cache",version:2,sha256,source_path,generated_at,engine:"marshal"}`.
-  - Allow direct `.cache` opens while delegating payload data to the Marshal blobs.
+  - Lightweight JSON files containing `{format:"reader-cache",version:2,sha256,source_path,generated_at,engine:"json"}`.
+  - Allow direct `.cache` opens while delegating payload data to the JSON payload and resource blobs.
 - **Pagination cache entries**
-  - Stored as Marshal blobs under `~/.cache/reader/layouts/<sha256>/<layout_key>.marshal` and managed via `Infrastructure::PaginationCache`.
-  - Schema version `1`; entries mirror the compact format used by `PageCalculatorService`.
-- **Cache manifest** (`~/.cache/reader/marshal_manifest.json`)
-  - Written by `MarshalCacheStore` to provide lightweight cache listings without loading payloads.
+  - Stored as JSON under `~/.cache/reader/layouts/<sha256>/<layout_key>.json` and managed via `Infrastructure::PaginationCache`.
+  - Schema version `3`; entries mirror the compact format used by `PageCalculatorService`.
+- **Cache manifest** (`~/.cache/reader/cache_manifest.json`)
+  - Written by `JsonCacheStore` to provide lightweight cache listings without loading payloads.
 - **Library scan cache** (`~/.config/reader/epub_cache.json`)
   - Produced by `EPUBFinder`; keeps `version`, `timestamp`, and `files[]` entries (`path`, `name`, `size`, `modified`, `dir`).
   - Expiry governed by `Constants::CACHE_DURATION`.
@@ -27,7 +28,7 @@
 
 ## Cache Keys & Invalidation
 - **Book cache**: pointer filename uses the SHA-256 digest of the source EPUB. `EpubCache#load_for_source` treats entries as stale when the payload version differs or when the stored digest/mtime mismatch the current EPUB.
-- **Pagination cache**: key = `width x height + view_mode + line_spacing` (`PaginationCache.layout_key`). Entries are stored per-layout-file in the Marshal cache; missing keys trigger a rebuild.
+- **Pagination cache**: key = `width x height + view_mode + line_spacing` (`PaginationCache.layout_key`). Entries are stored per-layout-file in the book cache; missing keys trigger a rebuild.
 - **Library scan cache**: invalidated when `Constants::CACHE_DURATION` elapses or `--force` scan is requested.
 - **Per-book metadata (progress/bookmarks/annotations)**: keyed by canonical EPUB path (`StateController#canonical_path_for_doc`); no automatic pruning when files move.
 
@@ -40,7 +41,7 @@ cli.rb -> UnifiedApplication#reader_mode
   -> DocumentService#load_document
       -> BookCachePipeline.load (miss)
           -> EpubImporter.import (Zip::File, container/OPF parse, chapter/resource extraction)
-          -> EpubCache.write_book! (persist via Marshal + pointer file)
+          -> EpubCache.write_book! (persist via JSON + pointer file)
   -> ReaderController#run
       -> ReaderStartupOrchestrator#start (load progress, pagination build)
       -> PaginationOrchestrator.initial_build (dynamic map)

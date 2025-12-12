@@ -93,12 +93,12 @@ RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
     FileUtils.rm_rf(tmp_dir)
   end
 
-  it 'imports an EPUB and writes a Marshal-backed cache' do
+  it 'imports an EPUB and writes a JSON-backed cache' do
     result = pipeline.load(epub_path)
     expect(result.loaded_from_cache).to be(false)
     expect(File.exist?(result.cache_path)).to be(true)
-    marshal_path = File.join(File.dirname(result.cache_path), "#{result.payload.source_sha256}.marshal")
-    expect(File.exist?(marshal_path)).to be(true)
+    payload_path = File.join(File.dirname(result.cache_path), "#{result.payload.source_sha256}.json")
+    expect(File.exist?(payload_path)).to be(true)
     expect(result.book.title).to eq('Spec Book')
     expect(result.book.resources['OPS/images/pic.jpg'].bytesize).to eq(image_payload.bytesize)
   end
@@ -143,6 +143,32 @@ RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
     expect do
       pipeline.load(result.cache_path)
     end.to raise_error(EbookReader::CacheLoadError)
+  end
+
+  it 'rebuilds from source when opening a cache pointer with missing payload' do
+    first = pipeline.load(epub_path)
+    sha = first.payload.source_sha256
+    payload_path = File.join(File.dirname(first.cache_path), "#{sha}.json")
+    FileUtils.rm_f(payload_path)
+
+    rebuilt = pipeline.load(first.cache_path)
+    expect(rebuilt.loaded_from_cache).to be(false)
+    expect(rebuilt.book.title).to eq('Spec Book')
+    expect(File.exist?(payload_path)).to be(true)
+    expect(File.exist?(rebuilt.cache_path)).to be(true)
+  end
+
+  it 'rebuilds from source when opening a cache pointer with corrupted payload JSON' do
+    first = pipeline.load(epub_path)
+    sha = first.payload.source_sha256
+    payload_path = File.join(File.dirname(first.cache_path), "#{sha}.json")
+    File.write(payload_path, '{broken-json')
+
+    rebuilt = pipeline.load(first.cache_path)
+    expect(rebuilt.loaded_from_cache).to be(false)
+    expect(rebuilt.book.title).to eq('Spec Book')
+    expect(File.exist?(payload_path)).to be(true)
+    expect(JSON.parse(File.read(payload_path))).to include('format' => EbookReader::Infrastructure::JsonCacheStore::FORMAT)
   end
 
   it 'handles EPUBs that omit table-of-contents data' do

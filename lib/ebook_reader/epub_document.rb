@@ -9,7 +9,7 @@ require_relative 'domain/models/chapter'
 require_relative 'domain/models/toc_entry'
 
 module EbookReader
-  # Represents an EPUB document backed by the SQLite cache pipeline.
+  # Represents an EPUB document backed by the cache pipeline.
   # The document always operates on in-memory chapter objects; no temporary
   # extraction to disk is required.
   class EPUBDocument

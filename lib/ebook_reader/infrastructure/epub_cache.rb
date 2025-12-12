@@ -8,15 +8,15 @@ require_relative '../domain/models/toc_entry'
 require_relative '../domain/models/content_block'
 require_relative '../errors'
 require_relative 'cache_paths'
-require_relative 'marshal_cache_store'
+require_relative 'json_cache_store'
 require_relative 'cache_pointer_manager'
 require_relative 'logger'
 
 module EbookReader
   module Infrastructure
-    # Marshal-backed cache for imported EPUB data and derived pagination layouts.
+    # JSON-backed cache for imported EPUB data and derived pagination layouts.
     # Pointer files keep lightweight `.cache` discovery while the bulk payload
-    # lives in `.marshal` blobs.
+    # lives in JSON + binary blobs.
     class EpubCache
       CACHE_VERSION   = 2
       CACHE_EXTENSION = '.cache'
@@ -68,7 +68,7 @@ module EbookReader
 
       def initialize(path, cache_root: CachePaths.reader_root, store: nil)
         @cache_root = cache_root
-        @cache_store = store || MarshalCacheStore.new(cache_root: @cache_root)
+        @cache_store = store || JsonCacheStore.new(cache_root: @cache_root)
         @raw_path = File.expand_path(path)
         @payload_cache = nil
         @layout_cache = {}
@@ -320,7 +320,7 @@ module EbookReader
       end
 
       def deep_dup(obj)
-        Marshal.load(Marshal.dump(obj))
+        deep_dup_value(obj)
       end
 
       def invalidate_and_nil
@@ -352,9 +352,24 @@ module EbookReader
 
       def cache_engine
         engine = @cache_store&.respond_to?(:engine) ? @cache_store.engine : nil
-        engine || MarshalCacheStore::ENGINE
+        engine || JsonCacheStore::ENGINE
       rescue StandardError
-        MarshalCacheStore::ENGINE
+        JsonCacheStore::ENGINE
+      end
+
+      def deep_dup_value(value)
+        case value
+        when NilClass, TrueClass, FalseClass, Numeric, Symbol
+          value
+        when String
+          value.dup
+        when Array
+          value.map { |v| deep_dup_value(v) }
+        when Hash
+          value.each_with_object({}) { |(k, v), acc| acc[k] = deep_dup_value(v) }
+        else
+          value
+        end
       end
 
       module Serializer
