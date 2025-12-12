@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'json'
 
+require_relative 'atomic_file_writer'
 require_relative 'cache_paths'
 require_relative 'logger'
 
@@ -14,6 +15,9 @@ module EbookReader
       ENGINE = 'marshal'
       Payload = Struct.new(:metadata_row, :chapters, :resources, :layouts, keyword_init: true)
       MANIFEST_FILENAME = 'marshal_manifest.json'
+      SHA256_HEX_PATTERN = /\A[0-9a-f]{64}\z/i
+      MAX_LAYOUT_KEY_BYTES = 200
+      LAYOUT_KEY_PATTERN = /\A[a-zA-Z0-9][a-zA-Z0-9._-]*\z/
 
       def initialize(cache_root: CachePaths.reader_root)
         @cache_root = cache_root
@@ -58,7 +62,7 @@ module EbookReader
         }
 
         path = payload_path(sha)
-        File.binwrite(path, Marshal.dump(payload))
+        AtomicFileWriter.write(path, Marshal.dump(payload), binary: true)
         write_layouts(sha, serialized_layouts)
         update_manifest(metadata_row, serialized_resources)
         true
@@ -86,6 +90,11 @@ module EbookReader
           next unless entry.end_with?('.marshal')
 
           key = entry.sub(/\.marshal\z/, '')
+          unless layout_key_valid?(key)
+            Logger.debug('MarshalCacheStore: skipping invalid layout filename', sha:, key:)
+            next
+          end
+
           layouts[key] = Marshal.load(File.binread(File.join(dir, entry)))
         end
         layouts
@@ -133,15 +142,15 @@ module EbookReader
       private
 
       def payload_path(sha)
-        File.join(@cache_root, "#{sha}.marshal")
+        File.join(@cache_root, "#{normalize_sha!(sha)}.marshal")
       end
 
       def layouts_dir(sha)
-        File.join(@cache_root, 'layouts', sha)
+        File.join(@cache_root, 'layouts', normalize_sha!(sha))
       end
 
       def layout_file(sha, key)
-        File.join(layouts_dir(sha), "#{key}.marshal")
+        File.join(layouts_dir(sha), "#{normalize_layout_key!(key)}.marshal")
       end
 
       def write_layouts(sha, layouts_hash)
@@ -149,11 +158,15 @@ module EbookReader
         FileUtils.mkdir_p(dir)
         existing = Dir.exist?(dir) ? Dir.children(dir).select { |entry| entry.end_with?('.marshal') } : []
 
+        written_files = []
         layouts_hash.each do |key, payload|
-          File.binwrite(layout_file(sha, key), Marshal.dump(payload))
+          normalized_key = normalize_layout_key!(key)
+          written_files << "#{normalized_key}.marshal"
+          file = File.join(dir, "#{normalized_key}.marshal")
+          AtomicFileWriter.write(file, Marshal.dump(payload), binary: true)
         end
 
-        stale = existing - layouts_hash.keys.map { |key| "#{key}.marshal" }
+        stale = existing - written_files
         stale.each { |entry| FileUtils.rm_f(File.join(dir, entry)) }
       end
 
@@ -167,7 +180,7 @@ module EbookReader
         manifest = self.class.manifest_rows(@cache_root)
         manifest.reject! { |entry| entry['source_sha'] == row['source_sha'] }
         manifest << row
-        File.write(manifest_path, JSON.pretty_generate(manifest))
+        AtomicFileWriter.write(manifest_path, JSON.pretty_generate(manifest))
       rescue StandardError => e
         Logger.debug('MarshalCacheStore: manifest write failed', error: e.message)
       end
@@ -181,9 +194,35 @@ module EbookReader
       def remove_from_manifest(sha)
         manifest = self.class.manifest_rows(@cache_root)
         manifest.reject! { |entry| entry['source_sha'] == sha }
-        File.write(manifest_path, JSON.pretty_generate(manifest))
+        AtomicFileWriter.write(manifest_path, JSON.pretty_generate(manifest))
       rescue StandardError
         nil
+      end
+
+      def normalize_sha!(sha)
+        value = sha.to_s.strip
+        raise ArgumentError, 'sha is blank' if value.empty?
+        raise ArgumentError, 'sha must be a 64-char hex digest' unless SHA256_HEX_PATTERN.match?(value)
+
+        value.downcase
+      end
+
+      def layout_key_valid?(key)
+        normalize_layout_key!(key)
+        true
+      rescue ArgumentError
+        false
+      end
+
+      def normalize_layout_key!(key)
+        value = key.to_s
+        raise ArgumentError, 'layout key is blank' if value.empty?
+        raise ArgumentError, 'layout key too long' if value.bytesize > MAX_LAYOUT_KEY_BYTES
+        raise ArgumentError, 'layout key contains null byte' if value.include?("\0")
+        raise ArgumentError, 'layout key contains path separator' if value.include?('/') || value.include?('\\')
+        raise ArgumentError, 'layout key has invalid characters' unless LAYOUT_KEY_PATTERN.match?(value)
+
+        value
       end
     end
   end

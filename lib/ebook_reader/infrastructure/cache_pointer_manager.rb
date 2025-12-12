@@ -13,6 +13,7 @@ module EbookReader
       POINTER_VERSION = 2
       POINTER_ENGINE  = 'marshal'
       POINTER_KEYS    = %w[format version sha256 source_path generated_at engine].freeze
+      SHA256_HEX_PATTERN = /\A[0-9a-f]{64}\z/i
 
       def initialize(path)
         @path = path
@@ -49,7 +50,8 @@ module EbookReader
         POINTER_KEYS.all? { |key| data.key?(key) } &&
           data['format'] == POINTER_FORMAT &&
           data['engine'].to_s == POINTER_ENGINE &&
-          data['version'].to_i == POINTER_VERSION
+          data['version'].to_i == POINTER_VERSION &&
+          data['sha256'].to_s.match?(SHA256_HEX_PATTERN)
       end
     end
   end

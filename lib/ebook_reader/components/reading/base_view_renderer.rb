@@ -270,49 +270,51 @@ module EbookReader
 
           nil
         end
+
+        private
+
+        def build_line_geometry(page_id, column_id, abs_row, abs_col, line_offset, plain_text, styled_text)
+          cell_data = EbookReader::Helpers::TextMetrics.cell_data_for(plain_text)
+          cells = cell_data.map do |cell|
+            EbookReader::Models::LineCell.new(
+              cluster: cell[:cluster],
+              char_start: cell[:char_start],
+              char_end: cell[:char_end],
+              display_width: cell[:display_width],
+              screen_x: cell[:screen_x]
+            )
+          end
+
+          EbookReader::Models::LineGeometry.new(
+            page_id: page_id,
+            column_id: column_id,
+            row: abs_row,
+            column_origin: abs_col,
+            line_offset: line_offset,
+            plain_text: plain_text,
+            styled_text: styled_text,
+            cells: cells
+          )
+        end
+
+        def geometry_debug_enabled?
+          ENV['READER_DEBUG_GEOMETRY']&.to_s == '1'
+        end
+
+        def dump_geometry(geometry)
+          logger = begin
+            @dependencies.resolve(:logger)
+          rescue StandardError
+            nil
+          end
+          payload = geometry.to_h
+          if logger
+            logger.debug('geometry.line', payload)
+          else
+            warn("[geometry] #{payload}")
+          end
+        end
       end
     end
-  end
-end
-
-def build_line_geometry(page_id, column_id, abs_row, abs_col, line_offset, plain_text, styled_text)
-  cell_data = EbookReader::Helpers::TextMetrics.cell_data_for(plain_text)
-  cells = cell_data.map do |cell|
-    EbookReader::Models::LineCell.new(
-      cluster: cell[:cluster],
-      char_start: cell[:char_start],
-      char_end: cell[:char_end],
-      display_width: cell[:display_width],
-      screen_x: cell[:screen_x]
-    )
-  end
-
-  EbookReader::Models::LineGeometry.new(
-    page_id: page_id,
-    column_id: column_id,
-    row: abs_row,
-    column_origin: abs_col,
-    line_offset: line_offset,
-    plain_text: plain_text,
-    styled_text: styled_text,
-    cells: cells
-  )
-end
-
-def geometry_debug_enabled?
-  ENV['READER_DEBUG_GEOMETRY']&.to_s == '1'
-end
-
-def dump_geometry(geometry)
-  logger = begin
-    @dependencies.resolve(:logger)
-  rescue StandardError
-    nil
-  end
-  payload = geometry.to_h
-  if logger
-    logger.debug('geometry.line', payload)
-  else
-    warn("[geometry] #{payload}")
   end
 end

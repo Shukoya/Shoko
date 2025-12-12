@@ -101,7 +101,7 @@ module EbookReader
         end
 
         def display_width(text)
-          text.to_s.length
+          EbookReader::Helpers::TextMetrics.visible_length(text.to_s)
         end
       end
     end

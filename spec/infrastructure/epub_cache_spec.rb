@@ -79,6 +79,18 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
     expect(layout['pages']).to eq([{ 'chapter_index' => 0 }])
   end
 
+  it 'rejects unsafe layout keys (prevents path traversal writes)' do
+    cache = described_class.new(epub_path)
+    cache.write_book!(book_data)
+
+    success = cache.mutate_layouts! do |layouts|
+      layouts['../evil'] = { 'version' => 1, 'pages' => [] }
+    end
+
+    expect(success).to be(false)
+    expect(File.exist?(File.join(cache_root, 'evil.marshal'))).to be(false)
+  end
+
   it 'returns nil when pointer payload is corrupted' do
     cache = described_class.new(epub_path)
     cache.write_book!(book_data)
@@ -87,6 +99,25 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
     expect do
       described_class.new(cache.cache_path).read_cache(strict: true)
     end.to raise_error(EbookReader::CacheLoadError)
+  end
+
+  it 'rejects cache pointer files with invalid sha256 digests' do
+    bad_pointer = File.join(tmp_dir, 'invalid.cache')
+    File.write(
+      bad_pointer,
+      JSON.generate(
+        {
+          'format' => EbookReader::Infrastructure::CachePointerManager::POINTER_FORMAT,
+          'version' => EbookReader::Infrastructure::CachePointerManager::POINTER_VERSION,
+          'sha256' => '../evil',
+          'source_path' => epub_path,
+          'generated_at' => Time.now.utc.iso8601,
+          'engine' => EbookReader::Infrastructure::MarshalCacheStore::ENGINE
+        }
+      )
+    )
+
+    expect { described_class.new(bad_pointer) }.to raise_error(EbookReader::CacheLoadError)
   end
 
   it 'repairs pointer files when loading via source path after corruption' do

@@ -20,6 +20,7 @@ module EbookReader
     class EpubCache
       CACHE_VERSION   = 2
       CACHE_EXTENSION = '.cache'
+      SHA256_HEX_PATTERN = /\A[0-9a-f]{64}\z/i
 
       CachePayload = Struct.new(
         :version,
@@ -56,7 +57,10 @@ module EbookReader
         end
 
         def cache_path_for_sha(sha, cache_root: CachePaths.reader_root)
-          File.join(cache_root, "#{sha}#{CACHE_EXTENSION}")
+          normalized = sha.to_s.strip
+          return nil unless normalized.match?(SHA256_HEX_PATTERN)
+
+          File.join(cache_root, "#{normalized.downcase}#{CACHE_EXTENSION}")
         end
       end
 
@@ -205,6 +209,7 @@ module EbookReader
           @source_path = @raw_path
           @source_sha = Digest::SHA256.file(@source_path).hexdigest
           @cache_path = self.class.cache_path_for_sha(@source_sha, cache_root: @cache_root)
+          raise EbookReader::CacheLoadError.new(@raw_path, 'invalid sha256 digest') unless @cache_path
           @pointer_manager = CachePointerManager.new(@cache_path)
           @pointer_metadata = @pointer_manager.read
         end

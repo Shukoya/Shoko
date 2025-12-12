@@ -209,7 +209,6 @@ module EbookReader
           marker = list_context&.ordered ? "#{list_context.index}." : '•'
           list_context.index += 1 if list_context&.ordered
 
-          segments.map(&:text).join(' ').strip
           level = context.list_stack.length
           metadata = { marker: marker, level: level }
           metadata[:quoted] = true if context.in_blockquote

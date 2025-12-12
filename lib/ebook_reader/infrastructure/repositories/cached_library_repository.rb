@@ -24,7 +24,7 @@ module EbookReader
           rows = fetch_rows if rows.empty?
           return [] if rows.empty?
 
-          rows.map { |row| build_entry_from_row(row) }
+          rows.map { |row| build_entry_from_row(row) }.compact
         end
 
         private
@@ -38,7 +38,10 @@ module EbookReader
         end
 
         def build_entry_from_row(row)
-          pointer_path = Infrastructure::EpubCache.cache_path_for_sha(row['source_sha'], cache_root: @cache_root)
+          sha = row.is_a?(Hash) ? (row['source_sha'] || row[:source_sha]) : nil
+          pointer_path = Infrastructure::EpubCache.cache_path_for_sha(sha, cache_root: @cache_root)
+          return nil unless pointer_path
+
           ensure_pointer_file(row, pointer_path)
 
           metadata = parse_json_object(row['metadata_json'])

@@ -247,9 +247,3 @@ module EbookReader
     end
   end
 end
-
-def state_store_for(context)
-  return context.state if context.respond_to?(:state)
-
-  context.dependencies.resolve(:state_store)
-end

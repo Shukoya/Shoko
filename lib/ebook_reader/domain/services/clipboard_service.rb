@@ -54,22 +54,41 @@ module EbookReader
         def detect_clipboard_command
           case RUBY_PLATFORM
           when /darwin/
-            command_exists?('pbcopy') ? 'pbcopy' : nil
+            command_exists?('pbcopy') ? ['pbcopy'] : nil
           when /linux/
             if command_exists?('xclip')
-              'xclip -selection clipboard'
+              ['xclip', '-selection', 'clipboard']
             elsif command_exists?('xsel')
-              'xsel --clipboard --input'
+              ['xsel', '--clipboard', '--input']
             elsif command_exists?('wl-copy')
-              'wl-copy'
+              ['wl-copy']
             end
           when /mswin|mingw|cygwin/
-            'clip'
+            ['clip']
           end
         end
 
         def command_exists?(command)
-          system("which #{command} > /dev/null 2>&1")
+          name = command.to_s.strip
+          return false if name.empty?
+
+          path_env = ENV.fetch('PATH', '')
+          exts = if RUBY_PLATFORM.match?(/mswin|mingw|cygwin/i)
+                   raw = ENV.fetch('PATHEXT', '.EXE;.BAT;.CMD')
+                   parsed = raw.split(';').map(&:strip).reject(&:empty?)
+                   (parsed + parsed.map(&:downcase) + ['']).uniq
+                 else
+                   ['']
+                 end
+
+          path_env.split(File::PATH_SEPARATOR).any? do |dir|
+            exts.any? do |ext|
+              candidate = File.join(dir, "#{name}#{ext}")
+              File.file?(candidate) && File.executable?(candidate)
+            end
+          end
+        rescue StandardError
+          false
         end
 
         def execute_clipboard_command(command, text)
