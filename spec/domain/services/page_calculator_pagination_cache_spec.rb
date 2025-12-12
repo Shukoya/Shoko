@@ -75,10 +75,13 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
 
     key = EbookReader::Infrastructure::PaginationCache.layout_key(80, 24, :single, :normal)
     compact_pages = [
-      { 'chapter_index' => 0, 'page_in_chapter' => 0, 'total_pages_in_chapter' => 4, 'start_line' => 0, 'end_line' => 24 },
-      { 'chapter_index' => 0, 'page_in_chapter' => 1, 'total_pages_in_chapter' => 4, 'start_line' => 25, 'end_line' => 49 },
-      { 'chapter_index' => 0, 'page_in_chapter' => 2, 'total_pages_in_chapter' => 4, 'start_line' => 50, 'end_line' => 74 },
-      { 'chapter_index' => 0, 'page_in_chapter' => 3, 'total_pages_in_chapter' => 4, 'start_line' => 75, 'end_line' => 99 },
+      { 'chapter_index' => 0, 'page_in_chapter' => 0, 'total_pages_in_chapter' => 7, 'start_line' => 0, 'end_line' => 14 },
+      { 'chapter_index' => 0, 'page_in_chapter' => 1, 'total_pages_in_chapter' => 7, 'start_line' => 15, 'end_line' => 29 },
+      { 'chapter_index' => 0, 'page_in_chapter' => 2, 'total_pages_in_chapter' => 7, 'start_line' => 30, 'end_line' => 44 },
+      { 'chapter_index' => 0, 'page_in_chapter' => 3, 'total_pages_in_chapter' => 7, 'start_line' => 45, 'end_line' => 59 },
+      { 'chapter_index' => 0, 'page_in_chapter' => 4, 'total_pages_in_chapter' => 7, 'start_line' => 60, 'end_line' => 74 },
+      { 'chapter_index' => 0, 'page_in_chapter' => 5, 'total_pages_in_chapter' => 7, 'start_line' => 75, 'end_line' => 89 },
+      { 'chapter_index' => 0, 'page_in_chapter' => 6, 'total_pages_in_chapter' => 7, 'start_line' => 90, 'end_line' => 99 },
     ]
     ok = EbookReader::Infrastructure::PaginationCache.save_for_document(doc, key, compact_pages)
     expect(ok).to be true
@@ -100,12 +103,12 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
 
     pages = service.build_page_map(80, 24, doc, state)
     expect(pages).to be_a(Array)
-    expect(service.total_pages).to eq(4)
+    expect(service.total_pages).to eq(7)
 
     # get_page should populate lines lazily based on start/end line using wrap_window
     p0 = service.get_page(1)
     expect(p0[:lines]).to be_a(Array)
-    expect(p0[:lines].length).to eq(25)
-    expect(p0[:lines].first).to eq('L25')
+    expect(p0[:lines].length).to eq(15)
+    expect(p0[:lines].first).to eq('L15')
   end
 end

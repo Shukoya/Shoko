@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../layout_service'
+
 module EbookReader
   module Domain
     module Services
@@ -7,19 +9,24 @@ module EbookReader
         # Responsible for deriving layout metrics (column width, content height,
         # lines per page) from terminal dimensions and user configuration.
         class LayoutMetricsCalculator
-          def initialize(state_store)
+          def initialize(state_store, layout_service: nil)
             @state_store = state_store
+            @layout_service = layout_service || EbookReader::Domain::Services::LayoutService.new(nil)
           end
 
           def layout(width, height, config)
-            [column_width(width, config), content_height(height)]
+            view_mode = resolve_view_mode(config)
+            @layout_service.calculate_metrics(width, height, view_mode)
           end
 
           def lines_per_page
             state = current_state
-            terminal_height = state.dig(:ui, :terminal_height) || 24
-            content = content_height(terminal_height)
-            adjust_for_spacing(content, state.dig(:config, :line_spacing) || EbookReader::Constants::DEFAULT_LINE_SPACING)
+            width = state.dig(:ui, :terminal_width) || 80
+            height = state.dig(:ui, :terminal_height) || 24
+            view_mode = resolve_view_mode(state)
+            _, content = @layout_service.calculate_metrics(width, height, view_mode)
+            spacing = state.dig(:config, :line_spacing) || EbookReader::Constants::DEFAULT_LINE_SPACING
+            @layout_service.adjust_for_line_spacing(content, spacing)
           end
 
           def lines_per_page_for(content_height, config)
@@ -28,13 +35,14 @@ module EbookReader
                       else
                         EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config)
                       end
-            adjust_for_spacing(content_height,
-                               spacing || EbookReader::Constants::DEFAULT_LINE_SPACING)
+            @layout_service.adjust_for_line_spacing(content_height,
+                                                    spacing || EbookReader::Constants::DEFAULT_LINE_SPACING)
           end
 
           def column_width_from_state
             state = current_state
-            column_width(state.dig(:ui, :terminal_width) || 80, state)
+            width = state.dig(:ui, :terminal_width) || 80
+            column_width(width, state)
           end
 
           private
@@ -46,21 +54,14 @@ module EbookReader
           def column_width(width, config)
             view_mode = resolve_view_mode(config)
             if view_mode == :split
-              [(width - 3) / 2, 20].max
+              @layout_service.split_column_width(width)
             else
-              (width * 0.9).to_i.clamp(30, 120)
+              @layout_service.single_column_width(width)
             end
           end
 
           def content_height(height)
-            [height - 4, 1].max
-          end
-
-          def adjust_for_spacing(height, line_spacing)
-            multiplier = resolve_multiplier(line_spacing)
-            adjusted = (height * multiplier).floor
-            adjusted = height if multiplier >= 1.0 && adjusted < height
-            [adjusted, 1].max
+            @layout_service.content_area_height(height)
           end
 
           def resolve_view_mode(config)
@@ -69,15 +70,6 @@ module EbookReader
             else
               EbookReader::Domain::Selectors::ConfigSelectors.view_mode(config)
             end || :split
-          end
-
-          def resolve_multiplier(line_spacing)
-            key = begin
-              line_spacing&.to_sym
-            rescue StandardError
-              nil
-            end
-            EbookReader::Constants::LINE_SPACING_MULTIPLIERS.fetch(key, 1.0)
           end
         end
       end

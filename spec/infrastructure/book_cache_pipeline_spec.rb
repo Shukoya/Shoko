@@ -112,6 +112,18 @@ RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
     expect(warmed.book.chapters.first.title).to eq('Chapter 1')
   end
 
+  it 'rebuilds cache when cached chapters are missing raw content' do
+    pipeline.load(epub_path)
+    cache = EbookReader::Infrastructure::EpubCache.new(epub_path, cache_root: File.join(tmp_dir, '.cache', 'reader'))
+    payload = cache.load_for_source(strict: false)
+    payload.book.chapters.each { |ch| ch.raw_content = nil }
+    cache.send(:persist_payload, payload.source_sha256, payload.source_path, payload.source_mtime, payload.generated_at, payload.book, payload.layouts)
+
+    rebuilt = pipeline.load(epub_path)
+    expect(rebuilt.loaded_from_cache).to be(false)
+    expect(rebuilt.book.chapters.first.raw_content).not_to be_nil
+  end
+
   it 'repairs the pointer file when it is corrupted' do
     first = pipeline.load(epub_path)
     File.write(first.cache_path, 'corrupt-data')

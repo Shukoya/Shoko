@@ -31,11 +31,13 @@ module EbookReader
         payload ||= cache.load_for_source(strict: false)
 
         if payload
+          rebuilt = cache_incomplete?(payload.book)
+          payload = rebuild_cache(cache, formatting_service) if rebuilt
           return Result.new(
             book: payload.book,
             cache_path: cache.cache_path,
             source_path: payload.source_path || cache.source_path,
-            loaded_from_cache: true,
+            loaded_from_cache: !rebuilt,
             payload: payload
           )
         end
@@ -60,6 +62,24 @@ module EbookReader
       rescue StandardError => e
         Logger.error('Book cache pipeline failed', path: path, error: e.message)
         raise EbookReader::EPUBParseError.new(e.message, path)
+      end
+
+      private
+
+      def cache_incomplete?(book)
+        chapters = Array(book&.chapters)
+        return true if chapters.empty?
+
+        chapters.any? { |ch| ch.nil? || ch.raw_content.nil? || ch.raw_content.to_s.empty? }
+      rescue StandardError
+        true
+      end
+
+      def rebuild_cache(cache, formatting_service)
+        importer = EpubImporter.new(formatting_service:)
+        book_data = importer.import(cache.source_path)
+        cache.write_book!(book_data)
+        cache.load_for_source(strict: true) || cache.load_for_source(strict: false)
       end
     end
   end

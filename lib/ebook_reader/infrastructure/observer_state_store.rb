@@ -10,7 +10,9 @@ module EbookReader
         super
         @observers_by_path = Hash.new { |h, k| h[k] = [] }
         @observers_all = []
-        config_missing = !File.exist?(CONFIG_FILE)
+        config_file = self.class.config_file
+        legacy_file = self.class.legacy_config_file
+        config_missing = !(File.exist?(config_file) || File.exist?(legacy_file))
         load_config_from_file
         save_config if config_missing && respond_to?(:save_config)
       end

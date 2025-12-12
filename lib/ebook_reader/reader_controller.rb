@@ -136,7 +136,9 @@ module EbookReader
       end
 
       # Observe sidebar visibility changes to rebuild layout
-      @state.add_observer(self, %i[reader sidebar_visible], %i[config theme])
+      @state.add_observer(self, %i[reader sidebar_visible], %i[config theme],
+                          %i[config view_mode], %i[config line_spacing],
+                          %i[config page_numbering_mode])
     end
 
     # Observer callback for state changes
@@ -146,6 +148,8 @@ module EbookReader
         rebuild_root_layout
       when %i[config theme]
         apply_theme_palette
+      when %i[config view_mode], %i[config line_spacing], %i[config page_numbering_mode]
+        rebuild_pagination_for_layout_change
       end
     end
 
@@ -295,9 +299,14 @@ module EbookReader
     end
 
     def bookmark_down
-      bookmarks_count = (@state.get(%i[reader bookmarks]) || []).length - 1
-      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(bookmark_selected: [@state.get(%i[reader bookmark_selected]) + 1,
-                                                                                                   bookmarks_count].max))
+      bookmarks = @state.get(%i[reader bookmarks]) || []
+      return if bookmarks.empty?
+
+      current = (@state.get(%i[reader bookmark_selected]) || 0).to_i
+      next_index = [current + 1, bookmarks.length - 1].min
+      return if next_index == current
+
+      @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(bookmark_selected: next_index))
     end
 
     def bookmark_up
@@ -491,6 +500,16 @@ module EbookReader
 
     def size_changed?(width, height)
       @state.terminal_size_changed?(width, height)
+    end
+
+    def rebuild_pagination_for_layout_change
+      return unless @doc && @page_calculator && @pagination_orchestrator
+
+      width, height = @terminal_service.size
+      @pagination_orchestrator.rebuild_after_config_change(@doc, @state, @page_calculator, [width, height])
+      force_redraw
+    rescue StandardError
+      # best-effort rebuild; avoid crashing on layout changes
     end
 
     def build_page_map_in_background

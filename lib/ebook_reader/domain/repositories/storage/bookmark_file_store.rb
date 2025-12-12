@@ -13,7 +13,7 @@ module EbookReader
     module Repositories
       module Storage
         # File-backed bookmark storage isolated under Domain.
-        # Persists bookmarks to ~/.config/reader/bookmarks.json
+        # Persists bookmarks to ${XDG_CONFIG_HOME:-~/.config}/reader/bookmarks.json
         class BookmarkFileStore
           def initialize(file_writer:, path_service:)
             @file_writer = file_writer

@@ -12,7 +12,7 @@ require 'ebook_reader/domain/selectors/reader_selectors'
 RSpec.describe EbookReader::Application::AnnotationEditorOverlaySession do
   class StubUIController
     attr_accessor :current_book_path
-    attr_reader :messages, :closed_count, :refreshed, :current_book_path
+    attr_reader :messages, :closed_count, :refreshed
 
     def initialize(state)
       @state = state

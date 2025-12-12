@@ -105,13 +105,15 @@ module EbookReader
 
         preferred = keys.find do |candidate|
           parsed = pagination_cache.parse_layout_key(candidate)
-          parsed && parsed[:view_mode] == current_view_mode && parsed[:line_spacing] == current_line_spacing
+          parsed && parsed[:view_mode] == current_view_mode &&
+            parsed[:line_spacing] == current_line_spacing
         end
-        key = preferred || keys.first
-        parsed = pagination_cache.parse_layout_key(key)
+        return nil unless preferred
+
+        parsed = pagination_cache.parse_layout_key(preferred)
         return nil unless parsed
 
-        parsed.merge(key: key)
+        parsed.merge(key: preferred)
       end
 
       def current_view_mode

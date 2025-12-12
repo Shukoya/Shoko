@@ -12,7 +12,7 @@ module EbookReader
     module Repositories
       module Storage
         # File-backed progress storage under Domain.
-        # Persists progress to ~/.config/reader/progress.json
+        # Persists progress to ${XDG_CONFIG_HOME:-~/.config}/reader/progress.json
         class ProgressFileStore
           def initialize(file_writer:, path_service:)
             @file_writer = file_writer

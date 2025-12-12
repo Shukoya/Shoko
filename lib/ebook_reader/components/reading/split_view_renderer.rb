@@ -9,9 +9,9 @@ module EbookReader
       # Renderer for split-view (two-column) reading mode
       # Supports both dynamic and absolute page numbering modes
       class SplitViewRenderer < BaseViewRenderer
-        LEFT_MARGIN = 2
-        RIGHT_MARGIN = 2
-        COLUMN_GAP = 4
+        LEFT_MARGIN = EbookReader::Domain::Services::LayoutService::SPLIT_LEFT_MARGIN
+        RIGHT_MARGIN = EbookReader::Domain::Services::LayoutService::SPLIT_RIGHT_MARGIN
+        COLUMN_GAP = EbookReader::Domain::Services::LayoutService::SPLIT_COLUMN_GAP
 
         def render_with_context(surface, bounds, context)
           if context.page_numbering_mode == :dynamic
@@ -161,14 +161,9 @@ module EbookReader
         end
 
         def split_layout(bounds, config)
-          total_width = bounds.width
-          content_height = [bounds.height - 2, 1].max
+          col_width, content_height = layout_metrics(bounds.width, bounds.height, :split)
           spacing = resolve_line_spacing(config)
           displayable = adjust_for_line_spacing(content_height, spacing)
-
-          usable_width = total_width - LEFT_MARGIN - RIGHT_MARGIN
-          usable_width = [usable_width, 40].max
-          col_width = [(usable_width - COLUMN_GAP) / 2, 20].max
 
           left_start = bounds.x + LEFT_MARGIN
           right_start = left_start + col_width + COLUMN_GAP

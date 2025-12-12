@@ -29,7 +29,13 @@ module EbookReader
           @cache = {}
           @pages_data = []
           @chapter_page_index = {}
-          @metrics_calculator = Internal::LayoutMetricsCalculator.new(@state_store)
+          @layout_service = begin
+            resolve(:layout_service)
+          rescue StandardError
+            nil
+          end
+          @metrics_calculator = Internal::LayoutMetricsCalculator.new(@state_store,
+                                                                      layout_service: @layout_service)
           @pagination_cache = begin
             resolve(:pagination_cache)
           rescue StandardError
@@ -75,7 +81,14 @@ module EbookReader
           return @pages_data.last if page_index >= @pages_data.size
 
           page = @pages_data[page_index]
-          return page if page[:lines]
+          if formatted_lines?(page[:lines])
+            return page
+          elsif page[:lines]
+            # Rewrap with formatting so rendered lines include styling when map stored raw strings
+            hydrated = hydrate_lines_with_formatting(page)
+            @pages_data[page_index] = hydrated if hydrated
+            return hydrated if hydrated
+          end
 
           # Lazily populate lines when loaded from cache (compact format)
           measure_with_instrumentation('page_map.hydrate') do
@@ -386,13 +399,37 @@ module EbookReader
         end
 
         def resolve_formatting_service
-          return @formatting_service if defined?(@formatting_service)
+          @dependencies&.resolve(:formatting_service)
+        rescue StandardError
+          nil
+        end
 
-          @formatting_service = begin
-            @dependencies&.resolve(:formatting_service)
-          rescue StandardError
-            nil
-          end
+        def formatted_lines?(lines)
+          first = Array(lines).find { |ln| !ln.nil? }
+          first && first.respond_to?(:segments) && first.respond_to?(:text)
+        end
+
+        def hydrate_lines_with_formatting(page)
+          cs = if @state_store.respond_to?(:peek)
+                 @state_store.peek
+               else
+                 @state_store.current_state
+               end
+          width  = cs.dig(:ui, :terminal_width) || 80
+          height = cs.dig(:ui, :terminal_height) || 24
+          config = @state_store
+          col_width, _ = @metrics_calculator.layout(width, height, config)
+          start_i = page[:start_line].to_i
+          end_i = page[:end_line].to_i
+          len = (end_i - start_i + 1)
+          doc = resolve_document_reference
+          ch_i = page[:chapter_index].to_i
+          formatting_lines = wrap_with_formatting(doc, ch_i, col_width, start_i, len)
+          return page unless formatting_lines && !formatting_lines.empty?
+
+          page.merge(lines: formatting_lines)
+        rescue StandardError
+          page
         end
 
         def resolve_wrapping_service

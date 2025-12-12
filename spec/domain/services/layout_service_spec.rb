@@ -7,12 +7,12 @@ RSpec.describe EbookReader::Domain::Services::LayoutService do
 
   it 'calculates metrics for single and split view' do
     col, height = service.calculate_metrics(100, 40, :single)
-    expect(col).to be_between(30, 120)
-    expect(height).to eq(38)
+    expect(col).to eq(90)
+    expect(height).to eq(37)
 
     col2, height2 = service.calculate_metrics(100, 40, :split)
-    expect(col2).to be <= 50
-    expect(height2).to eq(38)
+    expect(col2).to eq(46)
+    expect(height2).to eq(37)
   end
 
   it 'adjusts for line spacing' do
@@ -28,5 +28,9 @@ RSpec.describe EbookReader::Domain::Services::LayoutService do
     # relaxed spacing doubles visual height
     start_row_relaxed = service.calculate_center_start_row(30, 5, :relaxed)
     expect(start_row_relaxed).to be_a(Integer)
+  end
+
+  it 'reserves top and bottom padding when computing content height' do
+    expect(service.content_area_height(24)).to eq(21)
   end
 end

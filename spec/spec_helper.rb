@@ -1,8 +1,17 @@
 # frozen_string_literal: true
 
+ENV['EBOOK_READER_TEST_MODE'] ||= '1'
+ENV['READER_SKIP_PROGRESS_OVERLAY'] ||= '1'
+
+require 'json'
+require 'tmpdir'
+require 'fileutils'
+require 'simplecov'
+
 # SimpleCov depends on the json gem, whose newer versions expect JSON::Fragment
 # to exist. Ruby 3.4 ships an older default gem without that struct, so we
-# provide the minimal implementation to keep the suite bootable.
+# provide the minimal implementation to keep the suite bootable. We define it
+# only when missing to avoid constant redefinition warnings.
 unless defined?(JSON::Fragment)
   module JSON
     Fragment = Struct.new(:json) do
@@ -20,12 +29,26 @@ unless defined?(JSON::Fragment)
   end
 end
 
-ENV['EBOOK_READER_TEST_MODE'] ||= '1'
-ENV['READER_SKIP_PROGRESS_OVERLAY'] ||= '1'
+ORIGINAL_HOME = ENV['HOME']
+TEST_HOME = Dir.mktmpdir('reader-home')
+ENV['HOME'] = TEST_HOME
 
-require 'json'
-require 'tmpdir'
-require 'simplecov'
+config_home_existing = ENV['XDG_CONFIG_HOME']
+CONFIG_HOME = config_home_existing && !config_home_existing.empty? ? config_home_existing : Dir.mktmpdir('reader-config')
+config_home_created = CONFIG_HOME != config_home_existing
+ENV['XDG_CONFIG_HOME'] = CONFIG_HOME
+
+cache_home_existing = ENV['XDG_CACHE_HOME']
+CACHE_HOME = cache_home_existing && !cache_home_existing.empty? ? cache_home_existing : Dir.mktmpdir('reader-cache')
+cache_home_created = CACHE_HOME != cache_home_existing
+ENV['XDG_CACHE_HOME'] = CACHE_HOME
+
+at_exit do
+  ENV['HOME'] = ORIGINAL_HOME if ORIGINAL_HOME
+  FileUtils.remove_entry(CONFIG_HOME) if config_home_created && CONFIG_HOME && File.directory?(CONFIG_HOME)
+  FileUtils.remove_entry(CACHE_HOME) if cache_home_created && CACHE_HOME && File.directory?(CACHE_HOME)
+  FileUtils.remove_entry(TEST_HOME) if TEST_HOME && File.directory?(TEST_HOME)
+end
 SimpleCov.start do
   track_files 'lib/ebook_reader/infrastructure/**/*.rb'
   add_filter '/spec/'

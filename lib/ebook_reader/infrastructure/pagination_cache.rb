@@ -9,7 +9,7 @@ module EbookReader
     module PaginationCache
       module_function
 
-      SCHEMA_VERSION = 1
+      SCHEMA_VERSION = 3
 
       def layout_key(width, height, view_mode, line_spacing)
         "#{width}x#{height}_#{view_mode}_#{line_spacing}"
@@ -84,7 +84,7 @@ module EbookReader
         version = data['version'] || data[:version]
         pages = data['pages'] || data[:pages]
         return nil unless pages.is_a?(Array)
-        return nil if version && version.to_i > SCHEMA_VERSION
+        return nil if version && version.to_i != SCHEMA_VERSION
 
         pages.map do |entry|
           {

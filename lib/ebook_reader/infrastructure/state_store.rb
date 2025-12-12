@@ -12,6 +12,7 @@ rescue NameError => e
   require 'json'
 end
 require_relative 'atomic_file_writer'
+require_relative 'config_paths'
 
 module EbookReader
   module Infrastructure
@@ -344,8 +345,22 @@ module EbookReader
       end
 
       # Configuration file management
-      CONFIG_DIR = File.expand_path('~/.config/reader')
-      CONFIG_FILE = File.join(CONFIG_DIR, 'config.json')
+      def self.config_dir
+        EbookReader::Infrastructure::ConfigPaths.reader_root
+      end
+
+      def self.config_file
+        File.join(config_dir, 'config.json')
+      end
+
+      def self.legacy_config_dir
+        EbookReader::Infrastructure::ConfigPaths.legacy_reader_root
+      end
+
+      def self.legacy_config_file
+        File.join(legacy_config_dir, 'config.json')
+      end
+
       SYMBOL_KEYS = %i[view_mode line_spacing page_numbering_mode theme].freeze
       LINE_SPACING_ALIASES = {
         tight: :compact,
@@ -353,30 +368,42 @@ module EbookReader
       }.freeze
 
       def ensure_config_dir
-        FileUtils.mkdir_p(CONFIG_DIR)
+        FileUtils.mkdir_p(self.class.config_dir)
       rescue StandardError
         nil
       end
 
       def write_config_file
         payload = JSON.pretty_generate(config_to_h)
-        EbookReader::Infrastructure::AtomicFileWriter.write(CONFIG_FILE, payload)
+        EbookReader::Infrastructure::AtomicFileWriter.write(self.class.config_file, payload)
       rescue StandardError
         nil
       end
 
       # Load config from file on initialization
       def load_config_from_file
-        return unless File.exist?(CONFIG_FILE)
+        config_file = self.class.config_file
+        legacy_file = self.class.legacy_config_file
+        path = if File.exist?(config_file)
+                 config_file
+               elsif File.exist?(legacy_file)
+                 legacy_file
+               end
+        return unless path
 
-        data = parse_config_file
+        data = parse_config_file(path)
         apply_config_data(data) if data
+
+        # Best-effort migration when XDG paths differ and only legacy exists.
+        if path == legacy_file && config_file != legacy_file && !File.exist?(config_file)
+          save_config
+        end
       rescue StandardError
         # Use defaults on error
       end
 
-      def parse_config_file
-        JSON.parse(File.read(CONFIG_FILE), symbolize_names: true)
+      def parse_config_file(path)
+        JSON.parse(File.read(path), symbolize_names: true)
       rescue StandardError
         nil
       end

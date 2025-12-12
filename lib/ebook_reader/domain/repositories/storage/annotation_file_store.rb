@@ -11,7 +11,7 @@ module EbookReader
     module Repositories
       module Storage
         # File-backed annotation storage under Domain.
-        # Persists annotations to ~/.config/reader/annotations.json
+        # Persists annotations to ${XDG_CONFIG_HOME:-~/.config}/reader/annotations.json
         class AnnotationFileStore
           def initialize(file_writer:, path_service:)
             @file_writer = file_writer

@@ -152,11 +152,7 @@ module EbookReader
       chapter_index = index.to_i
       return if chapter.blocks && !chapter.blocks.empty?
 
-      if @loaded_from_cache && @background_worker
-        enqueue_async_formatting(chapter_index, chapter)
-        return
-      end
-
+      # Always format synchronously so rendering/pagination receives structured lines immediately.
       format_chapter_sync(chapter_index, chapter, raise_on_error: true)
     end
 

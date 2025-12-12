@@ -30,9 +30,13 @@ module Zip
     CDH_SIG  = [0x02014B50].pack('V').freeze # "PK\x01\x02"
     LFH_SIG  = [0x04034B50].pack('V').freeze # "PK\x03\x04"
     MAX_EOCD_SCAN = 66_560 # 64 KiB comment + 2 KiB buffer
+    DEFAULT_MAX_ENTRY_COMPRESSED_BYTES = 64 * 1024 * 1024
+    DEFAULT_MAX_ENTRY_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
+    DEFAULT_MAX_TOTAL_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
+    READ_CHUNK_BYTES = 16 * 1024
 
-    def self.open(path)
-      z = new(path)
+    def self.open(path, **options)
+      z = new(path, **options)
       return z unless block_given?
 
       begin
@@ -46,11 +50,24 @@ module Zip
       end
     end
 
-    def initialize(path)
+    def initialize(path,
+                   max_entry_uncompressed_bytes: nil,
+                   max_entry_compressed_bytes: nil,
+                   max_total_uncompressed_bytes: nil)
       @path = path
       @io = ::File.open(path, 'rb')
       @entries = {}
       @closed = false
+      @max_entry_uncompressed_bytes = resolve_limit(max_entry_uncompressed_bytes,
+                                                    env: 'READER_ZIP_MAX_ENTRY_BYTES',
+                                                    default: DEFAULT_MAX_ENTRY_UNCOMPRESSED_BYTES)
+      @max_entry_compressed_bytes = resolve_limit(max_entry_compressed_bytes,
+                                                  env: 'READER_ZIP_MAX_ENTRY_COMPRESSED_BYTES',
+                                                  default: DEFAULT_MAX_ENTRY_COMPRESSED_BYTES)
+      @max_total_uncompressed_bytes = resolve_limit(max_total_uncompressed_bytes,
+                                                    env: 'READER_ZIP_MAX_TOTAL_BYTES',
+                                                    default: DEFAULT_MAX_TOTAL_UNCOMPRESSED_BYTES)
+      @total_uncompressed_bytes = 0
       build_index!
     rescue StandardError
       close
@@ -76,6 +93,9 @@ module Zip
       entry = find_entry(path)
       raise Error, "entry not found: #{path}" unless entry
       raise Error, "cannot read directory entry: #{entry.name}" if entry.name.end_with?('/')
+      raise Error, "unsupported encrypted entry: #{entry.name}" if (entry.gp_flags.to_i & 0x1) != 0
+
+      enforce_entry_limits!(entry, requested_name: path)
 
       # Seek to local file header
       @io.seek(entry.local_header_offset, ::IO::SEEK_SET)
@@ -91,26 +111,15 @@ module Zip
       # Skip name + extra to reach data start
       @io.seek(name_len + extra_len, ::IO::SEEK_CUR)
 
-      compressed = @io.read(entry.compressed_size)
-      unless compressed && compressed.bytesize == entry.compressed_size
-        raise Error,
-              'truncated compressed data'
-      end
-
       case entry.compression_method
       when 0 # STORE
-        data = compressed
-      when 8 # DEFLATE
-        inflater = ::Zlib::Inflate.new(-::Zlib::MAX_WBITS)
-        begin
-          data = inflater.inflate(compressed)
-        ensure
-          begin
-            inflater.close
-          rescue StandardError
-            nil
-          end
+        data = @io.read(entry.compressed_size)
+        unless data && data.bytesize == entry.compressed_size
+          raise Error,
+                'truncated compressed data'
         end
+      when 8 # DEFLATE
+        data = inflate_deflated_entry(entry)
       else
         raise Error, "unsupported compression method: #{entry.compression_method}"
       end
@@ -123,10 +132,80 @@ module Zip
       end
 
       # Return binary string
+      enforce_uncompressed_budget!(entry, data.bytesize)
+      @total_uncompressed_bytes += data.bytesize
       data.force_encoding(Encoding::BINARY)
     end
 
     private
+
+    def resolve_limit(value, env:, default:)
+      candidate = value
+      candidate = ENV.fetch(env, nil) if candidate.nil?
+      parsed = begin
+        Integer(candidate)
+      rescue StandardError
+        nil
+      end
+      parsed = default if parsed.nil? || parsed <= 0
+      parsed
+    end
+
+    def enforce_entry_limits!(entry, requested_name:)
+      csize = entry.compressed_size.to_i
+      usize = entry.uncompressed_size.to_i
+
+      if csize > @max_entry_compressed_bytes
+        raise Error, "entry too large (compressed): #{requested_name}"
+      end
+
+      if usize.positive? && usize > @max_entry_uncompressed_bytes
+        raise Error, "entry too large (uncompressed): #{requested_name}"
+      end
+
+      if usize.positive? && (@total_uncompressed_bytes + usize) > @max_total_uncompressed_bytes
+        raise Error, "archive exceeds total uncompressed limit: #{requested_name}"
+      end
+    end
+
+    def enforce_uncompressed_budget!(entry, bytes)
+      if bytes > @max_entry_uncompressed_bytes
+        raise Error, "entry too large after decompression: #{entry.name}"
+      end
+
+      if (@total_uncompressed_bytes + bytes) > @max_total_uncompressed_bytes
+        raise Error, "archive exceeds total uncompressed limit: #{entry.name}"
+      end
+    end
+
+    def inflate_deflated_entry(entry)
+      remaining = entry.compressed_size.to_i
+      inflater = ::Zlib::Inflate.new(-::Zlib::MAX_WBITS)
+      output = +''
+
+      begin
+        while remaining.positive?
+          chunk = @io.read([remaining, READ_CHUNK_BYTES].min)
+          raise Error, 'truncated compressed data' unless chunk && !chunk.empty?
+
+          remaining -= chunk.bytesize
+          output << inflater.inflate(chunk)
+          enforce_uncompressed_budget!(entry, output.bytesize)
+        end
+
+        output << inflater.finish
+      rescue ::Zlib::DataError => e
+        raise Error, "invalid deflate data: #{e.message}"
+      ensure
+        begin
+          inflater.close
+        rescue StandardError
+          nil
+        end
+      end
+
+      output
+    end
 
     def build_index!
       cd_offset, cd_size, _entries = locate_central_directory

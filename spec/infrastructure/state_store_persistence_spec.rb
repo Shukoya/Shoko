@@ -9,7 +9,7 @@ RSpec.describe 'StateStore persistence', :fakefs do
     store = EbookReader::Infrastructure::StateStore.new(bus)
     store.set(%i[config view_mode], :single)
     store.save_config
-    path = EbookReader::Infrastructure::StateStore::CONFIG_FILE
+    path = EbookReader::Infrastructure::StateStore.config_file
     expect(File).to exist(path)
     data = JSON.parse(File.read(path))
     expect(data['view_mode']).to eq('single')
@@ -17,9 +17,9 @@ RSpec.describe 'StateStore persistence', :fakefs do
 
   it 'loads config on ObserverStateStore init' do
     # Write a config file first
-    dir = EbookReader::Infrastructure::StateStore::CONFIG_DIR
+    dir = EbookReader::Infrastructure::StateStore.config_dir
     FileUtils.mkdir_p(dir)
-    File.write(EbookReader::Infrastructure::StateStore::CONFIG_FILE, { view_mode: 'single' }.to_json)
+    File.write(EbookReader::Infrastructure::StateStore.config_file, { view_mode: 'single' }.to_json)
     store = EbookReader::Infrastructure::ObserverStateStore.new(bus)
     expect(store.get(%i[config view_mode])).to eq(:single)
   end

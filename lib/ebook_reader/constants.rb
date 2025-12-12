@@ -14,7 +14,13 @@ module EbookReader
     APP_HOMEPAGE = 'https://github.com/yourusername/reader'
 
     # File system constants
-    CONFIG_DIR = File.expand_path('~/.config/reader')
+    xdg_config_home = ENV.fetch('XDG_CONFIG_HOME', nil)
+    config_root = if xdg_config_home && !xdg_config_home.empty?
+                    xdg_config_home
+                  else
+                    File.join(Dir.home, '.config')
+                  end
+    CONFIG_DIR = File.join(config_root, 'reader')
     CACHE_DIR = File.join(CONFIG_DIR, 'cache')
     LOG_DIR = File.join(CONFIG_DIR, 'logs')
 

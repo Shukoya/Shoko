@@ -51,6 +51,24 @@ module EbookReader
         end
       end
 
+      # Rebuild pagination when layout-affecting config (view mode, line spacing, page numbering)
+      # changes. Preserves the current reading position as precisely as possible.
+      def rebuild_after_config_change(doc, state, page_calculator, dimensions)
+        return unless doc && page_calculator
+
+        width, height = dimensions
+        if dynamic_mode?(state)
+          payload = pending_progress_payload(state, page_calculator)
+          state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_progress: payload))
+          perform_dynamic_build(doc, state, page_calculator, [width, height])
+          clamp_dynamic_index(state, page_calculator)
+        else
+          perform_absolute_build(doc, state, page_calculator, [width, height])
+        end
+      rescue StandardError
+        nil
+      end
+
       # Rebuilds dynamic pagination with a loading overlay and precise restore.
       def rebuild_dynamic(doc, state, page_calculator)
         return :pass unless dynamic_mode?(state) && page_calculator

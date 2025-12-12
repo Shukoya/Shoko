@@ -10,7 +10,7 @@ module EbookReader
         # Produces the same page hashes used by PageCalculatorService.
         # Not DI-registered; used internally by the facade service.
         class DynamicPageMapBuilder
-          def self.build(doc, col_width, lines_per_page)
+          def self.build(doc, col_width, lines_per_page, wrapper: nil, formatter: nil)
             pages_data = []
             total = doc.chapter_count
 
@@ -18,8 +18,7 @@ module EbookReader
               chapter = doc.get_chapter(chapter_idx)
               next unless chapter
 
-              raw = chapter.lines || []
-              wrapped = wrap_lines(raw, col_width)
+              wrapped = wrapped_lines(doc, chapter, chapter_idx, col_width, wrapper, formatter)
 
               wrapped_size = wrapped.size
               page_count = [(wrapped_size.to_f / [lines_per_page, 1].max).ceil, 1].max
@@ -46,7 +45,23 @@ module EbookReader
           class << self
             private
 
-            def wrap_lines(lines, width)
+            def wrapped_lines(doc, chapter, chapter_idx, width, wrapper, formatter)
+              return [] if width <= 0 || chapter.nil?
+
+              if formatter
+                lines = formatter.wrap_all(doc, chapter_idx, width)
+                return lines if lines && !lines.empty?
+              end
+
+              if wrapper
+                lines = wrapper.wrap_lines(chapter.lines || [], chapter_idx, width)
+                return lines if lines && !lines.empty?
+              end
+
+              wrap_plain_lines(chapter.lines || [], width)
+            end
+
+            def wrap_plain_lines(lines, width)
               return [] if lines.empty? || width <= 0
 
               lines.each_with_object([]) do |line, acc|

@@ -256,13 +256,12 @@ module EbookReader
 
         def resolve_line_spacing(config)
           store = config_store(config)
-          if store
-            EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(store)
-          else
-            :normal
-          end
+          return EbookReader::Constants::DEFAULT_LINE_SPACING unless store
+
+          EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(store) ||
+            EbookReader::Constants::DEFAULT_LINE_SPACING
         rescue StandardError
-          :normal
+          EbookReader::Constants::DEFAULT_LINE_SPACING
         end
 
         def config_store(config)

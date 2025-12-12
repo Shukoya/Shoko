@@ -26,10 +26,14 @@ module EbookReader
           layout = layout_for(width, height, config)
           return Result.new(pages: [], cached: false) if layout[:lines_per_page] <= 0
 
+          wrapper = resolve_wrapping_service
+          formatter = resolve_formatting_service
           pages = Internal::DynamicPageMapBuilder.build(
               doc,
               layout[:col_width],
-              layout[:lines_per_page]
+              layout[:lines_per_page],
+              wrapper: wrapper,
+              formatter: formatter
             ) do |idx, total|
               on_progress&.call(idx, total)
             end
@@ -126,6 +130,14 @@ module EbookReader
             return nil unless @dependencies.respond_to?(:resolve)
 
             @dependencies.resolve(:wrapping_service)
+          rescue StandardError
+            nil
+          end
+
+          def resolve_formatting_service
+            return nil unless @dependencies.respond_to?(:resolve)
+
+            @dependencies.resolve(:formatting_service)
           rescue StandardError
             nil
           end

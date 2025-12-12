@@ -8,14 +8,20 @@ module EbookReader
       # Domain service for layout calculations with dependency injection.
       # Migrated from legacy Services::LayoutService to follow DI pattern.
       class LayoutService < BaseService
+        # Shared layout constants so pagination and rendering stay in sync
+        SPLIT_LEFT_MARGIN = 2
+        SPLIT_RIGHT_MARGIN = 2
+        SPLIT_COLUMN_GAP = 4
+        SPLIT_MIN_USABLE_WIDTH = 40
+        MIN_COLUMN_WIDTH = 20
+        CONTENT_TOP_PADDING = 2
+        CONTENT_BOTTOM_PADDING = 1
+        CONTENT_VERTICAL_PADDING = CONTENT_TOP_PADDING + CONTENT_BOTTOM_PADDING
+
         # Calculate layout metrics for given dimensions and view mode
         def calculate_metrics(width, height, view_mode)
-          col_width = if view_mode == :split
-                        [(width - 3) / 2, 20].max
-                      else
-                        (width * 0.9).to_i.clamp(30, 120)
-                      end
-          content_height = [height - 2, 1].max
+          col_width = view_mode == :split ? split_column_width(width) : single_column_width(width)
+          content_height = content_area_height(height)
           [col_width, content_height]
         end
 
@@ -23,7 +29,15 @@ module EbookReader
         def adjust_for_line_spacing(height, line_spacing)
           return 1 if height <= 0
 
-          multiplier = resolve_multiplier(line_spacing)
+          spacing = begin
+            line_spacing&.to_sym
+          rescue StandardError
+            nil
+          end
+
+          return [(height + 1) / 2, 1].max if spacing == :relaxed
+
+          multiplier = resolve_multiplier(spacing)
           adjusted = (height * multiplier).floor
           adjusted = height if multiplier >= 1.0 && adjusted < height
           [adjusted, 1].max
@@ -48,13 +62,18 @@ module EbookReader
           [(container_width - content_width) / 2, 0].max
         end
 
-        protected
-
-        def required_dependencies
-          [] # No dependencies required for layout calculations
+        def content_area_height(height)
+          [height - CONTENT_VERTICAL_PADDING, 1].max
         end
 
-        private
+        def split_column_width(width)
+          usable_width = [width - SPLIT_LEFT_MARGIN - SPLIT_RIGHT_MARGIN, SPLIT_MIN_USABLE_WIDTH].max
+          [(usable_width - SPLIT_COLUMN_GAP) / 2, MIN_COLUMN_WIDTH].max
+        end
+
+        def single_column_width(width)
+          (width * Constants::SINGLE_VIEW_WIDTH_PERCENT).to_i.clamp(30, 120)
+        end
 
         def resolve_multiplier(line_spacing)
           key = begin
@@ -63,6 +82,12 @@ module EbookReader
             nil
           end
           EbookReader::Constants::LINE_SPACING_MULTIPLIERS.fetch(key, 1.0)
+        end
+
+        protected
+
+        def required_dependencies
+          [] # No dependencies required for layout calculations
         end
       end
     end
