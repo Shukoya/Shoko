@@ -53,6 +53,8 @@ RSpec.describe EbookReader::Infrastructure::JsonCacheStore do
     manifest_rows = described_class.manifest_rows(cache_root)
     expect(manifest_rows.length).to eq(1)
     expect(manifest_rows.first['title']).to eq('JSON Book')
+    expect(manifest_rows.first['source_size_bytes']).to eq(File.size(epub_path))
+    expect(manifest_rows.first['source_fingerprint'].to_s).not_to be_empty
   end
 
   it 'writes payloads atomically (failed write keeps previous data intact)' do

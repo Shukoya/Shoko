@@ -4,6 +4,7 @@ require 'spec_helper'
 require 'tmpdir'
 require 'fileutils'
 require 'json'
+require 'digest'
 
 RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
   let(:tmp_dir) { Dir.mktmpdir }
@@ -110,6 +111,40 @@ RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
     warmed = pipeline.load(epub_path)
     expect(warmed.loaded_from_cache).to be(true)
     expect(warmed.book.chapters.first.title).to eq('Chapter 1')
+  end
+
+  it 'avoids hashing the EPUB on warm opens by using the manifest' do
+    pipeline.load(epub_path)
+
+    expect(Digest::SHA256).not_to receive(:file)
+    warmed = pipeline.load(epub_path)
+
+    expect(warmed.loaded_from_cache).to be(true)
+    expect(warmed.book.title).to eq('Spec Book')
+  end
+
+  it 're-hashes when the file changes even if mtime and size match' do
+    pipeline.load(epub_path)
+    original_mtime = File.mtime(epub_path)
+    original_size = File.size(epub_path)
+
+    mutated_entries = zip_entries.map do |entry|
+      cloned = entry.dup
+      if cloned[:name] == 'OPS/xhtml/chapter1.xhtml'
+        cloned[:data] = cloned[:data].gsub('Hello', 'Jello')
+      end
+      cloned
+    end
+
+    File.binwrite(epub_path, ZipTestBuilder.build_zip(mutated_entries))
+    expect(File.size(epub_path)).to eq(original_size)
+    File.utime(original_mtime, original_mtime, epub_path)
+
+    expect(Digest::SHA256).to receive(:file).at_least(:once).and_call_original
+    result = pipeline.load(epub_path)
+
+    expect(result.loaded_from_cache).to be(false)
+    expect(result.book.chapters.first.raw_content).to include('Jello')
   end
 
   it 'rebuilds cache when cached chapters are missing raw content' do

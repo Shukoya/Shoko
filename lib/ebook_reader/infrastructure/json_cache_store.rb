@@ -7,6 +7,7 @@ require 'json'
 require_relative 'atomic_file_writer'
 require_relative 'cache_paths'
 require_relative 'logger'
+require_relative 'source_fingerprint'
 
 module EbookReader
   module Infrastructure
@@ -66,6 +67,8 @@ module EbookReader
         metadata_row['source_sha'] = normalized_sha
         metadata_row['source_path'] = source_path
         metadata_row['source_mtime'] = source_mtime&.to_f
+        metadata_row['source_size_bytes'] = safe_file_size(source_path)
+        metadata_row['source_fingerprint'] = SourceFingerprint.compute(source_path)
         metadata_row['generated_at'] = generated_at&.to_f
         metadata_row['created_at'] = now
         metadata_row['updated_at'] = now
@@ -336,6 +339,14 @@ module EbookReader
           end
         end
 
+      rescue StandardError
+        nil
+      end
+
+      def safe_file_size(path)
+        return nil if path.nil? || path.to_s.empty?
+
+        File.size(path)
       rescue StandardError
         nil
       end
