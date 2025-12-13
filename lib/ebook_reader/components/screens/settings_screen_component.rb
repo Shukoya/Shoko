@@ -19,6 +19,7 @@ module EbookReader
           SettingsItem.new(action: :toggle_page_numbering_mode, icon: '', label: 'Page Numbering Mode'),
           SettingsItem.new(action: :toggle_page_numbers, icon: '', label: 'Page Numbers'),
           SettingsItem.new(action: :toggle_highlight_quotes, icon: '', label: 'Text Highlighting'),
+          SettingsItem.new(action: :toggle_kitty_images, icon: '', label: 'Kitty Images'),
           SettingsItem.new(action: :wipe_cache, icon: '', label: 'Wipe Cache'),
         ].freeze
 
@@ -136,6 +137,7 @@ module EbookReader
             back_to_menu: ['Return to main menu', COLOR_TEXT_DIM],
             toggle_page_numbers: toggle_page_number_value,
             toggle_highlight_quotes: toggle_highlight_value,
+            toggle_kitty_images: toggle_kitty_images_value,
             wipe_cache: ['Removes EPUB + scan caches', COLOR_TEXT_WARNING],
           }
         end
@@ -164,7 +166,7 @@ module EbookReader
         end
 
         def toggled_action?(action)
-          %i[toggle_page_numbers toggle_highlight_quotes].include?(action)
+          %i[toggle_page_numbers toggle_highlight_quotes toggle_kitty_images].include?(action)
         end
 
         def view_mode_buttons
@@ -210,6 +212,13 @@ module EbookReader
         def format_highlight_quotes
           value = @state.get(%i[config highlight_quotes])
           (value.nil? ? true : !!value) ? 'On' : 'Off'
+        end
+
+        def toggle_kitty_images_value
+          enabled = !!@state.get(%i[config kitty_images])
+          text = enabled ? 'Enabled' : 'Disabled'
+          color = enabled ? COLOR_TEXT_SUCCESS : COLOR_TEXT_DIM
+          [text, color]
         end
       end
     end

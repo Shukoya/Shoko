@@ -14,7 +14,7 @@ module EbookReader
   # extraction to disk is required.
   class EPUBDocument
     attr_reader :title, :chapters, :language, :source_path,
-                :cache_path, :toc_entries, :metadata, :resources
+                :cache_path, :cache_sha, :toc_entries, :metadata, :resources
 
     def initialize(path, formatting_service: nil, background_worker: nil)
       @open_path = File.expand_path(path)
@@ -96,6 +96,7 @@ module EbookReader
         book: result.source_path || @open_path
       ) if defined?(Infrastructure::PerfTracer)
       @cache_path = result.cache_path
+      @cache_sha = derive_cache_sha(@cache_path)
       @source_path = result.source_path || @open_path
       @loaded_from_cache = result.loaded_from_cache
       @book_payload = result.payload
@@ -111,6 +112,14 @@ module EbookReader
       @opf_path = book.opf_path
 
       ensure_chapters_exist
+    end
+
+    def derive_cache_sha(path)
+      return nil unless path && !path.to_s.empty?
+
+      File.basename(path.to_s, File.extname(path.to_s))
+    rescue StandardError
+      nil
     end
 
     def present_or_fallback(value, fallback)

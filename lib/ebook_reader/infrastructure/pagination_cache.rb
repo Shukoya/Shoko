@@ -11,14 +11,15 @@ module EbookReader
 
       SCHEMA_VERSION = 3
 
-      def layout_key(width, height, view_mode, line_spacing)
-        "#{width}x#{height}_#{view_mode}_#{line_spacing}"
+      def layout_key(width, height, view_mode, line_spacing, kitty_images: false)
+        suffix = kitty_images ? 'img1' : 'img0'
+        "#{width}x#{height}_#{view_mode}_#{line_spacing}_#{suffix}"
       end
 
       def parse_layout_key(key)
         return nil unless key
 
-        dims, view_mode, line_spacing = key.to_s.split('_', 3)
+        dims, view_mode, line_spacing, image_mode = key.to_s.split('_', 4)
         width_str, height_str = dims.to_s.split('x', 2)
         return nil unless width_str && height_str && view_mode && line_spacing
 
@@ -27,6 +28,7 @@ module EbookReader
           height: height_str.to_i,
           view_mode: view_mode.to_sym,
           line_spacing: line_spacing.to_sym,
+          kitty_images: image_mode.to_s == 'img1',
         }
       rescue StandardError
         nil

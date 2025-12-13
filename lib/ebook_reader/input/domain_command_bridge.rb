@@ -141,6 +141,7 @@ module EbookReader
           when :toggle_page_numbers then Domain::Commands::MenuCommand.new(:toggle_page_numbers)
           when :toggle_page_numbering_mode then Domain::Commands::MenuCommand.new(:toggle_page_numbering_mode)
           when :toggle_highlight_quotes then Domain::Commands::MenuCommand.new(:toggle_highlight_quotes)
+          when :toggle_kitty_images then Domain::Commands::MenuCommand.new(:toggle_kitty_images)
           when :wipe_cache then Domain::Commands::MenuCommand.new(:wipe_cache)
           # Reader mode transitions
           when :exit_help then Domain::Commands::ReaderModeCommand.new(:exit_help)

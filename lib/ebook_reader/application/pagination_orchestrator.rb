@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../infrastructure/kitty_graphics'
+
 module EbookReader
   module Application
     # Handles pagination builds (dynamic/absolute) and progress overlay.
@@ -94,8 +96,9 @@ module EbookReader
 
         view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
         line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
+        kitty_images = EbookReader::Infrastructure::KittyGraphics.enabled_for?(state)
         key = @pagination_cache.layout_key(width, height, view_mode,
-                                           line_spacing)
+                                           line_spacing, kitty_images: kitty_images)
         return :missing unless key && @pagination_cache.exists_for_document?(doc, key)
 
         @pagination_cache.delete_for_document(doc, key)
@@ -180,8 +183,9 @@ module EbookReader
       def build_absolute_cache_entry(page_map, state, width, height)
         view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
         line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
+        kitty_images = EbookReader::Infrastructure::KittyGraphics.enabled_for?(state)
         key = if @pagination_cache
-                @pagination_cache.layout_key(width, height, view_mode, line_spacing)
+                @pagination_cache.layout_key(width, height, view_mode, line_spacing, kitty_images: kitty_images)
               else
                 nil
               end

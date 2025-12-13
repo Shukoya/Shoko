@@ -22,10 +22,10 @@ RSpec.describe EbookReader::Application::PaginationOrchestrator do
   describe '#invalidate_cache' do
     let(:view_mode) { EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state_store) }
     let(:spacing) { EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state_store) }
-    let(:key) { '80x24_single_normal' }
+    let(:key) { '80x24_single_normal_img0' }
 
     before do
-      allow(pagination_cache).to receive(:layout_key).with(80, 24, view_mode, spacing).and_return(key)
+      allow(pagination_cache).to receive(:layout_key).with(80, 24, view_mode, spacing, kitty_images: false).and_return(key)
     end
 
     it 'deletes the cache entry when one exists' do

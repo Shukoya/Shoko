@@ -55,6 +55,11 @@ module EbookReader
           dispatch_config(highlight_quotes: !current)
         end
 
+        def toggle_kitty_images
+          current = Selectors::ConfigSelectors.kitty_images(@state_store)
+          dispatch_config(kitty_images: !current)
+        end
+
         # Toggle dynamic/absolute page numbering mode.
         def toggle_page_numbering_mode
           current = Selectors::ConfigSelectors.page_numbering_mode(@state_store) || :dynamic

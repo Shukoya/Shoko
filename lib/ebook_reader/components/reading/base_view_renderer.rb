@@ -93,7 +93,8 @@ module EbookReader
           if @dependencies&.registered?(:formatting_service)
             begin
               formatting = @dependencies.resolve(:formatting_service)
-              lines = formatting.wrap_window(document, chapter_index, col_width, offset, length)
+              config = safe_resolve(:global_state)
+              lines = formatting.wrap_window(document, chapter_index, col_width, offset, length, config: config)
               return lines unless lines.nil? || lines.empty?
             rescue StandardError
               # fall through to wrapping service fallback
@@ -144,6 +145,12 @@ module EbookReader
 
         def draw_line(surface, bounds, line:, row:, col:, width:, context:, column_id:, line_offset:,
                       page_id:)
+          if kitty_image_line?(line, context)
+            abs_row, abs_col = absolute_cell(bounds, row, col)
+            render_kitty_image(line, context, abs_row, abs_col)
+            return
+          end
+
           plain_text, styled_text = renderable_line_content(line, width, context)
           abs_row, abs_col = absolute_cell(bounds, row, col)
           geometry = build_line_geometry(page_id, column_id, abs_row, abs_col, line_offset,
@@ -252,6 +259,80 @@ module EbookReader
           return @dependencies.resolve(name) if @dependencies.registered?(name)
 
           nil
+        end
+
+        def kitty_image_line?(line, context)
+          return false unless line.respond_to?(:metadata)
+          return false unless line.metadata.is_a?(Hash)
+
+          enabled = begin
+            renderer = kitty_image_renderer
+            renderer && renderer.enabled?(config_store(context&.config))
+          rescue StandardError
+            false
+          end
+          return false unless enabled
+
+          line.metadata[:image_render_line] == true && line.metadata[:image_render].is_a?(Hash)
+        end
+
+        def render_kitty_image(line, context, abs_row, abs_col)
+          renderer = kitty_image_renderer
+          return unless renderer
+
+          meta = line.metadata || {}
+          image = meta[:image] || meta['image'] || {}
+          src = image[:src] || image['src']
+          alt = image[:alt] || image['alt']
+          chapter_entry = meta[:chapter_source_path] || meta['chapter_source_path']
+          render_opts = meta[:image_render] || {}
+
+          cols = render_opts[:cols] || render_opts['cols'] || 0
+          rows = render_opts[:rows] || render_opts['rows'] || 0
+          placement_id = render_opts[:placement_id] || render_opts['placement_id']
+          col_offset = render_opts[:col_offset] || render_opts['col_offset'] || 0
+
+          doc = context&.document
+          epub_path = doc&.respond_to?(:canonical_path) ? doc.canonical_path : nil
+          book_sha = doc&.respond_to?(:cache_sha) ? doc.cache_sha : nil
+
+          rendered = renderer.render(
+            output: Terminal,
+            book_sha: book_sha,
+            epub_path: epub_path,
+            chapter_entry_path: chapter_entry,
+            src: src,
+            row: abs_row,
+            col: abs_col + col_offset.to_i,
+            cols: cols,
+            rows: rows,
+            placement_id: placement_id
+          )
+
+          return if rendered
+
+          label = alt.to_s.strip
+          if label.empty?
+            path = src.to_s.split(/[?#]/, 2).first.to_s
+            label = File.basename(path)
+          end
+          label = 'Image' if label.empty?
+
+          plain = "[Image: #{label}]"
+          clipped = cols.to_i.positive? ? plain[0, cols.to_i] : plain
+          Terminal.write(abs_row, abs_col + col_offset.to_i, Components::RenderStyle.dim(clipped))
+        rescue StandardError
+          nil
+        end
+
+        def kitty_image_renderer
+          return @kitty_image_renderer if defined?(@kitty_image_renderer)
+
+          @kitty_image_renderer = begin
+            @dependencies.resolve(:kitty_image_renderer)
+          rescue StandardError
+            nil
+          end
         end
 
         def resolve_line_spacing(config)

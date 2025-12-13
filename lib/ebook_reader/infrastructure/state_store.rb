@@ -13,6 +13,7 @@ rescue NameError => e
 end
 require_relative 'atomic_file_writer'
 require_relative 'config_paths'
+require_relative 'kitty_graphics'
 
 module EbookReader
   module Infrastructure
@@ -235,6 +236,7 @@ module EbookReader
             highlight_quotes: true,
             highlight_keywords: false,
             prefetch_pages: 20,
+            kitty_images: EbookReader::Infrastructure::KittyGraphics.supported?,
           },
 
           ui: {
@@ -276,6 +278,8 @@ module EbookReader
           raise ArgumentError, 'current_chapter must be non-negative' if value.negative?
         when %i[reader view_mode], %i[config view_mode]
           raise ArgumentError, 'invalid view_mode' unless %i[single split].include?(value)
+        when %i[config kitty_images]
+          raise ArgumentError, 'kitty_images must be boolean' unless value == true || value == false
         when %i[ui terminal_width], %i[ui terminal_height]
           raise ArgumentError, 'terminal dimensions must be positive' if value <= 0
         end

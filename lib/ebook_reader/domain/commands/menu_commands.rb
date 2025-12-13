@@ -12,6 +12,7 @@ module EbookReader
           toggle_page_numbering_mode
           toggle_page_numbers
           toggle_highlight_quotes
+          toggle_kitty_images
           wipe_cache
         ].freeze
         SETTINGS_MAX_INDEX = SETTINGS_ACTIONS.length - 1
@@ -54,6 +55,8 @@ module EbookReader
             context.toggle_page_numbering_mode if context.respond_to?(:toggle_page_numbering_mode)
           when :toggle_highlight_quotes
             context.toggle_highlight_quotes if context.respond_to?(:toggle_highlight_quotes)
+          when :toggle_kitty_images
+            context.toggle_kitty_images if context.respond_to?(:toggle_kitty_images)
           when :wipe_cache then context.wipe_cache if context.respond_to?(:wipe_cache)
           when :start_search
             if context.respond_to?(:switch_to_search)

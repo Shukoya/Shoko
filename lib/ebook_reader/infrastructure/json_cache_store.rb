@@ -39,7 +39,7 @@ module EbookReader
         ENGINE
       end
 
-      def fetch_payload(sha)
+      def fetch_payload(sha, include_resources: false)
         path = payload_path(sha)
         return nil unless File.file?(path)
 
@@ -47,10 +47,13 @@ module EbookReader
         data = JSON.parse(json)
         return nil unless valid_payload_file?(data)
 
+        resources_index = data.fetch('resources', [])
+        resources = include_resources ? hydrate_resources(sha, resources_index) : []
+
         Payload.new(
           metadata_row: data.fetch('metadata_row', {}),
           chapters: data.fetch('chapters', []),
-          resources: hydrate_resources(sha, data.fetch('resources', [])),
+          resources: resources,
           layouts: fetch_layouts(sha)
         )
       rescue StandardError => e
@@ -217,12 +220,15 @@ module EbookReader
       end
 
       def persist_resources(sha, resources_rows)
+        rows = []
+        total_bytes = 0
+        resources_rows = Array(resources_rows)
+        return [rows, total_bytes] if resources_rows.empty?
+
         dir = resources_dir(sha)
         FileUtils.mkdir_p(dir)
 
-        rows = []
-        total_bytes = 0
-        Array(resources_rows).each do |row|
+        resources_rows.each do |row|
           path = row.is_a?(Hash) ? (row[:path] || row['path']) : nil
           data = row.is_a?(Hash) ? (row[:data] || row['data']) : nil
           next if path.to_s.empty?

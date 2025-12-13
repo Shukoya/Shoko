@@ -101,7 +101,11 @@ RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
     payload_path = File.join(File.dirname(result.cache_path), "#{result.payload.source_sha256}.json")
     expect(File.exist?(payload_path)).to be(true)
     expect(result.book.title).to eq('Spec Book')
-    expect(result.book.resources['OPS/images/pic.jpg'].bytesize).to eq(image_payload.bytesize)
+    expect(result.book.resources).to eq({})
+    expect(result.book.chapters.first.raw_content).to include('img')
+
+    resources_dir = File.join(File.dirname(payload_path), 'resources', result.payload.source_sha256)
+    expect(File.directory?(resources_dir)).to be(false)
   end
 
   it 'returns cached data on subsequent loads' do

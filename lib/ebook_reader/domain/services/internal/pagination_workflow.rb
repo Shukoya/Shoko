@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../../infrastructure/kitty_graphics'
+
 module EbookReader
   module Domain
     module Services
@@ -33,7 +35,8 @@ module EbookReader
               layout[:col_width],
               layout[:lines_per_page],
               wrapper: wrapper,
-              formatter: formatter
+              formatter: formatter,
+              config: config
             ) do |idx, total|
               on_progress&.call(idx, total)
             end
@@ -85,7 +88,8 @@ module EbookReader
             line_spacing = resolve_line_spacing(config)
             return nil unless @pagination_cache
 
-            @pagination_cache.layout_key(width, height, view_mode, line_spacing)
+            kitty_images = EbookReader::Infrastructure::KittyGraphics.enabled_for?(config)
+            @pagination_cache.layout_key(width, height, view_mode, line_spacing, kitty_images: kitty_images)
           end
 
           def load_cached_pages(doc, key, config)
@@ -103,7 +107,8 @@ module EbookReader
               config.get(%i[ui terminal_width]) || 0,
               config.get(%i[ui terminal_height]) || 0,
               view_mode_reader,
-              resolve_line_spacing(config)
+              resolve_line_spacing(config),
+              kitty_images: EbookReader::Infrastructure::KittyGraphics.enabled_for?(config)
             )
             @pagination_cache.load_for_document(doc, alt_key)
           rescue StandardError

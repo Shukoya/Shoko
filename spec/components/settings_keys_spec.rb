@@ -31,7 +31,7 @@ RSpec.describe 'Settings key bindings' do
     dispatcher = mm.instance_variable_get(:@dispatcher)
     dispatcher.activate(:settings)
 
-    5.times { dispatcher.handle_key('j') }
+    6.times { dispatcher.handle_key('j') }
     dispatcher.handle_key(' ')
     expect(settings_service).to have_received(:wipe_cache)
   end

@@ -45,6 +45,14 @@ module EbookReader
           highlight_keywords(state)
         end
 
+        def self.kitty_images(state)
+          state.get(%i[config kitty_images])
+        end
+
+        def self.kitty_images?(state)
+          !!kitty_images(state)
+        end
+
         def self.config_hash(state)
           state.get([:config])
         end

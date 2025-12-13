@@ -14,14 +14,19 @@ module EbookReader
   module Infrastructure
     # Imports an EPUB archive into an in-memory representation that can be
     # serialized using {EpubCache}. Responsible for extracting metadata,
-    # chapters, table-of-contents entries, and binary resources (images, css,
-    # etc.) in a consistent schema.
+    # chapters, and table-of-contents entries in a consistent schema.
+    #
+    # Binary resources (images, stylesheets, etc.) are intentionally not extracted
+    # by default since the reader currently renders image placeholders and does
+    # not consume the raw bytes. Optional consumers (e.g. Kitty image rendering)
+    # should load resources on-demand.
     class EpubImporter
       DEFAULT_LANGUAGE = 'en_US'
       CONTAINER_PATH   = 'META-INF/container.xml'
 
-      def initialize(formatting_service: nil)
+      def initialize(formatting_service: nil, extract_resources: false)
         @formatting_service = formatting_service
+        @extract_resources = !!extract_resources
       end
 
       def import(epub_path)
@@ -43,7 +48,7 @@ module EbookReader
           spine         = chapters_data[:spine]
 
           toc_entries = build_toc_entries(chapters, processor.toc_entries, chapter_hrefs, opf_path)
-          resources   = extract_resources(zip, opf_path, manifest)
+          resources   = @extract_resources ? extract_resources(zip, opf_path, manifest) : {}
 
           EpubCache::BookData.new(
             title: metadata[:title] || fallback_title(@epub_path),
@@ -105,7 +110,7 @@ module EbookReader
             number: number.to_s,
             title: extract_chapter_title(raw, number, title),
             lines: nil,
-            metadata: nil,
+            metadata: { source_path: file_path, href: resolved_href },
             blocks: nil,
             raw_content: raw
           )

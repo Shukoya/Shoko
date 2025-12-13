@@ -8,6 +8,7 @@ require_relative '../infrastructure/perf_tracer'
 require_relative '../infrastructure/pagination_cache'
 require_relative '../infrastructure/cache_paths'
 require_relative '../infrastructure/epub_cache'
+require_relative '../infrastructure/kitty_image_renderer'
 require_relative '../infrastructure/repositories/cached_library_repository'
 require_relative '../infrastructure/parsers/xhtml_content_parser'
 require_relative '../infrastructure/render_registry'
@@ -189,6 +190,7 @@ module EbookReader
         container.register_singleton(:wrapping_service) { |c| Domain::Services::WrappingService.new(c) }
         container.register_singleton(:formatting_service) { |c| Domain::Services::FormattingService.new(c) }
         container.register_factory(:settings_service) { |c| Domain::Services::SettingsService.new(c) }
+        container.register_singleton(:kitty_image_renderer) { |_c| Infrastructure::KittyImageRenderer.new }
 
         container.register_singleton(:cache_service) { |c| Domain::Services::CacheService.new(c) }
         container.register_singleton(:file_writer) { |c| Domain::Services::FileWriterService.new(c) }

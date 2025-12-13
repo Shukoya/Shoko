@@ -138,7 +138,8 @@ module EbookReader
       # Observe sidebar visibility changes to rebuild layout
       @state.add_observer(self, %i[reader sidebar_visible], %i[config theme],
                           %i[config view_mode], %i[config line_spacing],
-                          %i[config page_numbering_mode])
+                          %i[config page_numbering_mode],
+                          %i[config kitty_images])
     end
 
     # Observer callback for state changes
@@ -148,7 +149,7 @@ module EbookReader
         rebuild_root_layout
       when %i[config theme]
         apply_theme_palette
-      when %i[config view_mode], %i[config line_spacing], %i[config page_numbering_mode]
+      when %i[config view_mode], %i[config line_spacing], %i[config page_numbering_mode], %i[config kitty_images]
         rebuild_pagination_for_layout_change
       end
     end

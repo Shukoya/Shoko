@@ -21,6 +21,10 @@ module EbookReader
           settings_service.toggle_highlight_quotes
         end
 
+        def toggle_kitty_images(_key = nil)
+          settings_service.toggle_kitty_images
+        end
+
         def toggle_page_numbering_mode(_key = nil)
           settings_service.toggle_page_numbering_mode
         end

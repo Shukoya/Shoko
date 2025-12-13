@@ -7,6 +7,7 @@ require_relative 'internal/page_hydrator'
 require_relative 'internal/pagination_workflow'
 require_relative 'internal/layout_metrics_calculator'
 require_relative '../../helpers/text_metrics'
+require_relative '../../infrastructure/kitty_graphics'
 
 module EbookReader
   module Domain
@@ -393,7 +394,7 @@ module EbookReader
           formatting = resolve_formatting_service
           return nil unless formatting
 
-          formatting.wrap_window(doc, chapter_index, width, offset, length)
+          formatting.wrap_window(doc, chapter_index, width, offset, length, config: @state_store)
         rescue StandardError
           nil
         end
@@ -587,8 +588,9 @@ module EbookReader
           end
           view_mode ||= (config.respond_to?(:get) ? config.get(%i[reader view_mode]) : :single)
           line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config) || EbookReader::Constants::DEFAULT_LINE_SPACING
+          kitty_images = EbookReader::Infrastructure::KittyGraphics.enabled_for?(config)
           @pagination_cache.layout_key(width, height, view_mode,
-                                       line_spacing)
+                                       line_spacing, kitty_images: kitty_images)
         end
 
         def compact_pages(pages)

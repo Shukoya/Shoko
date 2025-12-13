@@ -43,7 +43,7 @@ RSpec.describe 'Wipe Cache setting' do
     dispatcher = mm.instance_variable_get(:@dispatcher)
     dispatcher.activate(:settings)
 
-    5.times { dispatcher.handle_key('j') }
+    6.times { dispatcher.handle_key('j') }
     dispatcher.handle_key(' ')
 
     expect(File).not_to exist(reader_cache_root)

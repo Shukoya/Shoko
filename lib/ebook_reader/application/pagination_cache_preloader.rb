@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../infrastructure/kitty_graphics'
+
 module EbookReader
   module Application
     # Centralises the logic for hydrating dynamic pagination from the cache.
@@ -67,7 +69,8 @@ module EbookReader
       def build_layout_key(width, height)
         view_mode = current_view_mode
         line_spacing = current_line_spacing
-        key = pagination_cache.layout_key(width, height, view_mode, line_spacing)
+        kitty_images = EbookReader::Infrastructure::KittyGraphics.enabled_for?(state)
+        key = pagination_cache.layout_key(width, height, view_mode, line_spacing, kitty_images: kitty_images)
         [key, view_mode, line_spacing]
       end
 
@@ -103,10 +106,12 @@ module EbookReader
         keys = pagination_cache.layout_keys_for_document(doc)
         return nil if keys.empty?
 
+        want_images = EbookReader::Infrastructure::KittyGraphics.enabled_for?(state)
         preferred = keys.find do |candidate|
           parsed = pagination_cache.parse_layout_key(candidate)
           parsed && parsed[:view_mode] == current_view_mode &&
-            parsed[:line_spacing] == current_line_spacing
+            parsed[:line_spacing] == current_line_spacing &&
+            parsed[:kitty_images] == want_images
         end
         return nil unless preferred
 
