@@ -77,7 +77,7 @@ module EbookReader
       end
 
       def calculate_absolute_single
-        width, height = terminal_size
+        height, width = terminal_size
         _, content_height = layout_service.calculate_metrics(width, height, current_view_mode)
         lines_per_page = layout_service.adjust_for_line_spacing(content_height, current_line_spacing)
         return default_single if lines_per_page <= 0
@@ -105,7 +105,7 @@ module EbookReader
       end
 
       def calculate_absolute_split
-        width, height = terminal_size
+        height, width = terminal_size
         _, content_height = layout_service.calculate_metrics(width, height, :split)
         lines_per_page = layout_service.adjust_for_line_spacing(content_height, current_line_spacing)
         return default_split if lines_per_page <= 0

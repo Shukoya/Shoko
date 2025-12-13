@@ -99,34 +99,52 @@ module EbookReader
 
         def render_dynamic_from_page_data(surface, bounds, context, col_width, left_start,
                                           right_start, divider_param, left_pd, right_pd)
+          left_offset = left_pd[:start_line].to_i
           left_lines = left_pd[:lines]
-          left_lines ||= fetch_wrapped_lines(context, col_width, left_pd[:start_line].to_i,
-                                             page_span_length(left_pd))
+          if left_lines.nil? || left_lines.empty?
+            left_lines, left_offset = fetch_wrapped_lines_window(context, col_width, left_offset,
+                                                                 page_span_length(left_pd))
+          else
+            snapped = snap_offset_to_image_start(left_lines, left_offset)
+            if snapped != left_offset
+              left_lines, left_offset = fetch_wrapped_lines_window(context, col_width, snapped,
+                                                                   page_span_length(left_pd))
+            end
+          end
           render_column_lines(surface, bounds, left_lines, left_start, col_width, context,
-                              column_id: 0, line_offset: left_pd[:start_line].to_i,
+                              column_id: 0, line_offset: left_offset,
                               page_id: context.current_page_index)
           draw_divider(surface, bounds, divider_param)
           return unless right_pd
 
+          right_offset = right_pd[:start_line].to_i
           right_lines = right_pd[:lines]
-          right_lines ||= fetch_wrapped_lines(context, col_width, right_pd[:start_line].to_i,
-                                              page_span_length(right_pd))
+          if right_lines.nil? || right_lines.empty?
+            right_lines, right_offset = fetch_wrapped_lines_window(context, col_width, right_offset,
+                                                                   page_span_length(right_pd))
+          else
+            snapped = snap_offset_to_image_start(right_lines, right_offset)
+            if snapped != right_offset
+              right_lines, right_offset = fetch_wrapped_lines_window(context, col_width, snapped,
+                                                                     page_span_length(right_pd))
+            end
+          end
           render_column_lines(surface, bounds, right_lines, right_start, col_width, context,
-                              column_id: 1, line_offset: right_pd[:start_line].to_i,
+                              column_id: 1, line_offset: right_offset,
                               page_id: context.current_page_index ? context.current_page_index + 1 : nil)
         end
 
         def render_dynamic_fallback(surface, bounds, context, col_width, left_start,
                                     right_start, divider_param, base_offset, displayable)
-          left_lines = fetch_wrapped_lines(context, col_width, base_offset, displayable)
+          left_lines, left_offset = fetch_wrapped_lines_window(context, col_width, base_offset, displayable)
           render_column_lines(surface, bounds, left_lines, left_start, col_width, context,
-                              column_id: 0, line_offset: base_offset,
+                              column_id: 0, line_offset: left_offset,
                               page_id: context.current_page_index)
           draw_divider(surface, bounds, divider_param)
-          right_lines = fetch_wrapped_lines(context, col_width, base_offset + displayable,
-                                            displayable)
+          right_base_offset = base_offset + displayable
+          right_lines, right_offset = fetch_wrapped_lines_window(context, col_width, right_base_offset, displayable)
           render_column_lines(surface, bounds, right_lines, right_start, col_width, context,
-                              column_id: 1, line_offset: base_offset + displayable,
+                              column_id: 1, line_offset: right_offset,
                               page_id: context.current_page_index ? context.current_page_index + 1 : nil)
         end
 
@@ -136,21 +154,25 @@ module EbookReader
         def render_absolute_columns(surface, bounds, context, col)
           cw = col.col_width
           dh = col.display_height
-          left_lines = fetch_wrapped_lines(context, cw, col.left_offset, dh)
+
+          paired = col.right_offset.to_i == col.left_offset.to_i + dh
+          left_lines, left_offset = fetch_wrapped_lines_window(context, cw, col.left_offset, dh)
           render_column_lines(surface, bounds, left_lines, col.left_start, cw, context,
-                              column_id: 0, line_offset: col.left_offset,
+                              column_id: 0, line_offset: left_offset,
                               page_id: context.current_page_index)
           draw_divider(surface, bounds, col.divider_param)
-          right_lines = fetch_wrapped_lines(context, cw, col.right_offset, dh)
+
+          right_input = paired ? left_offset + dh : col.right_offset
+          right_lines, right_offset = fetch_wrapped_lines_window(context, cw, right_input, dh)
           render_column_lines(surface, bounds, right_lines, col.right_start, cw, context,
-                              column_id: 1, line_offset: col.right_offset,
+                              column_id: 1, line_offset: right_offset,
                               page_id: context.current_page_index)
         end
 
-        def fetch_wrapped_lines(context, col_width, offset, length)
+        def fetch_wrapped_lines_window(context, col_width, offset, length)
           st = context.state
           chapter_index = st.get(%i[reader current_chapter]) || 0
-          super(context.document, chapter_index, col_width, offset, length)
+          fetch_wrapped_lines_with_offset(context.document, chapter_index, col_width, offset, length)
         end
 
         def page_span_length(page_data)

@@ -73,7 +73,38 @@ RSpec.describe EbookReader::Infrastructure::Parsers::XHTMLContentParser do
 
     blocks = described_class.new(html).parse
     expect(blocks.any? { |b| b.type == :image }).to be(true)
-    expect(blocks.map(&:text).join("\n")).to include('[Image: Cover image]')
+    expect(blocks.map(&:text).join("\n")).to include('[Image]')
+    expect(blocks.map(&:text).join("\n")).not_to include('Cover image')
+  end
+
+  it 'does not use the src filename when alt is missing' do
+    html = <<~HTML
+      <html>
+        <body>
+          <img src="cover.png" />
+        </body>
+      </html>
+    HTML
+
+    blocks = described_class.new(html).parse
+    combined = blocks.map(&:text).join("\n")
+    expect(combined).to include('[Image]')
+    expect(combined).not_to include('cover.png')
+  end
+
+  it 'does not show filename-like alt text in placeholders' do
+    html = <<~HTML
+      <html>
+        <body>
+          <img src="cover.png" alt="img19.jpg" />
+        </body>
+      </html>
+    HTML
+
+    blocks = described_class.new(html).parse
+    combined = blocks.map(&:text).join("\n")
+    expect(combined).to include('[Image]')
+    expect(combined).not_to include('img19.jpg')
   end
 
   it 'decodes common HTML entities (e.g. &nbsp; and &mdash;)' do

@@ -394,7 +394,16 @@ module EbookReader
           formatting = resolve_formatting_service
           return nil unless formatting
 
-          formatting.wrap_window(doc, chapter_index, width, offset, length, config: @state_store)
+          lines_per_page = begin
+            @metrics_calculator&.lines_per_page
+          rescue StandardError
+            nil
+          end
+          lines_per_page = nil if lines_per_page.to_i <= 0
+          lines_per_page ||= length
+
+          formatting.wrap_window(doc, chapter_index, width, offset, length,
+                                 config: @state_store, lines_per_page: lines_per_page)
         rescue StandardError
           nil
         end

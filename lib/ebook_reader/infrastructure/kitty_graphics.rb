@@ -69,6 +69,22 @@ module EbookReader
         "#{APC_START}#{serialize_keys(keys)}#{APC_END}"
       end
 
+      def virtual_place(image_id, cols:, rows:, placement_id: nil, quiet: true, z: nil)
+        keys = {
+          a: 'p',
+          U: 1,
+          i: image_id.to_i,
+          p: placement_id.to_i,
+          c: cols.to_i,
+          r: rows.to_i,
+          C: 1,
+        }
+        keys.delete(:p) if placement_id.to_i <= 0
+        keys[:q] = 2 if quiet
+        keys[:z] = z.to_i if z
+        "#{APC_START}#{serialize_keys(keys)}#{APC_END}"
+      end
+
       def delete_visible(quiet: true)
         keys = { a: 'd' }
         keys[:q] = 2 if quiet

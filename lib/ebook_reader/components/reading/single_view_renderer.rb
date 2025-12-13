@@ -39,20 +39,27 @@ module EbookReader
           col_start = center_start_col(bounds.width, col_width)
 
           if page_calculator && (pd = page_calculator.get_page(context.current_page_index))
+            start_line = pd[:start_line].to_i
+            end_line = pd[:end_line].to_i
+            span_length = end_line - start_line + 1
+            span_length = [span_length, displayable].max
+            chapter_index = (pd[:chapter_index] || st&.get(%i[reader current_chapter]) || 0).to_i
+
             dyn_lines = pd[:lines]
             if dyn_lines.nil? || dyn_lines.empty?
-              start_line = pd[:start_line].to_i
-              end_line = pd[:end_line].to_i
-              span_length = end_line - start_line + 1
-              span_length = [span_length, displayable].max
-              chapter_index = st&.get(%i[reader current_chapter]) || 0
-              dyn_lines = fetch_wrapped_lines(context.document, chapter_index, col_width,
-                                              start_line, span_length)
+              dyn_lines, start_line = fetch_wrapped_lines_with_offset(context.document, chapter_index, col_width,
+                                                                      start_line, span_length)
+            else
+              snapped_start = snap_offset_to_image_start(dyn_lines, start_line)
+              if snapped_start != start_line
+                dyn_lines, start_line = fetch_wrapped_lines_with_offset(context.document, chapter_index, col_width,
+                                                                        snapped_start, span_length)
+              end
             end
             start_row = calculate_center_start_row(content_height, dyn_lines.size, spacing)
             params = Models::RenderParams.new(start_row: start_row, col_start: col_start,
                                               col_width: col_width, context: context,
-                                              line_offset: pd[:start_line].to_i,
+                                              line_offset: start_line,
                                               page_id: context.current_page_index,
                                               column_id: 0)
             render_dynamic_lines(surface, bounds, dyn_lines, params)
@@ -63,8 +70,8 @@ module EbookReader
           offset = compute_dynamic_offset(context, displayable)
           chapter_index = st.get(%i[reader current_chapter]) || 0 if st
           chapter_index ||= 0
-          lines = fetch_wrapped_lines(context.document, chapter_index, col_width, offset,
-                                      displayable)
+          lines, offset = fetch_wrapped_lines_with_offset(context.document, chapter_index, col_width, offset,
+                                                          displayable)
           start_row = calculate_center_start_row(content_height, lines.size, spacing)
           params = Models::RenderParams.new(start_row: start_row, col_start: col_start,
                                             col_width: col_width, context: context,
@@ -87,8 +94,8 @@ module EbookReader
 
           offset = st.get(%i[reader single_page]) || 0
           chapter_index = st.get(%i[reader current_chapter]) || 0
-          lines = fetch_wrapped_lines(context.document, chapter_index, col_width, offset,
-                                      displayable)
+          lines, offset = fetch_wrapped_lines_with_offset(context.document, chapter_index, col_width, offset,
+                                                          displayable)
           start_row = calculate_center_start_row(content_height, lines.size, spacing)
 
           params = Models::RenderParams.new(start_row: start_row, col_start: col_start,

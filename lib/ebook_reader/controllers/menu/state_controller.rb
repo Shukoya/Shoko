@@ -209,7 +209,7 @@ module EbookReader
         end
 
         def prepare_reader_launch(path, presenter)
-          width, height = terminal_service.size
+          height, width = terminal_service.size
           warm_launch_dependencies
 
           document = load_document_for(path)

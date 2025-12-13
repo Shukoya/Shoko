@@ -19,6 +19,28 @@ RSpec.describe EbookReader::Helpers::TextMetrics do
     end
   end
 
+  describe '.truncate_to' do
+    it 'does not split grapheme clusters' do
+      text = "a\u0301b" # a + combining acute accent + b
+      truncated = described_class.truncate_to(text, 1)
+      expect(truncated).to eq("a\u0301")
+      expect(described_class.visible_length(truncated)).to eq(1)
+    end
+
+    it 'truncates kitty placeholder lines by cell width' do
+      placeholder = EbookReader::Helpers::KittyUnicodePlaceholders.line(
+        image_id: 42,
+        placement_id: 7,
+        row: 0,
+        cols: 3
+      )
+
+      truncated = described_class.truncate_to(placeholder, 1)
+      expect(described_class.visible_length(truncated)).to eq(1)
+      expect(truncated).to include(EbookReader::Helpers::KittyUnicodePlaceholders::PLACEHOLDER_CHAR)
+    end
+  end
+
   describe '.wrap_plain_text' do
     it 'wraps text based on grapheme cell widths' do
       line = '漢字漢字 example text'

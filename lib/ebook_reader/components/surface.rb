@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../terminal'
+require_relative '../helpers/text_metrics'
 
 module EbookReader
   module Components
@@ -30,7 +31,7 @@ module EbookReader
         return if abs_col > b_right
 
         max_width = b_right - abs_col + 1
-        clipped = text.to_s[0, max_width]
+        clipped = EbookReader::Helpers::TextMetrics.truncate_to(text.to_s, max_width)
         clipped = apply_dim(clipped) if dimmed?
         return if clipped.nil? || clipped.empty?
 

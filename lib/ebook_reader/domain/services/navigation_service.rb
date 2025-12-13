@@ -6,6 +6,7 @@ require_relative 'navigation/context_builder'
 require_relative 'navigation/strategy_factory'
 require_relative 'navigation/dynamic_strategy'
 require_relative 'navigation/absolute_strategy'
+require_relative '../../infrastructure/kitty_graphics'
 
 module EbookReader
   module Domain
@@ -232,6 +233,7 @@ module EbookReader
             end
           end
 
+          updates = snap_absolute_offsets_for_images(updates, snapshot, metrics)
           apply_updates(updates)
         end
 
@@ -384,6 +386,100 @@ module EbookReader
 
           state = safe_snapshot
           state.dig(:reader, :page_map)&.[](chapter_index) || 0
+        end
+
+        def snap_absolute_offsets_for_images(updates, snapshot, metrics)
+          return updates unless EbookReader::Infrastructure::KittyGraphics.enabled_for?(@state_store)
+          return updates unless registered?(:formatting_service) && registered?(:document)
+          return updates unless @layout_service
+
+          doc = resolve(:document)
+          formatting = resolve(:formatting_service)
+          return updates unless doc && formatting
+
+          view_mode = snapshot.dig(:config, :view_mode) || :split
+          width = snapshot.dig(:ui, :terminal_width) || 80
+          height = snapshot.dig(:ui, :terminal_height) || 24
+          col_width, = @layout_service.calculate_metrics(width, height, view_mode)
+          col_width = width if col_width.to_i <= 0
+
+          chapter_index = updates[%i[reader current_chapter]] || snapshot.dig(:reader, :current_chapter) || 0
+          stride = stride_for_view(view_mode, metrics)
+
+          if view_mode == :split
+            left = (updates[%i[reader left_page]] || snapshot.dig(:reader, :left_page) || 0).to_i
+            snapped = snap_offset_to_image_start(formatting, doc, chapter_index, col_width, left, stride)
+            return updates if snapped == left
+
+            updates[%i[reader left_page]] = snapped
+            updates[%i[reader current_page]] = snapped
+            updates[%i[reader right_page]] = snapped + stride
+            updates
+          else
+            offset = (updates[%i[reader single_page]] || snapshot.dig(:reader, :single_page) || 0).to_i
+            snapped = snap_offset_to_image_start(formatting, doc, chapter_index, col_width, offset, stride)
+            return updates if snapped == offset
+
+            updates[%i[reader single_page]] = snapped
+            updates[%i[reader current_page]] = snapped
+            updates
+          end
+        rescue StandardError
+          updates
+        end
+
+        def snap_offset_to_image_start(formatting, doc, chapter_index, col_width, offset, lines_per_page)
+          offset_i = offset.to_i
+          return offset_i if offset_i <= 0
+
+          lines = formatting.wrap_all(doc, chapter_index, col_width,
+                                      config: @state_store, lines_per_page: lines_per_page)
+          line = lines && lines[offset_i]
+          meta = line_metadata(line)
+          return offset_i unless meta
+
+          render = meta[:image_render] || meta['image_render']
+          return offset_i unless render.is_a?(Hash)
+
+          render_line = meta.key?(:image_render_line) ? meta[:image_render_line] : meta['image_render_line']
+          return offset_i if render_line == true
+
+          src = image_src(meta)
+          return offset_i if src.to_s.empty?
+
+          idx = offset_i
+          while idx.positive?
+            cur_meta = line_metadata(lines[idx])
+            break unless cur_meta && image_src(cur_meta).to_s == src.to_s
+
+            cur_render = cur_meta[:image_render] || cur_meta['image_render']
+            break unless cur_render.is_a?(Hash)
+
+            cur_render_line = cur_meta.key?(:image_render_line) ? cur_meta[:image_render_line] : cur_meta['image_render_line']
+            return idx if cur_render_line == true
+
+            idx -= 1
+          end
+
+          0
+        rescue StandardError
+          offset_i
+        end
+
+        def line_metadata(line)
+          return nil unless line && line.respond_to?(:metadata)
+
+          meta = line.metadata
+          meta.is_a?(Hash) ? meta : nil
+        rescue StandardError
+          nil
+        end
+
+        def image_src(meta)
+          image = meta[:image] || meta['image'] || {}
+          image[:src] || image['src']
+        rescue StandardError
+          nil
         end
       end
     end

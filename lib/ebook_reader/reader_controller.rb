@@ -530,7 +530,7 @@ module EbookReader
     def rebuild_pagination_for_layout_change
       return unless @doc && @page_calculator && @pagination_orchestrator
 
-      width, height = @terminal_service.size
+      height, width = @terminal_service.size
       @pagination_orchestrator.rebuild_after_config_change(@doc, @state, @page_calculator, [width, height])
       force_redraw
     rescue StandardError

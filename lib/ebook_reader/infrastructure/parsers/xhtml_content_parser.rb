@@ -431,29 +431,16 @@ module EbookReader
         end
 
         def image_placeholder_segment(element, inherited_styles)
-          src = element.attributes['src'].to_s
-          alt = element.attributes['alt'].to_s.strip
-          label = alt.empty? ? image_label_from_src(src) : alt
-          text = label.empty? ? '[Image]' : "[Image: #{label}]"
+          text = '[Image]'
           text_segment(" #{text} ", inherited_styles.merge(dim: true))
         end
 
         def inline_image_placeholder_segment(element, inherited_styles)
           src = element.attributes['src'].to_s
           alt = element.attributes['alt'].to_s.strip
-          label = alt.empty? ? image_label_from_src(src) : alt
-          text = label.empty? ? '[Image]' : "[Image: #{label}]"
+          text = '[Image]'
           styles = inherited_styles.merge(dim: true, inline_image: { src: src, alt: alt })
           text_segment(" #{text} ", styles)
-        end
-
-        def image_label_from_src(src)
-          return '' if src.nil? || src.empty?
-
-          path = src.split('?', 2).first.to_s
-          File.basename(path)
-        rescue StandardError
-          ''
         end
 
         def finalize_segments(segments)

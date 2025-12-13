@@ -9,7 +9,7 @@ module EbookReader
     module TextMetrics
       TAB_SIZE = 4
       ANSI_REGEX = /\[[0-9;]*[A-Za-z]/
-      TOKEN_REGEX = /\[[0-9;]*[A-Za-z]|./m
+      TOKEN_REGEX = /\[[0-9;]*[A-Za-z]|\X/m
 
       module_function
 

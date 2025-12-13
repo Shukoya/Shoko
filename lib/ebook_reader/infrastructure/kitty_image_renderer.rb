@@ -29,7 +29,7 @@ module EbookReader
       end
 
       def render(output:, book_sha:, epub_path:, chapter_entry_path:, src:, row:, col:, cols:, rows:,
-                 placement_id:)
+                 placement_id:, z: nil)
         return false unless output && output.respond_to?(:write)
         return false unless epub_path && File.file?(epub_path)
 
@@ -45,11 +45,36 @@ module EbookReader
                                         placement_id: clamp_id(placement_id),
                                         cols: fit[:cols],
                                         rows: fit[:rows],
-                                        quiet: true)
+                                        quiet: true,
+                                        z: z)
         output.write(row.to_i + fit[:row_offset], col.to_i + fit[:col_offset], place_seq)
         true
       rescue StandardError
         false
+      end
+
+      # Ensure the image is transmitted and has a virtual placement for Unicode placeholders.
+      # Returns the image_id on success, otherwise nil.
+      def prepare_virtual(output:, book_sha:, epub_path:, chapter_entry_path:, src:, cols:, rows:, placement_id: nil,
+                          z: nil)
+        return nil unless output && output.respond_to?(:write)
+        return nil unless epub_path && File.file?(epub_path)
+
+        entry_path = EpubResourceLoader.resolve_chapter_relative(chapter_entry_path, src)
+        return nil unless entry_path
+
+        image_id = image_id_for(book_sha, epub_path, entry_path)
+        return nil unless ensure_transmitted(output, image_id, book_sha, epub_path, entry_path)
+        return nil unless ensure_virtual_placement(output,
+                                                   image_id,
+                                                   cols.to_i,
+                                                   rows.to_i,
+                                                   placement_id: placement_id,
+                                                   z: z)
+
+        image_id
+      rescue StandardError
+        nil
       end
 
       private
@@ -77,6 +102,25 @@ module EbookReader
 
         @transmitted[image_id] = true
         true
+      end
+
+      def ensure_virtual_placement(output, image_id, cols, rows, placement_id: nil, z: nil)
+        cols_i = cols.to_i
+        rows_i = rows.to_i
+        return false if cols_i <= 0 || rows_i <= 0
+
+        place_id = placement_id.to_i
+        place_id = clamp_id(place_id) if place_id.positive?
+        seq = KittyGraphics.virtual_place(image_id,
+                                          cols: cols_i,
+                                          rows: rows_i,
+                                          placement_id: place_id,
+                                          quiet: true,
+                                          z: z)
+        output.write(1, 1, seq)
+        true
+      rescue StandardError
+        false
       end
 
       def fit_geometry(image_id, max_cols, max_rows)

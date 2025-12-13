@@ -82,8 +82,9 @@ module EbookReader
         # @param offset [Integer]
         # @param length [Integer]
         # @param config [Object,nil] state store-like object responding to #get
+        # @param lines_per_page [Integer,nil] optional page height hint for image sizing
         # @return [Array<Domain::Models::DisplayLine,String>]
-        def wrap_window(document, chapter_index, width, offset, length, config: nil)
+        def wrap_window(document, chapter_index, width, offset, length, config: nil, lines_per_page: nil)
           return [] if width.to_i <= 0 || length.to_i <= 0
 
           chapter = document&.get_chapter(chapter_index)
@@ -98,14 +99,15 @@ module EbookReader
 
           chapter_source_path = chapter_source_path_for(chapter)
           wrapped = wrapped_lines_for(document, chapter_index, formatted, width.to_i,
-                                      chapter_source_path: chapter_source_path, config: config)
+                                      chapter_source_path: chapter_source_path, config: config,
+                                      lines_per_page: lines_per_page)
           wrapped[offset, length] || []
         end
 
         # Retrieve all wrapped lines for a chapter at the provided width.
         #
         # @return [Array<Domain::Models::DisplayLine>]
-        def wrap_all(document, chapter_index, width, config: nil)
+        def wrap_all(document, chapter_index, width, config: nil, lines_per_page: nil)
           return [] if width.to_i <= 0
 
           chapter = document&.get_chapter(chapter_index)
@@ -116,16 +118,23 @@ module EbookReader
 
           chapter_source_path = chapter_source_path_for(chapter)
           wrapped_lines_for(document, chapter_index, formatted, width.to_i,
-                            chapter_source_path: chapter_source_path, config: config)
+                            chapter_source_path: chapter_source_path, config: config,
+                            lines_per_page: lines_per_page)
         end
 
         private
 
-        def wrapped_lines_for(document, chapter_index, formatted, width, chapter_source_path:, config:)
+        def wrapped_lines_for(document, chapter_index, formatted, width, chapter_source_path:, config:, lines_per_page: nil)
           width_key = width.to_i
           cache_key = chapter_cache_key(document, chapter_index)
           variant = wrap_variant(config)
-          composite_key = "#{width_key}|#{variant}"
+          max_image_rows = lines_per_page.to_i
+          max_image_rows = nil if max_image_rows <= 0
+          composite_key = if variant == 'img' && max_image_rows
+                            "#{width_key}|#{variant}|#{max_image_rows}"
+                          else
+                            "#{width_key}|#{variant}"
+                          end
           cached = @wrapped_cache[cache_key][composite_key]
           return cached if cached
 
@@ -133,7 +142,8 @@ module EbookReader
             width_key,
             chapter_index: chapter_index,
             chapter_source_path: chapter_source_path,
-            image_rendering: variant == 'img'
+            image_rendering: variant == 'img',
+            max_image_rows: max_image_rows
           )
           lines = assembler.build(formatted.blocks)
           @wrapped_cache[cache_key][composite_key] = lines
@@ -220,12 +230,14 @@ module EbookReader
           MAX_ID = 4_294_967_295
           RENDERABLE_IMAGE_EXTENSIONS = %w[.png .jpg .jpeg].freeze
 
-          def initialize(width, chapter_index: nil, chapter_source_path: nil, image_rendering: false)
+          def initialize(width, chapter_index: nil, chapter_source_path: nil, image_rendering: false, max_image_rows: nil)
             @width = [width.to_i, 10].max
             @lines = []
             @chapter_index = chapter_index
             @chapter_source_path = chapter_source_path
             @image_rendering = !!image_rendering
+            @max_image_rows = max_image_rows.to_i
+            @max_image_rows = nil if @max_image_rows <= 0
             @inline_image_counter = 0
           end
 
@@ -298,14 +310,14 @@ module EbookReader
                 )
               )
             end
-
-            append_wrapped_block(block, meta.merge(image_caption: true))
           end
 
           def image_rows_for(cols)
             estimate = (cols.to_i * 0.5).round
             estimate = 4 if estimate < 4
             estimate = 18 if estimate > 18
+            estimate = [estimate, @max_image_rows].min if @max_image_rows
+            estimate = 1 if estimate < 1
             estimate
           rescue StandardError
             8
@@ -557,18 +569,6 @@ module EbookReader
                 )
               )
             end
-
-            caption_label = alt.to_s.strip
-            caption_label = label_from_src(src) if caption_label.empty?
-            caption_text = caption_label.empty? ? '[Image]' : "[Image: #{caption_label}]"
-            indent_text = ' ' * indent_cols.to_i
-            rendered = "#{indent_text} #{caption_text} "
-            segment = TextSegment.new(text: rendered, styles: { dim: true })
-            @lines << DisplayLine.new(
-              text: rendered,
-              segments: [segment],
-              metadata: base_metadata.merge(image_caption: true, image_render_line: false)
-            )
           end
 
           def placement_id_for_inline(src, index)
@@ -576,15 +576,6 @@ module EbookReader
             hashed_id(seed)
           rescue StandardError
             clamp_id(index.to_i + 1)
-          end
-
-          def label_from_src(src)
-            return '' if src.nil? || src.to_s.empty?
-
-            path = src.to_s.split(/[?#]/, 2).first.to_s
-            File.basename(path)
-          rescue StandardError
-            ''
           end
 
           def renderable_block_image?(block)

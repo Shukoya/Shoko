@@ -18,7 +18,8 @@ module EbookReader
               chapter = doc.get_chapter(chapter_idx)
               next unless chapter
 
-              wrapped = wrapped_lines(doc, chapter, chapter_idx, col_width, wrapper, formatter, config)
+              wrapped = wrapped_lines(doc, chapter, chapter_idx, col_width, lines_per_page,
+                                      wrapper, formatter, config)
 
               pages = paginate_lines(wrapped, lines_per_page)
               page_count = [pages.length, 1].max
@@ -124,11 +125,11 @@ module EbookReader
               nil
             end
 
-            def wrapped_lines(doc, chapter, chapter_idx, width, wrapper, formatter, config)
+            def wrapped_lines(doc, chapter, chapter_idx, width, lines_per_page, wrapper, formatter, config)
               return [] if width <= 0 || chapter.nil?
 
               if formatter
-                lines = formatter.wrap_all(doc, chapter_idx, width, config: config)
+                lines = formatter.wrap_all(doc, chapter_idx, width, config: config, lines_per_page: lines_per_page)
                 return lines if lines && !lines.empty?
               end
 

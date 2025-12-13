@@ -5,7 +5,9 @@ require_relative '../../models/rendering_context'
 require_relative '../../models/render_params'
 require_relative '../../models/line_geometry'
 require_relative '../../helpers/text_metrics'
+require_relative '../../helpers/kitty_unicode_placeholders'
 require_relative '../render_style'
+require 'digest/sha1'
 
 module EbookReader
   module Components
@@ -30,6 +32,7 @@ module EbookReader
 
           # Collect rendered lines for a single, consistent state update per frame
           @rendered_lines_buffer = {}
+          @placed_kitty_images = {}
           render_with_context(surface, bounds, context)
           begin
             state = context.state
@@ -38,6 +41,7 @@ module EbookReader
             # best-effort; avoid crashing render on bookkeeping
           ensure
             @rendered_lines_buffer = nil
+            @placed_kitty_images = nil
           end
         end
 
@@ -94,7 +98,8 @@ module EbookReader
             begin
               formatting = @dependencies.resolve(:formatting_service)
               config = safe_resolve(:global_state)
-              lines = formatting.wrap_window(document, chapter_index, col_width, offset, length, config: config)
+              lines = formatting.wrap_window(document, chapter_index, col_width, offset, length,
+                                             config: config, lines_per_page: length)
               return lines unless lines.nil? || lines.empty?
             rescue StandardError
               # fall through to wrapping service fallback
@@ -107,6 +112,25 @@ module EbookReader
           end
 
           (chapter.lines || [])[offset, length] || []
+        end
+
+        # Fetch wrapped lines and return [lines, effective_offset].
+        #
+        # When Kitty image rendering is enabled, images are represented as a block of
+        # empty lines where only the first line triggers the Kitty "place" command.
+        # If a page offset lands inside the image block, the terminal frame clear will
+        # erase the image and the renderer won't re-place it, resulting in blank space.
+        #
+        # To keep rendering stable across redraws (mouse selection, overlays, etc.),
+        # we snap offsets that point inside an image block back to that block's first
+        # line and re-fetch the window.
+        def fetch_wrapped_lines_with_offset(document, chapter_index, col_width, offset, length)
+          offset_i = offset.to_i
+          lines = fetch_wrapped_lines(document, chapter_index, col_width, offset_i, length)
+          snapped = snap_offset_to_image_start(lines, offset_i)
+          return [lines, offset_i] if snapped == offset_i
+
+          [fetch_wrapped_lines(document, chapter_index, col_width, snapped, length), snapped]
         end
 
         # Shared helper to draw a list of lines with spacing and clipping considerations.
@@ -132,6 +156,31 @@ module EbookReader
 
         private
 
+        def snap_offset_to_image_start(lines, offset)
+          offset_i = offset.to_i
+          return offset_i if offset_i <= 0
+
+          first = Array(lines).first
+          return offset_i unless first && first.respond_to?(:metadata)
+
+          meta = first.metadata
+          return offset_i unless meta.is_a?(Hash)
+
+          render = meta[:image_render] || meta['image_render']
+          return offset_i unless render.is_a?(Hash)
+
+          render_line = meta.key?(:image_render_line) ? meta[:image_render_line] : meta['image_render_line']
+          return offset_i if render_line == true
+
+          idx = meta.key?(:image_line_index) ? meta[:image_line_index] : meta['image_line_index']
+          return offset_i unless idx
+
+          snapped = offset_i - idx.to_i
+          snapped.negative? ? 0 : snapped
+        rescue StandardError
+          offset.to_i
+        end
+
         def create_rendering_context
           state = @dependencies.resolve(:global_state)
           Models::RenderingContext.new(
@@ -146,8 +195,8 @@ module EbookReader
         def draw_line(surface, bounds, line:, row:, col:, width:, context:, column_id:, line_offset:,
                       page_id:)
           if kitty_image_line?(line, context)
-            abs_row, abs_col = absolute_cell(bounds, row, col)
-            render_kitty_image(line, context, abs_row, abs_col)
+            image_text, image_col_offset = render_kitty_image(line, context)
+            surface.write(bounds, row, col + image_col_offset.to_i, image_text) if image_text && !image_text.empty?
             return
           end
 
@@ -168,7 +217,7 @@ module EbookReader
             return styled_text_for_display_line(line, width, highlight_enabled:)
           end
 
-          text = line.to_s[0, width]
+          text = EbookReader::Helpers::TextMetrics.truncate_to(line.to_s, width)
           if store
             text = highlight_keywords(text) if store.get(%i[config highlight_keywords])
             text = highlight_quotes(text) if highlight_enabled
@@ -273,56 +322,104 @@ module EbookReader
           end
           return false unless enabled
 
-          line.metadata[:image_render_line] == true && line.metadata[:image_render].is_a?(Hash)
+          meta = line.metadata
+          render = meta[:image_render] || meta['image_render']
+          return false unless render.is_a?(Hash)
+
+          image = meta[:image] || meta['image'] || {}
+          src = image[:src] || image['src']
+          !src.to_s.strip.empty?
         end
 
-        def render_kitty_image(line, context, abs_row, abs_col)
+        def render_kitty_image(line, context)
           renderer = kitty_image_renderer
-          return unless renderer
+          return [nil, 0] unless renderer
 
           meta = line.metadata || {}
           image = meta[:image] || meta['image'] || {}
           src = image[:src] || image['src']
           alt = image[:alt] || image['alt']
           chapter_entry = meta[:chapter_source_path] || meta['chapter_source_path']
-          render_opts = meta[:image_render] || {}
+          render_opts = meta[:image_render] || meta['image_render'] || {}
 
           cols = render_opts[:cols] || render_opts['cols'] || 0
           rows = render_opts[:rows] || render_opts['rows'] || 0
           placement_id = render_opts[:placement_id] || render_opts['placement_id']
           col_offset = render_opts[:col_offset] || render_opts['col_offset'] || 0
+          line_index = meta[:image_line_index] || meta['image_line_index'] || 0
 
-          doc = context&.document
-          epub_path = doc&.respond_to?(:canonical_path) ? doc.canonical_path : nil
-          book_sha = doc&.respond_to?(:cache_sha) ? doc.cache_sha : nil
-
-          rendered = renderer.render(
-            output: Terminal,
-            book_sha: book_sha,
-            epub_path: epub_path,
-            chapter_entry_path: chapter_entry,
-            src: src,
-            row: abs_row,
-            col: abs_col + col_offset.to_i,
-            cols: cols,
-            rows: rows,
-            placement_id: placement_id
-          )
-
-          return if rendered
-
-          label = alt.to_s.strip
-          if label.empty?
-            path = src.to_s.split(/[?#]/, 2).first.to_s
-            label = File.basename(path)
+          core_src = begin
+            src.to_s.split(/[?#]/, 2).first.to_s
+          rescue StandardError
+            src.to_s
           end
-          label = 'Image' if label.empty?
 
-          plain = "[Image: #{label}]"
-          clipped = cols.to_i.positive? ? plain[0, cols.to_i] : plain
-          Terminal.write(abs_row, abs_col + col_offset.to_i, Components::RenderStyle.dim(clipped))
+          placement_id = begin
+            raw = placement_id.to_i
+            if raw <= 0
+              seed = "#{chapter_entry}|#{core_src}|#{cols.to_i}|#{rows.to_i}"
+              raw = Digest::SHA1.digest(seed).unpack1('N')
+            end
+            raw &= 0xFF_FF_FF
+            raw = 1 if raw.zero?
+            raw
+          rescue StandardError
+            1
+          end
+
+          dedupe_key = begin
+            "#{chapter_entry}|#{core_src}|#{cols.to_i}|#{rows.to_i}|p=#{placement_id}"
+          rescue StandardError
+            nil
+          end
+
+          prepared_id = nil
+          if dedupe_key && @placed_kitty_images.is_a?(Hash)
+            cached = @placed_kitty_images[dedupe_key]
+            prepared_id = cached if cached.is_a?(Integer)
+            prepared_id = nil if cached == false
+          end
+
+          unless prepared_id
+            doc = context&.document
+            epub_path = doc&.respond_to?(:canonical_path) ? doc.canonical_path : nil
+            book_sha = doc&.respond_to?(:cache_sha) ? doc.cache_sha : nil
+
+            prepared_id = renderer.prepare_virtual(
+              output: Terminal,
+              book_sha: book_sha,
+              epub_path: epub_path,
+              chapter_entry_path: chapter_entry,
+              src: src,
+              cols: cols,
+              rows: rows,
+              placement_id: placement_id,
+              z: -1
+            )
+
+            if dedupe_key && @placed_kitty_images.is_a?(Hash)
+              @placed_kitty_images[dedupe_key] = prepared_id || false
+            end
+          end
+
+          if prepared_id && cols.to_i.between?(1, 255) && line_index.to_i.between?(0, 255)
+            placeholder = EbookReader::Helpers::KittyUnicodePlaceholders.line(
+              image_id: prepared_id,
+              placement_id: placement_id,
+              row: line_index,
+              cols: cols
+            )
+            return [placeholder, col_offset.to_i]
+          end
+
+          render_line = meta.key?(:image_render_line) ? meta[:image_render_line] : meta['image_render_line']
+          return ['', col_offset.to_i] unless render_line == true
+
+          plain = '[Image]'
+          clipped = cols.to_i.positive? ? EbookReader::Helpers::TextMetrics.truncate_to(plain, cols.to_i) : plain
+          [Components::RenderStyle.dim(clipped), col_offset.to_i]
         rescue StandardError
-          nil
+          [nil, 0]
         end
 
         def kitty_image_renderer
