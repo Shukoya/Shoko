@@ -15,7 +15,7 @@ module EbookReader
       # Ensures end_frame is called, even on errors.
       def with_frame
         height, width = @terminal_service.size
-        @terminal_service.start_frame
+        @terminal_service.start_frame(width: width, height: height)
         @state.update_terminal_size(width, height)
         surface = @terminal_service.create_surface
         bounds = EbookReader::Components::Rect.new(x: 1, y: 1, width: width, height: height)
@@ -27,7 +27,7 @@ module EbookReader
       # Renders the loading overlay component in a standalone frame.
       def render_loading_overlay
         height, width = @terminal_service.size
-        @terminal_service.start_frame
+        @terminal_service.start_frame(width: width, height: height)
         surface = @terminal_service.create_surface
         bounds = EbookReader::Components::Rect.new(x: 1, y: 1, width: width, height: height)
         overlay = EbookReader::Components::Screens::LoadingOverlayComponent.new(@dependencies)

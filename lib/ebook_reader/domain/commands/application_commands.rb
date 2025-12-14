@@ -60,7 +60,7 @@ module EbookReader
 
           handle_quit_to_menu(deps)
           force_cleanup(deps)
-          exit(0)
+          Kernel.exit(0)
         end
 
         def handle_toggle_view_mode(deps)

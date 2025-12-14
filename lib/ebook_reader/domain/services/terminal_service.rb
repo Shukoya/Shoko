@@ -69,8 +69,8 @@ module EbookReader
           cleanup(force: true)
         end
 
-        def start_frame
-          Terminal.start_frame
+        def start_frame(width: nil, height: nil)
+          Terminal.start_frame(width: width, height: height)
         end
 
         def read_key_blocking

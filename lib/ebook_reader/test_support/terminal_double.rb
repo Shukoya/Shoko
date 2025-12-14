@@ -83,7 +83,7 @@ module EbookReader
           @cleanup_calls ||= 0
         end
 
-        def start_frame
+        def start_frame(**_kwargs)
           # no-op, but record for assertions if needed
           @frame_started = true
         end

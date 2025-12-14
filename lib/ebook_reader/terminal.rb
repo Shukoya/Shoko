@@ -42,6 +42,7 @@ module EbookReader
 
       def clear
         print [ANSI::Control::CLEAR, ANSI::Control::HOME].join
+        clear_buffer_cache
         $stdout.flush
       end
 
@@ -66,14 +67,26 @@ module EbookReader
         @buffer_manager.batch_write(&)
       end
 
-      def start_frame
-        @buffer_manager.start_frame
-        # Keep @buffer reference fresh for test visibility
+      def start_frame(width: nil, height: nil)
+        if width && height
+          w = width.to_i
+          h = height.to_i
+        else
+          h, w = size
+        end
+
+        @buffer_manager.start_frame(width: w, height: h)
         @buffer = @buffer_manager.buffer
       end
 
       def end_frame
         @buffer_manager.end_frame
+      end
+
+      # Queue raw control sequences (e.g., Kitty graphics) for the current frame.
+      # These are emitted before any row diffs.
+      def raw(text)
+        @buffer_manager.raw(text)
       end
 
       def setup

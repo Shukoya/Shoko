@@ -116,6 +116,14 @@ RSpec.configure do |config|
     end
   end
 
+  # Prevent a stray `exit` from silently terminating the suite mid-run.
+  # Any spec that expects `SystemExit` should explicitly assert it.
+  config.around(:each) do |example|
+    example.run
+  rescue SystemExit => e
+    raise "Unexpected SystemExit (status=#{e.status}) in: #{example.full_description}"
+  end
+
   # Include FakeFS for file system tests
   config.include FakeFS::SpecHelpers, :fakefs
 end

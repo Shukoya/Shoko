@@ -54,11 +54,10 @@ RSpec.describe EbookReader::Infrastructure::KittyImageRenderer do
       )
     end
 
-    texts = output.writes.map { |w| w[:text] }
+    texts = output.printed
     expect(texts.grep('TX').length).to eq(1)
     expect(texts.grep('VP').length).to eq(2)
   ensure
     epub.unlink if epub
   end
 end
-

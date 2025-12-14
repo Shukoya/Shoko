@@ -30,7 +30,7 @@ module EbookReader
 
       def render(output:, book_sha:, epub_path:, chapter_entry_path:, src:, row:, col:, cols:, rows:,
                  placement_id:, z: nil)
-        return false unless output && output.respond_to?(:write)
+        return false unless output
         return false unless epub_path && File.file?(epub_path)
 
         entry_path = EpubResourceLoader.resolve_chapter_relative(chapter_entry_path, src)
@@ -47,7 +47,17 @@ module EbookReader
                                         rows: fit[:rows],
                                         quiet: true,
                                         z: z)
-        output.write(row.to_i + fit[:row_offset], col.to_i + fit[:col_offset], place_seq)
+        abs_row = row.to_i + fit[:row_offset]
+        abs_col = col.to_i + fit[:col_offset]
+        if output.respond_to?(:raw)
+          output.raw(TerminalOutput::ANSI.move(abs_row, abs_col) + place_seq)
+        elsif output.respond_to?(:print)
+          output.print(TerminalOutput::ANSI.move(abs_row, abs_col) + place_seq)
+        elsif output.respond_to?(:write)
+          output.write(abs_row, abs_col, place_seq)
+        else
+          return false
+        end
         true
       rescue StandardError
         false
@@ -57,7 +67,7 @@ module EbookReader
       # Returns the image_id on success, otherwise nil.
       def prepare_virtual(output:, book_sha:, epub_path:, chapter_entry_path:, src:, cols:, rows:, placement_id: nil,
                           z: nil)
-        return nil unless output && output.respond_to?(:write)
+        return nil unless output
         return nil unless epub_path && File.file?(epub_path)
 
         entry_path = EpubResourceLoader.resolve_chapter_relative(chapter_entry_path, src)
@@ -97,7 +107,7 @@ module EbookReader
         @resource_loader.store(book_sha: book_sha, entry_path: cache_key, bytes: png_bytes)
 
         KittyGraphics.transmit_png(image_id, png_bytes, quiet: true).each do |seq|
-          output.write(1, 1, seq)
+          emit_raw(output, seq)
         end
 
         @transmitted[image_id] = true
@@ -117,10 +127,22 @@ module EbookReader
                                           placement_id: place_id,
                                           quiet: true,
                                           z: z)
-        output.write(1, 1, seq)
+        emit_raw(output, seq)
         true
       rescue StandardError
         false
+      end
+
+      def emit_raw(output, seq)
+        if output.respond_to?(:raw)
+          output.raw(seq)
+        elsif output.respond_to?(:print)
+          output.print(seq)
+        elsif output.respond_to?(:write)
+          output.write(1, 1, seq)
+        end
+      rescue StandardError
+        nil
       end
 
       def fit_geometry(image_id, max_cols, max_rows)
