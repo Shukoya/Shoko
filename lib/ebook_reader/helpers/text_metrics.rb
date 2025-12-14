@@ -83,15 +83,31 @@ module EbookReader
         current_line = +''
         current_width = 0
 
+        width_i = width.to_i
+
         normalized.split(/\s+/).each do |word|
           next if word.nil? || word.empty?
 
           word_width = visible_length(word)
 
+          if word_width > width_i
+            wrapped << current_line.dup unless current_line.empty?
+            current_line.clear
+            current_width = 0
+
+            chunks = wrap_cells(word, width_i).reject(&:empty?)
+            next if chunks.empty?
+
+            wrapped.concat(chunks[0...-1]) if chunks.length > 1
+            current_line.replace(chunks[-1])
+            current_width = visible_length(current_line)
+            next
+          end
+
           if current_width.zero?
             current_line.replace(word)
             current_width = word_width
-          elsif current_width + 1 + word_width <= width
+          elsif current_width + 1 + word_width <= width_i
             current_line << ' ' unless current_line.empty?
             current_line << word
             current_width += 1 + word_width

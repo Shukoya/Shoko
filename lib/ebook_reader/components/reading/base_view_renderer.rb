@@ -205,10 +205,29 @@ module EbookReader
 
           plain_text, styled_text = renderable_line_content(line, width, context)
           abs_row, abs_col = absolute_cell(bounds, row, col)
+          max_width = [width.to_i, bounds.right - abs_col + 1].min
+          max_width = 0 if max_width.negative?
+          start_column = [abs_col - 1, 0].max
+
+          # Ensure geometry matches what will actually be displayed after Surface clipping:
+          # - tabs expanded relative to absolute column
+          # - newlines normalized to spaces
+          # - non-CSI ESC dropped
+          clipped_styled = if max_width.positive?
+                             EbookReader::Helpers::TextMetrics.truncate_to(
+                               styled_text.to_s,
+                               max_width,
+                               start_column: start_column
+                             )
+                           else
+                             ''
+                           end
+          clipped_plain = EbookReader::Helpers::TextMetrics.strip_ansi(clipped_styled)
+
           geometry = build_line_geometry(page_id, column_id, abs_row, abs_col, line_offset,
-                                         plain_text, styled_text)
+                                         clipped_plain, clipped_styled)
           record_rendered_line(geometry)
-          surface.write(bounds, row, col, styled_text)
+          surface.write(bounds, row, col, clipped_styled)
         end
 
         def renderable_line_content(line, width, context)
