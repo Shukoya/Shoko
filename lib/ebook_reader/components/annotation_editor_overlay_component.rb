@@ -62,8 +62,8 @@ module EbookReader
 
         width = calculate_width(bounds.width)
         height = calculate_height(bounds.height)
-        origin_x = bounds.x + [(bounds.width - width) / 2, 1].max
-        origin_y = bounds.y + [(bounds.height - height) / 2, 1].max
+        origin_x = [(bounds.width - width) / 2, 1].max + 1
+        origin_y = [(bounds.height - height) / 2, 1].max + 1
 
         @button_regions = {}
 
@@ -166,8 +166,9 @@ module EbookReader
         draw_button(surface, bounds, button_row, save_col, save_label, SAVE_BUTTON_BG, save_width)
         draw_button(surface, bounds, button_row, cancel_col, cancel_label, CANCEL_BUTTON_BG, cancel_width)
 
-        @button_regions[:save] = { row: button_row, col: save_col, width: save_width }
-        @button_regions[:cancel] = { row: button_row, col: cancel_col, width: cancel_width }
+        abs_row = bounds.y + button_row - 1
+        @button_regions[:save] = { row: abs_row, col: bounds.x + save_col - 1, width: save_width }
+        @button_regions[:cancel] = { row: abs_row, col: bounds.x + cancel_col - 1, width: cancel_width }
       end
 
       def handle_backspace

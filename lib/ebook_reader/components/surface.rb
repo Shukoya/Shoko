@@ -28,7 +28,7 @@ module EbookReader
         abs_col = b_x + col - 1
 
         return if abs_row < b_y || abs_row > b_bottom
-        return if abs_col > b_right
+        return if abs_col < b_x || abs_col > b_right
 
         max_width = b_right - abs_col + 1
         clipped = EbookReader::Helpers::TextMetrics.truncate_to(
@@ -40,6 +40,16 @@ module EbookReader
         return if clipped.nil? || clipped.empty?
 
         @output.write(abs_row, abs_col, clipped)
+      end
+
+      # Write using absolute terminal coordinates while still clipping to bounds.
+      #
+      # This is intended for overlay components that operate in absolute
+      # coordinates (e.g., mouse hit regions, selection geometry).
+      def write_abs(bounds, abs_row, abs_col, text)
+        local_row = abs_row.to_i - bounds.y + 1
+        local_col = abs_col.to_i - bounds.x + 1
+        write(bounds, local_row, local_col, text)
       end
 
       # Convenience to fill an area with a character

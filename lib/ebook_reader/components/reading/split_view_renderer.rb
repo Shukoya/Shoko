@@ -94,7 +94,8 @@ module EbookReader
           available = bounds.width - LEFT_MARGIN - RIGHT_MARGIN
           heading_color = EbookReader::Components::RenderStyle.color(:heading)
           header_col = LEFT_MARGIN + 1
-          clipped = EbookReader::Helpers::TextMetrics.truncate_to(info, available, start_column: header_col - 1)
+          start_column = bounds.x + header_col - 2
+          clipped = EbookReader::Helpers::TextMetrics.truncate_to(info, available, start_column: start_column)
           surface.write(bounds, 1, header_col, heading_color + clipped + reset)
         end
 

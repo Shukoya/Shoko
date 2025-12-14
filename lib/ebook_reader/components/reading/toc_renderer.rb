@@ -67,7 +67,7 @@ module EbookReader
           title = entry_title(entry)
           indent = '  ' * [entry.level, 0].max
           available = [width - 4, 1].max
-          display = EbookReader::Helpers::TextMetrics.truncate_to(indent + title, available, start_column: 3)
+          display = EbookReader::Helpers::TextMetrics.truncate_to(indent + title, available, start_column: bounds.x + 2)
 
           selected = ctx.index == ctx.selected_entry_index
           pointer = if selected

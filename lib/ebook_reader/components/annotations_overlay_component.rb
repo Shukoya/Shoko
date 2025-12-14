@@ -68,8 +68,8 @@ module EbookReader
         entries = annotations
         overlay_width = calculate_width(bounds.width)
         overlay_height = calculate_height(bounds.height)
-        origin_x = bounds.x + [(bounds.width - overlay_width) / 2, 1].max
-        origin_y = bounds.y + [(bounds.height - overlay_height) / 2, 1].max
+        origin_x = [(bounds.width - overlay_width) / 2, 1].max + 1
+        origin_y = [(bounds.height - overlay_height) / 2, 1].max + 1
 
         fill_background(surface, bounds, origin_x, origin_y, overlay_width, overlay_height)
         draw_box(surface, bounds, origin_y, origin_x, overlay_height, overlay_width, label: 'Annotations')

@@ -13,7 +13,7 @@ module EbookReader
           if label && w > 4
             label_text = "[ #{label} ]"
             available = w - 3
-            clipped = EbookReader::Helpers::TextMetrics.truncate_to(label_text, available, start_column: x + 1)
+            clipped = EbookReader::Helpers::TextMetrics.truncate_to(label_text, available, start_column: bounds.x + x)
             surface.write(bounds, y, x + 2, clipped) unless clipped.empty?
           end
           # Sides

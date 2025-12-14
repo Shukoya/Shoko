@@ -76,16 +76,16 @@ module EbookReader
         overlay.render(surface, bounds)
       end
 
-    def render_annotation_editor_overlay(surface, bounds)
-      overlay = @controller.state.get(%i[reader annotation_editor_overlay])
-      return unless overlay.respond_to?(:visible?) && overlay.visible?
+      def render_annotation_editor_overlay(surface, bounds)
+        overlay = @controller.state.get(%i[reader annotation_editor_overlay])
+        return unless overlay.respond_to?(:visible?) && overlay.visible?
 
-      overlay.render(surface, bounds)
-    end
+        overlay.render(surface, bounds)
+      end
 
-    def render_text_highlight(surface, bounds, range, color)
-      rendered_lines = Domain::Selectors::ReaderSelectors.rendered_lines(@controller.state)
-      return if rendered_lines.empty?
+      def render_text_highlight(surface, bounds, range, color)
+        rendered_lines = Domain::Selectors::ReaderSelectors.rendered_lines(@controller.state)
+        return if rendered_lines.empty?
 
         normalized_range = @coordinate_service.normalize_selection_range(range, rendered_lines)
         return unless normalized_range
@@ -121,7 +121,7 @@ module EbookReader
 
         highlight = "#{color}#{COLOR_TEXT_PRIMARY}#{segment_text}#{Terminal::ANSI::RESET}"
         start_col = screen_column_for_cell(geometry, start_cell)
-        surface.write(bounds, geometry.row, start_col, highlight)
+        surface.write_abs(bounds, geometry.row, start_col, highlight)
         record_selection_segment(geometry.row, start_col, segment_text)
       end
 
@@ -180,7 +180,7 @@ module EbookReader
           safe_text = seg[:text] || ''
           reset = Terminal::ANSI::RESET
           repaint = "#{reset}#{COLOR_TEXT_PRIMARY}#{safe_text}#{reset}"
-          surface.write(bounds, seg[:row], seg[:col], repaint)
+          surface.write_abs(bounds, seg[:row], seg[:col], repaint)
         end
 
         @last_selection_segments.clear

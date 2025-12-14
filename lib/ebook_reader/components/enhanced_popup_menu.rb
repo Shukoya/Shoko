@@ -179,12 +179,12 @@ module EbookReader
         fg = is_selected ? POPUP_FG_SELECTED : POPUP_FG_DEFAULT
 
         # Background
-        surface.write(bounds, item_y, @x, "#{bg}#{' ' * @width}#{Terminal::ANSI::RESET}")
+        surface.write_abs(bounds, item_y, @x, "#{bg}#{' ' * @width}#{Terminal::ANSI::RESET}")
 
         # Content with icon
         icon = action[:icon] || sel_icon
         line_text = EbookReader::Helpers::TextMetrics.pad_right(" #{icon} #{item} ", @width)
-        surface.write(bounds, item_y, @x, "#{bg}#{fg}#{line_text}#{Terminal::ANSI::RESET}")
+        surface.write_abs(bounds, item_y, @x, "#{bg}#{fg}#{line_text}#{Terminal::ANSI::RESET}")
       end
     end
   end

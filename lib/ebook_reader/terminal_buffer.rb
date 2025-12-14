@@ -22,6 +22,7 @@ module EbookReader
         row_i = row.to_i - 1
         col_i = col.to_i - 1
         return if row_i.negative? || row_i >= @height
+        return if col_i.negative?
         return if col_i >= @width
 
         current_style = ''
