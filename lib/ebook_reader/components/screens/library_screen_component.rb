@@ -3,6 +3,7 @@
 require_relative 'base_screen_component'
 require_relative '../../constants/ui_constants'
 require_relative '../ui/list_helpers'
+require_relative '../ui/text_utils'
 
 module EbookReader
   module Components
@@ -11,6 +12,7 @@ module EbookReader
       # sortable columns and paging of visible items.
       class LibraryScreenComponent < BaseScreenComponent
         include EbookReader::Constants
+        include UI::TextUtils
 
         Item = Struct.new(:title, :authors, :year, :last_accessed, :size_bytes, :open_path, :epub_path,
                           keyword_init: true)
@@ -100,11 +102,11 @@ module EbookReader
           dims = compute_column_widths(width)
 
           headers = [
-            'Title'.ljust(dims[:title_w]),
-            'Author(s)'.ljust(dims[:author_w]),
-            'Year'.ljust(dims[:year_w]),
-            'Last accessed'.ljust(dims[:last_w]),
-            'Size'.rjust(dims[:size_w]),
+            pad_right('Title', dims[:title_w]),
+            pad_right('Author(s)', dims[:author_w]),
+            pad_right('Year', dims[:year_w]),
+            pad_right('Last accessed', dims[:last_w]),
+            pad_left('Size', dims[:size_w]),
           ].join(' ' * dims[:gap])
           header_style = Terminal::ANSI::BOLD + Terminal::ANSI::LIGHT_GREY
           header_line = header_style + (' ' * dims[:pointer_w]) + headers + Terminal::ANSI::RESET
@@ -125,11 +127,11 @@ module EbookReader
           y_w = dims[:year_w]
           l_w = dims[:last_w]
           s_w = dims[:size_w]
-          title_col = truncate_text((book.title || 'Unknown').to_s, t_w).ljust(t_w)
-          author_col = truncate_text((book.authors || '').to_s, a_w).ljust(a_w)
-          year_col = (book.year || '').to_s[0, 4].ljust(y_w)
-          last_col = truncate_text(relative_accessed_label(book.last_accessed), l_w).ljust(l_w)
-          size_col = format_size(book.size_bytes).rjust(s_w)
+          title_col = pad_right(truncate_text((book.title || 'Unknown').to_s, t_w), t_w)
+          author_col = pad_right(truncate_text((book.authors || '').to_s, a_w), a_w)
+          year_col = pad_right((book.year || '').to_s[0, 4], y_w)
+          last_col = pad_right(truncate_text(relative_accessed_label(book.last_accessed), l_w), l_w)
+          size_col = pad_left(format_size(book.size_bytes), s_w)
 
           line = [title_col, author_col, year_col, last_col, size_col].join(' ' * dims[:gap])
           style = is_selected ? UIConstants::SELECTION_HIGHLIGHT : UIConstants::COLOR_TEXT_PRIMARY
@@ -147,13 +149,6 @@ module EbookReader
           title_w = [remaining - author_w - year_w - last_w - size_w, 20].max
           { pointer_w: pointer_w, gap: gap, title_w: title_w, author_w: author_w,
             year_w: year_w, last_w: last_w, size_w: size_w }
-        end
-
-        def truncate_text(text, max_length)
-          str = text.to_s
-          return str if str.length <= max_length
-
-          "#{str[0...(max_length - 3)]}..."
         end
 
         def format_size(bytes)

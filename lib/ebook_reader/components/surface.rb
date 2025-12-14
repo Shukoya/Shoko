@@ -31,7 +31,11 @@ module EbookReader
         return if abs_col > b_right
 
         max_width = b_right - abs_col + 1
-        clipped = EbookReader::Helpers::TextMetrics.truncate_to(text.to_s, max_width)
+        clipped = EbookReader::Helpers::TextMetrics.truncate_to(
+          text.to_s,
+          max_width,
+          start_column: [abs_col - 1, 0].max
+        )
         clipped = apply_dim(clipped) if dimmed?
         return if clipped.nil? || clipped.empty?
 

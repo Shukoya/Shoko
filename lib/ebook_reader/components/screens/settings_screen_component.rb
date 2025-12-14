@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../../constants/ui_constants'
+require_relative '../../helpers/text_metrics'
 
 module EbookReader
   module Components
@@ -129,7 +130,7 @@ module EbookReader
         end
 
         def display_width(text)
-          text.to_s.length
+          EbookReader::Helpers::TextMetrics.visible_length(text.to_s)
         end
 
         def setting_value_map
@@ -162,7 +163,7 @@ module EbookReader
         end
 
         def button_group_width(buttons)
-          buttons.sum { |_value, label| label.length + 2 } + (buttons.length - 1)
+          buttons.sum { |_value, label| EbookReader::Helpers::TextMetrics.visible_length(label) + 2 } + (buttons.length - 1)
         end
 
         def toggled_action?(action)

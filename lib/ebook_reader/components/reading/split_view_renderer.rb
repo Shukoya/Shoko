@@ -91,10 +91,11 @@ module EbookReader
           idx = st.get(%i[reader current_chapter]) + 1
           info = "[#{idx}] #{chapter.title || 'Unknown'}"
           reset = Terminal::ANSI::RESET
-          header_col = bounds.x + LEFT_MARGIN
           available = bounds.width - LEFT_MARGIN - RIGHT_MARGIN
           heading_color = EbookReader::Components::RenderStyle.color(:heading)
-          surface.write(bounds, 1, header_col, heading_color + info[0, available].to_s + reset)
+          header_col = LEFT_MARGIN + 1
+          clipped = EbookReader::Helpers::TextMetrics.truncate_to(info, available, start_column: header_col - 1)
+          surface.write(bounds, 1, header_col, heading_color + clipped + reset)
         end
 
         def render_dynamic_from_page_data(surface, bounds, context, col_width, left_start,
@@ -187,9 +188,9 @@ module EbookReader
           spacing = resolve_line_spacing(config)
           displayable = adjust_for_line_spacing(content_height, spacing)
 
-          left_start = bounds.x + LEFT_MARGIN
+          left_start = LEFT_MARGIN + 1
           right_start = left_start + col_width + COLUMN_GAP
-          divider_param = col_width + left_start - 2
+          divider_col = left_start + col_width + 1
 
           {
             col_width: col_width,
@@ -198,7 +199,7 @@ module EbookReader
             displayable: displayable,
             left_start: left_start,
             right_start: right_start,
-            divider_param: divider_param,
+            divider_param: divider_col,
           }
         end
       end

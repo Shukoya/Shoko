@@ -3,6 +3,7 @@
 require_relative 'base_component'
 require_relative 'surface'
 require_relative '../constants/ui_constants'
+require_relative '../helpers/text_metrics'
 
 module EbookReader
   module Components
@@ -35,7 +36,8 @@ module EbookReader
 
         reset = Terminal::ANSI::RESET
         width = bounds.width
-        col = [(width - title.length) / 2, 1].max
+        title_width = EbookReader::Helpers::TextMetrics.visible_length(title)
+        col = [(width - title_width) / 2, 1].max
         surface.write(bounds, 1, col, "#{COLOR_TEXT_PRIMARY}#{title}#{reset}")
       end
     end

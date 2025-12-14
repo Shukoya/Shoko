@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../base_component'
+require_relative '../../helpers/text_metrics'
 
 module EbookReader
   module Components
@@ -42,11 +43,11 @@ module EbookReader
         def render_tab_navigation(surface, bounds)
           # Calculate tab positions
           tab_width = (bounds.width - 2) / TABS.length
-          start_y = bounds.y + 1
+          start_y = 1
 
           active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(@state)
           TABS.each_with_index do |tab, index|
-            x_pos = bounds.x + 1 + (index * tab_width)
+            x_pos = 2 + (index * tab_width)
             ctx = TabButtonCtx.new(tab: tab, x: x_pos, y: start_y, width: tab_width, active: (active_tab == tab))
             render_tab_button(surface, bounds, ctx)
           end
@@ -88,7 +89,7 @@ module EbookReader
           icon_text = "#{COLOR_TEXT_ACCENT}#{icon}#{reset}"
           label_text = "#{COLOR_TEXT_PRIMARY}#{label}#{reset}"
           content = "#{icon} #{label}"
-          content_len = content.length
+          content_len = EbookReader::Helpers::TextMetrics.visible_length(content)
           padding = [(w - content_len) / 2, 0].max
           xpad = xpad_for(x, padding)
           write_pair(surface, bounds, y1, xpad, icon_text, label_text)

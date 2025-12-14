@@ -90,10 +90,18 @@ module EbookReader
                        else
                          (all_mode ? 'All Books' : 'No book selected')
                        end
-          header_left = "#{COLOR_TEXT_ACCENT}📝 Annotations (#{count}) — #{book_label}#{reset}"
-          header_right = "#{COLOR_TEXT_DIM}[Enter] Open • [e] Edit • [d] Delete#{reset}"
+          header_left_plain = "📝 Annotations (#{count}) — #{book_label}"
+          header_left = "#{COLOR_TEXT_ACCENT}#{header_left_plain}#{reset}"
+
+          header_right_plain = '[Enter] Open • [e] Edit • [d] Delete'
+          header_right = "#{COLOR_TEXT_DIM}#{header_right_plain}#{reset}"
+
           surface.write(bounds, 1, 2, header_left)
-          right_col = [width - header_right.length - 1, header_left.length + 2].max
+          header_right_width = EbookReader::Helpers::TextMetrics.visible_length(header_right_plain)
+          header_left_width = EbookReader::Helpers::TextMetrics.visible_length(header_left_plain)
+          min_right_col = 2 + header_left_width + 2
+          right_aligned_col = width - header_right_width - 1
+          right_col = [right_aligned_col, min_right_col].max
           surface.write(bounds, 1, right_col, header_right)
           # Divider and column headers
           surface.write(bounds, 2, 1, COLOR_TEXT_DIM + ('─' * width) + reset)
@@ -105,8 +113,19 @@ module EbookReader
           snippet_w = (avail * 0.55).to_i
           note_w = avail - snippet_w
           has_book_col = book_w.positive?
-          columns = format("%-#{idx_w}s  %-#{ch_w}s  %-#{snippet_w}s  %-#{note_w}s  %-#{book_w}s  %-#{date_w}s",
-                           '#', 'Ch', 'Snippet', 'Note', (has_book_col ? 'Book' : ''), 'Date')
+          columns = [
+            '  ',
+            pad_right('#', idx_w),
+            '  ',
+            pad_right('Ch', ch_w),
+            '  ',
+            pad_right('Snippet', snippet_w),
+            '  ',
+            pad_right('Note', note_w),
+            (has_book_col ? "  #{pad_right('Book', book_w)}" : ''),
+            '  ',
+            pad_right('Date', date_w),
+          ].join
           surface.write(bounds, 3, 1, COLOR_TEXT_DIM + columns + reset)
 
           annotations = current_annotations
@@ -147,10 +166,14 @@ module EbookReader
           reset = Terminal::ANSI::RESET
           empty_text = "#{COLOR_TEXT_DIM}No annotations found#{reset}"
           mid = height / 2
-          surface.write(bounds, mid, [(width - empty_text.length + 10) / 2, 1].max, empty_text)
+          surface.write(bounds, mid,
+                        [(width - EbookReader::Helpers::TextMetrics.visible_length(empty_text) + 10) / 2, 1].max,
+                        empty_text)
 
           help_text = "#{COLOR_TEXT_DIM}Annotations you create while reading will appear here#{reset}"
-          surface.write(bounds, mid + 2, [(width - help_text.length + 10) / 2, 1].max, help_text)
+          surface.write(bounds, mid + 2,
+                        [(width - EbookReader::Helpers::TextMetrics.visible_length(help_text) + 10) / 2, 1].max,
+                        help_text)
         end
 
         def render_annotations_list(surface, bounds, width, height, annotations, in_all)
@@ -188,18 +211,22 @@ module EbookReader
           note_w = avail - snippet_w
 
           pointer = is_selected ? '▸' : ' '
-          idx = format("%#{idx_w}d", absolute_index + 1)
+          idx = pad_left((absolute_index + 1).to_s, idx_w)
           chv = chapter.nil? ? '-' : chapter.to_i
-          snippet = truncate_text(text, snippet_w)
-          note_tr = truncate_text(note, note_w)
+          ch_col = pad_right(chv.to_s, ch_w)
+          snippet = pad_right(truncate_text(text, snippet_w), snippet_w)
+          note_tr = pad_right(truncate_text(note, note_w), note_w)
           if in_all
             bp = annotation[:book_path]
             book = bp ? File.basename(bp) : ''
-            line = format("%s %s  %-#{ch_w}s  %-#{snippet_w}s  %-#{note_w}s  %-#{book_w}s  %-#{date_w}s",
-                          pointer, idx, chv, snippet, note_tr, truncate_text(book, book_w), created)
+            book_col = pad_right(truncate_text(book, book_w), book_w)
+            date_col = pad_right(truncate_text(created, date_w), date_w)
+            line = [pointer, ' ', idx, '  ', ch_col, '  ', snippet, '  ', note_tr,
+                    '  ', book_col, '  ', date_col].join
           else
-            line = format("%s %s  %-#{ch_w}s  %-#{snippet_w}s  %-#{note_w}s  %-#{date_w}s",
-                          pointer, idx, chv, snippet, note_tr, created)
+            date_col = pad_right(truncate_text(created, date_w), date_w)
+            line = [pointer, ' ', idx, '  ', ch_col, '  ', snippet, '  ', note_tr,
+                    '  ', date_col].join
           end
 
           color = is_selected ? SELECTION_HIGHLIGHT : COLOR_TEXT_PRIMARY

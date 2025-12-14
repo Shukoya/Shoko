@@ -111,9 +111,9 @@ module EbookReader
         title = "#{COLOR_TEXT_ACCENT}📝 Annotations (#{count})#{reset}"
         surface.write(bounds, origin_y + 1, origin_x + 2, title)
 
-        info = "#{COLOR_TEXT_DIM}[Enter] Open • [e] Edit • [d] Delete • [Esc] Close#{reset}"
-        info_col = origin_x + [width - info.length - 2, 2].max
-        surface.write(bounds, origin_y + 1, info_col, info)
+        info_plain = '[Enter] Open • [e] Edit • [d] Delete • [Esc] Close'
+        info_col = origin_x + [width - EbookReader::Helpers::TextMetrics.visible_length(info_plain) - 2, 2].max
+        surface.write(bounds, origin_y + 1, info_col, "#{COLOR_TEXT_DIM}#{info_plain}#{reset}")
       end
 
       def draw_list(surface, bounds, origin_x, origin_y, width, height, entries)
@@ -125,7 +125,7 @@ module EbookReader
         if entries.empty?
           message = "#{COLOR_TEXT_DIM}No annotations yet#{Terminal::ANSI::RESET}"
           row = origin_y + (height / 2)
-          col = origin_x + [(width - message.length) / 2, 2].max
+          col = origin_x + [(width - EbookReader::Helpers::TextMetrics.visible_length(message)) / 2, 2].max
           surface.write(bounds, row, col, message)
           return
         end
@@ -137,8 +137,16 @@ module EbookReader
         snippet_width = [(remaining * 0.6).floor, 8].max
         note_width = [remaining - snippet_width, 6].max
 
-        header = format("  %-#{idx_width}s %-#{snippet_width}s %-#{note_width}s %-#{date_width}s",
-                        '#', 'Snippet', 'Note', 'Saved')
+        header = [
+          '  ',
+          UI::TextUtils.pad_right('#', idx_width),
+          ' ',
+          UI::TextUtils.pad_right('Snippet', snippet_width),
+          ' ',
+          UI::TextUtils.pad_right('Note', note_width),
+          ' ',
+          UI::TextUtils.pad_right('Saved', date_width),
+        ].join
         surface.write(bounds, list_top - 1, origin_x + 2,
                       "#{COLOR_TEXT_DIM}#{header}#{Terminal::ANSI::RESET}")
 
@@ -147,18 +155,14 @@ module EbookReader
           line_row = list_top + offset
           pointer = (start_index + offset) == @selected_index ? '▸' : ' '
           line_color = (start_index + offset) == @selected_index ? SELECTION_HIGHLIGHT : COLOR_TEXT_PRIMARY
-          snippet = UI::TextUtils.truncate_text(annotation[:text].to_s.tr("\n", ' '), snippet_width)
-          note = UI::TextUtils.truncate_text(annotation[:note].to_s.tr("\n", ' '), note_width)
+          snippet = UI::TextUtils.pad_right(UI::TextUtils.truncate_text(annotation[:text].to_s.tr("\n", ' '), snippet_width), snippet_width)
+          note = UI::TextUtils.pad_right(UI::TextUtils.truncate_text(annotation[:note].to_s.tr("\n", ' '), note_width), note_width)
           saved_at = annotation[:updated_at] || annotation[:created_at]
           saved_text = saved_at ? saved_at.to_s.split('T').first : '-'
-          saved = UI::TextUtils.truncate_text(saved_text, date_width)
+          saved = UI::TextUtils.pad_right(UI::TextUtils.truncate_text(saved_text, date_width), date_width)
 
-          line = format("%s %-#{idx_width}s %-#{snippet_width}s %-#{note_width}s %-#{date_width}s",
-                        pointer,
-                        start_index + offset + 1,
-                        snippet,
-                        note,
-                        saved)
+          idx_text = UI::TextUtils.pad_right((start_index + offset + 1).to_s, idx_width)
+          line = [pointer, ' ', idx_text, ' ', snippet, ' ', note, ' ', saved].join
           surface.write(bounds, line_row, origin_x + 2,
                         "#{line_color}#{line}#{Terminal::ANSI::RESET}")
         end

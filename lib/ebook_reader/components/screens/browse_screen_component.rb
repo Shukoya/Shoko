@@ -122,7 +122,8 @@ module EbookReader
                         end
           return if status_text.empty?
 
-          surface.write(bounds, layout[:status_row], layout[:indent] + count_text.length + 2, status_text)
+          offset = EbookReader::Helpers::TextMetrics.visible_length(count_text)
+          surface.write(bounds, layout[:status_row], layout[:indent] + offset + 2, status_text)
         end
 
         def render_empty_state(surface, bounds, layout)
@@ -178,8 +179,8 @@ module EbookReader
           cols = ctx.layout[:columns]
           gap = ' ' * ctx.layout[:gap]
 
-          title_col = truncate_text(title, cols[:title]).ljust(cols[:title])
-          size_col = size_mb.rjust(cols[:size])
+          title_col = pad_right(truncate_text(title, cols[:title]), cols[:title])
+          size_col = pad_left(size_mb, cols[:size])
 
           line = [title_col, size_col].join(gap)
           row = ctx.row
@@ -199,12 +200,13 @@ module EbookReader
           cols = layout[:columns]
           gap = ' ' * layout[:gap]
           headers = [
-            'Title'.ljust(cols[:title]),
-            'Size'.rjust(cols[:size]),
+            pad_right('Title', cols[:title]),
+            pad_left('Size', cols[:size]),
           ].join(gap)
 
           header_style = Terminal::ANSI::BOLD + Terminal::ANSI::LIGHT_GREY
-          surface.write(bounds, row, layout[:indent], header_style + headers.ljust(layout[:content_width]) + Terminal::ANSI::RESET)
+          padded_headers = pad_right(headers, layout[:content_width])
+          surface.write(bounds, row, layout[:indent], header_style + padded_headers + Terminal::ANSI::RESET)
           # Divider line
           divider = ('─' * [layout[:content_width], 1].max)
           surface.write(bounds, row + 1, layout[:indent], COLOR_TEXT_DIM + divider + Terminal::ANSI::RESET)
@@ -238,7 +240,7 @@ module EbookReader
           cursor_pos = EbookReader::Domain::Selectors::MenuSelectors.search_cursor(@state)
           cursor_pos = cursor_pos.to_i.clamp(0, search_display.length)
           search_display.insert(cursor_pos, '_')
-          field_text = search_display.ljust(layout[:content_width])
+          field_text = pad_right(search_display, layout[:content_width])
 
           surface.write(bounds, row + 1, indent,
                         "#{SELECTION_HIGHLIGHT}#{field_text}#{Terminal::ANSI::RESET}")

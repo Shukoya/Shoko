@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../../constants/ui_constants'
+require_relative '../../helpers/text_metrics'
 
 module EbookReader
   module Components
@@ -28,18 +29,26 @@ module EbookReader
           width = bounds.width
 
           # Header
-          surface.write(bounds, 1, 2, "#{COLOR_TEXT_ACCENT}📂 Open File#{Terminal::ANSI::RESET}")
-          surface.write(bounds, 1, width - 20, "#{COLOR_TEXT_DIM}[ESC] Cancel#{Terminal::ANSI::RESET}")
+          reset = Terminal::ANSI::RESET
+          title_plain = '📂 Open File'
+          surface.write(bounds, 1, 2, "#{COLOR_TEXT_ACCENT}#{title_plain}#{reset}")
+
+          cancel_plain = '[ESC] Cancel'
+          cancel_width = EbookReader::Helpers::TextMetrics.visible_length(cancel_plain)
+          cancel_col = [width - cancel_width - 1, 2 + EbookReader::Helpers::TextMetrics.visible_length(title_plain) + 2].max
+          surface.write(bounds, 1, cancel_col, "#{COLOR_TEXT_DIM}#{cancel_plain}#{reset}")
 
           # File path input
           surface.write(bounds, 3, 2, "#{COLOR_TEXT_PRIMARY}File path:#{Terminal::ANSI::RESET}")
 
           # Input field with cursor
           input_text = @state.get(%i[menu file_input]) || ''
-          input_width = [width - 15, 40].max
+          available = [width - 4, 1].max
+          desired = [width - 15, 40].max
+          input_width = [desired, available].min
           display_input = truncate_input(input_text, input_width)
 
-          surface.write(bounds, 4, 4, "#{SELECTION_HIGHLIGHT}#{display_input}█#{Terminal::ANSI::RESET}")
+          surface.write(bounds, 4, 4, "#{SELECTION_HIGHLIGHT}#{display_input}█#{reset}")
 
           # Instructions
           surface.write(bounds, 6, 2, "#{COLOR_TEXT_DIM}Enter the path to an EPUB file#{Terminal::ANSI::RESET}")
@@ -58,12 +67,35 @@ module EbookReader
         private
 
         def truncate_input(text, max_width)
-          len = text.length
-          return text if len <= max_width
+          w = max_width.to_i
+          return '' if w <= 0
 
-          # Show end of path if too long
-          excess = len - max_width + 3
-          "...#{text[excess..]}"
+          str = text.to_s
+          return str if EbookReader::Helpers::TextMetrics.visible_length(str) <= w
+          return EbookReader::Helpers::TextMetrics.truncate_to(str, w) if w <= 3
+
+          tail_width = w - 3
+          "...#{take_last_cells(str, tail_width)}"
+        end
+
+        def take_last_cells(text, width)
+          target = width.to_i
+          return '' if target <= 0
+
+          clusters = text.to_s.scan(/\X/)
+          consumed = 0
+          out = []
+
+          clusters.reverse_each do |cluster|
+            cw = EbookReader::Helpers::TextMetrics.display_width_for(cluster)
+            next if cw <= 0
+            break if consumed + cw > target
+
+            out << cluster
+            consumed += cw
+          end
+
+          out.reverse.join
         end
       end
     end

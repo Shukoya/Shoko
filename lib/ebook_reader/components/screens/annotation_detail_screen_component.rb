@@ -28,10 +28,16 @@ module EbookReader
           book_label = book_path ? File.basename(book_path) : 'Unknown Book'
 
           # Header
-          title = "#{COLOR_TEXT_ACCENT}📝 Annotation • #{book_label}#{reset}"
+          title_plain = "📝 Annotation • #{book_label}"
+          title_width = EbookReader::Helpers::TextMetrics.visible_length(title_plain)
+          title = "#{COLOR_TEXT_ACCENT}#{title_plain}#{reset}"
           surface.write(bounds, 1, 2, title)
-          actions = "#{COLOR_TEXT_DIM}[o] Open • [e] Edit • [d] Delete • [ESC] Back#{reset}"
-          surface.write(bounds, 1, [width - actions.length - 1, title.length + 2].max, actions)
+          actions_plain = '[o] Open • [e] Edit • [d] Delete • [ESC] Back'
+          actions_width = EbookReader::Helpers::TextMetrics.visible_length(actions_plain)
+          min_actions_col = 2 + title_width + 2
+          right_actions_col = width - actions_width
+          actions_col = [right_actions_col, min_actions_col].max
+          surface.write(bounds, 1, actions_col, "#{COLOR_TEXT_DIM}#{actions_plain}#{reset}")
           surface.write(bounds, 2, 1, COLOR_TEXT_DIM + ('─' * width) + reset)
 
           return render_empty(surface, bounds) unless ann
@@ -78,7 +84,7 @@ module EbookReader
 
         def write_padded_primary(surface, bounds, row, col, text, width)
           reset = Terminal::ANSI::RESET
-          padded = text.ljust(width)
+          padded = UI::TextUtils.pad_right(text, width)
           surface.write(bounds, row, col, COLOR_TEXT_PRIMARY + padded + reset)
         end
 

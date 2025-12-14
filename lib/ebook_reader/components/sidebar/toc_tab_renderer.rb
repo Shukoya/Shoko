@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../ui/list_helpers'
+require_relative '../ui/text_utils'
 require_relative '../../domain/models/toc_entry'
 
 module EbookReader
@@ -61,7 +62,7 @@ module EbookReader
         private
 
         def metrics_for(bounds)
-          BoundsMetrics.new(x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height)
+          BoundsMetrics.new(x: 1, y: 1, width: bounds.width, height: bounds.height)
         end
 
         def resolve_document
@@ -74,19 +75,18 @@ module EbookReader
 
         def render_empty_message(surface, bounds, metrics)
           reset = Terminal::ANSI::RESET
-          bx = metrics.x
-          by = metrics.y
           bw = metrics.width
           bh = metrics.height
           messages = [
             'No chapters found',
             '',
-            "#{COLOR_TEXT_DIM}Content may still be loading#{reset}",
+            'Content may still be loading',
           ]
 
-          start_y = by + ((bh - messages.length) / 2)
+          start_y = ((bh - messages.length) / 2) + 1
           messages.each_with_index do |message, i|
-            x = bx + [(bw - message.length) / 2, 2].max
+            msg_width = EbookReader::Helpers::TextMetrics.visible_length(message)
+            x = [(bw - msg_width) / 2, 2].max
             y = start_y + i
             surface.write(bounds, y, x, "#{COLOR_TEXT_DIM}#{message}#{reset}")
           end
@@ -126,15 +126,26 @@ module EbookReader
 
         def render_header(surface, bounds, metrics, doc, total_entries)
           reset = Terminal::ANSI::RESET
-          title = "#{Terminal::ANSI::BOLD}#{COLOR_TEXT_ACCENT}#{doc_title(doc)}#{reset}"
-          subtitle = "#{COLOR_TEXT_DIM}#{total_entries} entries#{reset}"
+          title_plain = doc_title(doc)
+          title_width = EbookReader::Helpers::TextMetrics.visible_length(title_plain)
+          title = "#{Terminal::ANSI::BOLD}#{COLOR_TEXT_ACCENT}#{title_plain}#{reset}"
+
+          subtitle_plain = "#{total_entries} entries"
+          subtitle_width = EbookReader::Helpers::TextMetrics.visible_length(subtitle_plain)
+          subtitle = "#{COLOR_TEXT_DIM}#{subtitle_plain}#{reset}"
+
           bx = metrics.x
           by = metrics.y
           bw = metrics.width
 
           divider = "#{COLOR_TEXT_DIM}#{'─' * [bw - 2, 0].max}#{reset}"
           surface.write(bounds, by, bx + 1, title)
-          surface.write(bounds, by, bx + bw - subtitle.length - 1, subtitle) if bw > subtitle.length + 2
+          if bw > subtitle_width + 2
+            min_subtitle_col = bx + 1 + title_width + 2
+            right_subtitle_col = bx + bw - subtitle_width - 1
+            subtitle_col = [right_subtitle_col, min_subtitle_col].max
+            surface.write(bounds, by, subtitle_col, subtitle)
+          end
           surface.write(bounds, by + 1, bx + 1, divider)
           by + 2
         end
@@ -206,9 +217,10 @@ module EbookReader
           prefix_plain = branch_prefix(entries, ctx.index)
           icon_plain = entry_icon(entries, ctx.index, entry)
           icon_color = icon_color_for(entry)
-          prefix_len = prefix_plain.length
-          available_title_width = [max_width - prefix_len - icon_plain.length - 1, 0].max
-          title_plain = truncate_title(entry_title(entry), available_title_width)
+          prefix_w = EbookReader::Helpers::TextMetrics.visible_length(prefix_plain)
+          icon_w = EbookReader::Helpers::TextMetrics.visible_length(icon_plain)
+          available_title_width = [max_width - prefix_w - icon_w - 1, 0].max
+          title_plain = UI::TextUtils.truncate_text(entry_title(entry), available_title_width)
 
           segments = build_segments(prefix_plain, icon_plain, icon_color, title_plain, entry)
           line = compose_line(segments, selected)
@@ -228,17 +240,6 @@ module EbookReader
         def entry_title(entry)
           title = entry.title || 'Untitled'
           entry.level.zero? ? title.upcase : title
-        end
-
-        def truncate_title(title, width)
-          return '' if width <= 0
-
-          title = title.to_s
-          return title if title.length <= width
-
-          ellipsis = width > 3 ? '...' : ''
-          cutoff = [width - ellipsis.length, 0].max
-          "#{title[0, cutoff]}#{ellipsis}"
         end
 
         def navigable?(entry)

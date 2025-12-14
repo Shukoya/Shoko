@@ -136,14 +136,14 @@ module EbookReader
         visible_lines.each_with_index do |line, idx|
           target_row = note_top + idx
           surface.write(bounds, target_row, text_x,
-                        "#{POPUP_BG_DEFAULT}#{COLOR_TEXT_PRIMARY}#{line.ljust(text_width)}#{Terminal::ANSI::RESET}")
+                        "#{POPUP_BG_DEFAULT}#{COLOR_TEXT_PRIMARY}#{UI::TextUtils.pad_right(line, text_width)}#{Terminal::ANSI::RESET}")
         end
 
         cursor_display_row = cursor_line_index - visible_start
         cursor_display_row = [[cursor_display_row, 0].max, note_rows - 1].min
         cursor_row = note_top + cursor_display_row
         cursor_line = cursor_lines.last || ''
-        cursor_col = text_x + [cursor_line.length, text_width - 1].min
+        cursor_col = text_x + [EbookReader::Helpers::TextMetrics.visible_length(cursor_line), text_width - 1].min
         surface.write(bounds, cursor_row, cursor_col,
                       "#{SELECTION_HIGHLIGHT}_#{Terminal::ANSI::RESET}")
       end
@@ -235,7 +235,7 @@ module EbookReader
       def draw_button(surface, bounds, row, col, label, bg, width)
         reset = Terminal::ANSI::RESET
         text = " #{label} "
-        padded = text.ljust(width)
+        padded = UI::TextUtils.pad_right(text, width)
         surface.write(bounds, row, col, "#{bg}#{BUTTON_FG}#{padded}#{reset}")
       end
 

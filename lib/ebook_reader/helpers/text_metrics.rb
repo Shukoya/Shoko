@@ -8,46 +8,14 @@ module EbookReader
     # while respecting grapheme clusters and terminal cell widths.
     module TextMetrics
       TAB_SIZE = 4
-      ANSI_REGEX = /\[[0-9;]*[A-Za-z]/
-      TOKEN_REGEX = /\[[0-9;]*[A-Za-z]|\X/m
+      CSI_REGEX = /\e\[[0-?]*[ -\/]*[@-~]/.freeze
+      ANSI_REGEX = CSI_REGEX
+      TOKEN_REGEX = /#{CSI_REGEX}|\X/m
 
       module_function
 
       def visible_length(text)
         cell_data_for(strip_ansi(text.to_s)).sum { |cell| cell[:display_width] }
-      end
-
-      def truncate_to(text, width)
-        return '' if width.to_i <= 0
-
-        str = text.to_s
-        max_width = width.to_i
-        return str if max_width >= visible_length(str)
-
-        buffer = +''
-        current_width = 0
-
-        str.scan(TOKEN_REGEX).each do |token|
-          if token.start_with?("\e[")
-            buffer << token
-            next
-          end
-
-          token_cells = cell_data_for(token)
-          token_width = token_cells.sum { |cell| cell[:display_width] }
-
-          if current_width + token_width <= max_width
-            buffer << token
-            current_width += token_width
-          else
-            remaining = max_width - current_width
-            slice = slice_by_cells(token_cells, token, remaining)
-            buffer << slice unless slice.empty?
-            break
-          end
-        end
-
-        buffer
       end
 
       def cell_data_for(text)
@@ -139,22 +107,156 @@ module EbookReader
         wrapped
       end
 
-      def slice_by_cells(cells, token, target_width)
-        return '' if target_width <= 0
+      def truncate_to(text, width, start_column: 0)
+        max_width = width.to_i
+        return '' if max_width <= 0
 
-        consumed = 0
-        limit = 0
+        str = text.to_s
+        return '' if str.empty?
 
-        cells.each do |cell|
-          break if consumed >= target_width
-
-          consumed += cell[:display_width]
-          limit = cell[:char_end]
+        # Fast-path: preserve original when it already fits and contains no tab/newline.
+        unless str.include?("\t") || str.include?("\n") || str.include?("\r")
+          return str if max_width >= visible_length(str)
         end
 
-        token[0, limit]
+        buffer = +''
+        current_width = 0
+        column = start_column.to_i
+
+        str.scan(TOKEN_REGEX).each do |token|
+          if token.start_with?("\e[")
+            buffer << token
+            next
+          end
+
+          next if token == "\e"
+
+          remaining = max_width - current_width
+          break if remaining <= 0
+
+          case token
+          when "\t"
+            spaces = TAB_SIZE - (column % TAB_SIZE)
+            take = [spaces, remaining].min
+            buffer << (' ' * take)
+            current_width += take
+            column += take
+          when "\n", "\r"
+            # Never allow newlines to affect terminal layout; treat as a space.
+            break if remaining < 1
+
+            buffer << ' '
+            current_width += 1
+            column += 1
+          else
+            token_width = display_width_for(token)
+            break if token_width > remaining
+
+            buffer << token
+            current_width += token_width
+            column += token_width
+          end
+        end
+
+        buffer
       end
-      private_class_method :slice_by_cells
+
+      def pad_right(text, width, start_column: 0, pad: ' ')
+        w = width.to_i
+        return '' if w <= 0
+
+        clipped = truncate_to(text.to_s, w, start_column: start_column)
+        pad_len = w - visible_length(clipped)
+        pad_len.positive? ? (clipped + (pad.to_s * pad_len)) : clipped
+      end
+
+      def pad_left(text, width, start_column: 0, pad: ' ')
+        w = width.to_i
+        return '' if w <= 0
+
+        clipped = truncate_to(text.to_s, w, start_column: start_column)
+        pad_len = w - visible_length(clipped)
+        pad_len.positive? ? ((pad.to_s * pad_len) + clipped) : clipped
+      end
+
+      def pad_center(text, width, start_column: 0, pad: ' ')
+        w = width.to_i
+        return '' if w <= 0
+
+        clipped = truncate_to(text.to_s, w, start_column: start_column)
+        pad_len = w - visible_length(clipped)
+        return clipped unless pad_len.positive?
+
+        left = pad_len / 2
+        right = pad_len - left
+        (pad.to_s * left) + clipped + (pad.to_s * right)
+      end
+
+      # Wraps text by terminal cell width without splitting grapheme clusters.
+      # Preserves newlines and expands tabs relative to the provided start column.
+      #
+      # This is intended for UI text entry/display helpers (notes, dialogs),
+      # not for paragraph-aware ebook formatting.
+      def wrap_cells(text, width, start_column: 0)
+        w = width.to_i
+        return [''] if w <= 0
+
+        lines = []
+        line = +''
+        line_width = 0
+        column = start_column.to_i
+
+        text.to_s.each_grapheme_cluster do |cluster|
+          if cluster == "\n"
+            lines << line.dup
+            line.clear
+            line_width = 0
+            column = start_column.to_i
+            next
+          end
+
+          if cluster == "\r"
+            cluster = ' '
+          end
+
+          if cluster == "\t"
+            spaces = TAB_SIZE - (column % TAB_SIZE)
+            spaces.times do
+              if line_width >= w
+                lines << line.dup
+                line.clear
+                line_width = 0
+                column = start_column.to_i
+              end
+              line << ' '
+              line_width += 1
+              column += 1
+            end
+            next
+          end
+
+          cw = display_width_for(cluster)
+          next if cw <= 0
+          next if cw > w
+
+          if line_width.positive? && (line_width + cw > w)
+            lines << line.dup
+            line.clear
+            line_width = 0
+            column = start_column.to_i
+          end
+
+          break if cw > (w - line_width)
+
+          line << cluster
+          line_width += cw
+          column += cw
+        end
+
+        lines << line.dup
+        lines = [''] if lines.empty?
+        lines
+      end
     end
   end
 end

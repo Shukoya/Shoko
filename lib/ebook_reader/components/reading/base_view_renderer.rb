@@ -74,12 +74,15 @@ module EbookReader
         end
 
         # Draw a vertical divider between columns (shared helper)
-        def draw_divider(surface, bounds, col_width, start_row = 3)
+        def draw_divider(surface, bounds, divider_col, start_row = 3)
+          col = divider_col.to_i
+          return if col <= 0
+
           (start_row..[bounds.height - 1, start_row + 1].max).each do |row|
             surface.write(
               bounds,
               row,
-              col_width + 3,
+              col,
               "#{EbookReader::Constants::UIConstants::BORDER_PRIMARY}│#{Terminal::ANSI::RESET}"
             )
           end

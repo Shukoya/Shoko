@@ -7,6 +7,7 @@ require_relative 'sidebar/tab_header_component'
 require_relative 'sidebar/toc_tab_renderer'
 require_relative 'sidebar/annotations_tab_renderer'
 require_relative 'sidebar/bookmarks_tab_renderer'
+require_relative 'ui/text_utils'
 
 module EbookReader
   module Components
@@ -154,15 +155,11 @@ module EbookReader
         reset = Terminal::ANSI::RESET
         width = bounds.width
         hint = HELP_TEXTS[active_tab]
-        help_text = hint ? "#{COLOR_TEXT_DIM}#{hint}#{reset}" : ''
+        return unless hint
 
-        # Truncate to fit width
-        if help_text.length > width - 4
-          visible_length = width - 7
-          help_text = "#{help_text[0, visible_length]}..."
-        end
-
-        surface.write(bounds, 1, 2, help_text)
+        max_hint_width = [width - 4, 1].max
+        clipped_hint = UI::TextUtils.truncate_text(hint, max_hint_width)
+        surface.write(bounds, 1, 2, "#{COLOR_TEXT_DIM}#{clipped_hint}#{reset}")
       end
 
       def render_active_tab(surface, bounds)

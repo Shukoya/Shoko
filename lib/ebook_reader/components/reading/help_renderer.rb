@@ -44,16 +44,17 @@ module EbookReader
           b_width  = bounds.width
           start_row = [(b_height - HELP_LINES.size) / 2, 1].max
 
-          HELP_LINES.each_with_index do |line, idx|
-            row = start_row + idx
-            break if row >= b_height - 2
+        HELP_LINES.each_with_index do |line, idx|
+          row = start_row + idx
+          break if row >= b_height - 2
 
-            col = [(b_width - line.length) / 2, 1].max
-            surface.write(bounds, row, col,
+          text_width = EbookReader::Helpers::TextMetrics.visible_length(line)
+          col = [(b_width - text_width) / 2, 1].max
+          surface.write(bounds, row, col,
                           EbookReader::Constants::UIConstants::COLOR_TEXT_PRIMARY + line + Terminal::ANSI::RESET)
-          end
         end
       end
+    end
     end
   end
 end

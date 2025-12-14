@@ -66,7 +66,8 @@ module EbookReader
           width = bounds.width
           title = entry_title(entry)
           indent = '  ' * [entry.level, 0].max
-          (indent + title)[0, width - 6]
+          available = [width - 4, 1].max
+          display = EbookReader::Helpers::TextMetrics.truncate_to(indent + title, available, start_column: 3)
 
           selected = ctx.index == ctx.selected_entry_index
           pointer = if selected
@@ -84,9 +85,9 @@ module EbookReader
                        end
 
           line_text = if selected
-                        EbookReader::Constants::UIConstants::SELECTION_HIGHLIGHT + indent + title + reset
+                        EbookReader::Constants::UIConstants::SELECTION_HIGHLIGHT + display + reset
                       else
-                        base_color + indent + title + reset
+                        base_color + display + reset
                       end
 
           pointer_text = if selected

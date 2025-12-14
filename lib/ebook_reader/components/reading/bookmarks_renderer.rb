@@ -37,7 +37,8 @@ module EbookReader
         def render_empty_message(surface, bounds)
           reset = Terminal::ANSI::RESET
           message = 'No bookmarks yet. Press "b" while reading to add one.'
-          surface.write(bounds, bounds.height / 2, (bounds.width - message.length) / 2,
+          msg_width = EbookReader::Helpers::TextMetrics.visible_length(message)
+          surface.write(bounds, bounds.height / 2, (bounds.width - msg_width) / 2,
                         "#{EbookReader::Constants::UIConstants::COLOR_TEXT_DIM}#{message}#{reset}")
         end
 
@@ -72,8 +73,9 @@ module EbookReader
           row = ctx.row
           width = ctx.width
           bm = ctx.bookmark
-          chapter_text = "Ch. #{bm.chapter_index + 1}: #{ctx.chapter_title[0, width - 20]}"
-          text_snippet = bm.text_snippet[0, width - 8]
+          chapter_text = "Ch. #{bm.chapter_index + 1}: #{ctx.chapter_title}"
+          chapter_text = EbookReader::Helpers::TextMetrics.truncate_to(chapter_text, [width - 4, 1].max)
+          text_snippet = EbookReader::Helpers::TextMetrics.truncate_to(bm.text_snippet.to_s, [width - 8, 1].max)
 
           if ctx.selected
             pointer = "#{ui::SELECTION_POINTER_COLOR}#{ui::SELECTION_POINTER}#{ansi::RESET}"

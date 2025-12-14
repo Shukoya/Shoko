@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../render_style'
+require_relative '../../helpers/text_metrics'
 
 module EbookReader
   module Components
@@ -25,7 +26,8 @@ module EbookReader
           surface.write(bounds, 1, 2, title)
           return unless help_text
 
-          surface.write(bounds, 1, [w - help_text.length - 2, w / 2].max, help_text)
+          help_width = EbookReader::Helpers::TextMetrics.visible_length(help_text)
+          surface.write(bounds, 1, [w - help_width - 2, w / 2].max, help_text)
         end
 
         def write_footer(surface, bounds, text)
@@ -33,7 +35,7 @@ module EbookReader
         end
 
         def write_empty_message(surface, bounds, message)
-          col = [(bounds.width - message.length) / 2, 1].max
+          col = [(bounds.width - EbookReader::Helpers::TextMetrics.visible_length(message)) / 2, 1].max
           row = bounds.height / 2
           surface.write(bounds, row, col, message)
         end

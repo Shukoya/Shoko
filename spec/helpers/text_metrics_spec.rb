@@ -27,6 +27,18 @@ RSpec.describe EbookReader::Helpers::TextMetrics do
       expect(described_class.visible_length(truncated)).to eq(1)
     end
 
+    it 'never exceeds the requested width with wide characters' do
+      truncated = described_class.truncate_to('漢', 1)
+      expect(described_class.visible_length(truncated)).to be <= 1
+    end
+
+    it 'expands tabs when truncating' do
+      truncated = described_class.truncate_to("\tX", 4)
+      expect(truncated).to start_with(' ' * EbookReader::Helpers::TextMetrics::TAB_SIZE)
+      expect(truncated).not_to include("\t")
+      expect(described_class.visible_length(truncated)).to eq(4)
+    end
+
     it 'truncates kitty placeholder lines by cell width' do
       placeholder = EbookReader::Helpers::KittyUnicodePlaceholders.line(
         image_id: 42,

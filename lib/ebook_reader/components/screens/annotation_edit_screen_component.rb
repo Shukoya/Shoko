@@ -28,10 +28,16 @@ module EbookReader
           book_path = @state.get(%i[menu selected_annotation_book])
           book_label = book_path ? File.basename(book_path) : 'Unknown Book'
 
-          title = "#{COLOR_TEXT_ACCENT}📝 Edit Annotation • #{book_label}#{reset}"
+          title_plain = "📝 Edit Annotation • #{book_label}"
+          title_width = EbookReader::Helpers::TextMetrics.visible_length(title_plain)
+          title = "#{COLOR_TEXT_ACCENT}#{title_plain}#{reset}"
           surface.write(bounds, 1, 2, title)
-          surface.write(bounds, 1, [width - 28, title.length + 2].max,
-                        "#{COLOR_TEXT_DIM}[Ctrl+S] Save • [ESC] Cancel#{reset}")
+          hint_plain = '[Ctrl+S] Save • [ESC] Cancel'
+          hint_width = EbookReader::Helpers::TextMetrics.visible_length(hint_plain)
+          min_hint_col = 2 + title_width + 2
+          right_hint_col = width - hint_width
+          hint_col = [right_hint_col, min_hint_col].max
+          surface.write(bounds, 1, hint_col, "#{COLOR_TEXT_DIM}#{hint_plain}#{reset}")
           surface.write(bounds, 2, 1, COLOR_TEXT_DIM + ('─' * width) + reset)
 
           # Snippet (read-only)
@@ -64,7 +70,7 @@ module EbookReader
           # Cursor position
           cursor_lines = UI::TextUtils.wrap_text(text[0, cursor], bw)
           c_row = base_row + [cursor_lines.length - 1, 0].max
-          c_col = 4 + (cursor_lines.last || '').length
+          c_col = 4 + EbookReader::Helpers::TextMetrics.visible_length(cursor_lines.last || '')
           surface.write(bounds, c_row, c_col, "#{SELECTION_HIGHLIGHT}_#{reset}")
 
           # Footer
@@ -139,7 +145,7 @@ module EbookReader
 
         def write_padded_primary(surface, bounds, row, col, text, width)
           reset = Terminal::ANSI::RESET
-          padded = text.ljust(width)
+          padded = UI::TextUtils.pad_right(text, width)
           surface.write(bounds, row, col, COLOR_TEXT_PRIMARY + padded + reset)
         end
       end

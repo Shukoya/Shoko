@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../ui/list_helpers'
+require_relative '../ui/text_utils'
 
 module EbookReader
   module Components
@@ -34,13 +35,11 @@ module EbookReader
         private
 
         def metrics_for(bounds)
-          BoundsMetrics.new(x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height)
+          BoundsMetrics.new(x: 1, y: 1, width: bounds.width, height: bounds.height)
         end
 
         def render_empty_message(surface, bounds, metrics)
           reset = Terminal::ANSI::RESET
-          bx = metrics.x
-          by = metrics.y
           bw = metrics.width
           bh = metrics.height
           messages = [
@@ -50,9 +49,10 @@ module EbookReader
             'to add a bookmark',
           ]
 
-          start_y = by + ((bh - messages.length) / 2)
+          start_y = ((bh - messages.length) / 2) + 1
           messages.each_with_index do |message, i|
-            x = bx + [(bw - message.length) / 2, 2].max
+            msg_width = EbookReader::Helpers::TextMetrics.visible_length(message)
+            x = [(bw - msg_width) / 2, 2].max
             y = start_y + i
             surface.write(bounds, y, x, "#{COLOR_TEXT_DIM}#{message}#{reset}")
           end
@@ -104,7 +104,7 @@ module EbookReader
             snippet_style = COLOR_TEXT_DIM
           end
           chapter_text = chapter_title.to_s
-          chapter_text = "#{chapter_text[0, max_width - 6]}..." if chapter_text.length > max_width - 3
+          chapter_text = UI::TextUtils.truncate_text(chapter_text, [max_width - 6, 1].max)
 
           # Modern bookmark icon
           bookmark_icon = "#{COLOR_TEXT_WARNING}◆#{reset}"
@@ -113,7 +113,7 @@ module EbookReader
 
           # Second line: Text snippet and position
           snippet = bm.text_snippet || ''
-          snippet = "#{snippet[0, max_width - 11]}..." if snippet.length > max_width - 8
+          snippet = UI::TextUtils.truncate_text(snippet, [max_width - 11, 1].max)
 
           # Add position indicator if available
           position_text = ''

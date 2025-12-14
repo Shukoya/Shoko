@@ -2,6 +2,7 @@
 
 require_relative 'base_component'
 require_relative 'surface'
+require_relative '../helpers/text_metrics'
 
 module EbookReader
   module Components
@@ -79,7 +80,7 @@ module EbookReader
         return if current.zero? && total.zero?
 
         label = page_label(current, total)
-        col = center_col(width, label.length)
+        col = center_col(width, EbookReader::Helpers::TextMetrics.visible_length(label))
         write_colored(surface, bounds, row, col, label, ui::COLOR_TEXT_PRIMARY)
       end
 
@@ -89,13 +90,13 @@ module EbookReader
         return unless left
 
         left_label = page_label(left[:current].to_i, left[:total].to_i)
-        left_col = quarter_center_col(width, left_label.length, :left)
+        left_col = quarter_center_col(width, EbookReader::Helpers::TextMetrics.visible_length(left_label), :left)
         write_colored(surface, bounds, row, left_col, left_label, ui::COLOR_TEXT_PRIMARY) unless left_label.empty?
 
         return unless right
 
         right_label = page_label(right[:current].to_i, right[:total].to_i)
-        right_col = quarter_center_col(width, right_label.length, :right)
+        right_col = quarter_center_col(width, EbookReader::Helpers::TextMetrics.visible_length(right_label), :right)
         write_colored(surface, bounds, row, right_col, right_label, ui::COLOR_TEXT_PRIMARY) unless right_label.empty?
       end
 
@@ -103,7 +104,8 @@ module EbookReader
         ui = EbookReader::Constants::UIConstants
         width = bounds.width
         message = " #{view_model.message} "
-        col = [(width - message.length) / 2, 1].max
+        message = EbookReader::Helpers::TextMetrics.truncate_to(message, [width - 2, 1].max)
+        col = [(width - EbookReader::Helpers::TextMetrics.visible_length(message)) / 2, 1].max
         row = bounds.height
         surface.write(bounds, row, col,
                       "#{ui::BG_PRIMARY}#{ui::BG_ACCENT}#{message}#{Terminal::ANSI::RESET}")

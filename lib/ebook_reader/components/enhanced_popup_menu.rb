@@ -183,7 +183,7 @@ module EbookReader
 
         # Content with icon
         icon = action[:icon] || sel_icon
-        line_text = " #{icon} #{item} ".ljust(@width)
+        line_text = EbookReader::Helpers::TextMetrics.pad_right(" #{icon} #{item} ", @width)
         surface.write(bounds, item_y, @x, "#{bg}#{fg}#{line_text}#{Terminal::ANSI::RESET}")
       end
     end

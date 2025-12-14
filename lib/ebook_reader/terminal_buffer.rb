@@ -38,9 +38,28 @@ module EbookReader
 
           break if col_pos >= @width
 
-          cluster = token
+          if token == "\t"
+            tab_size = EbookReader::Helpers::TextMetrics::TAB_SIZE
+            spaces = tab_size - (col_pos % tab_size)
+            spaces.times do
+              break if col_pos >= @width
+
+              clear_wide_overlap(row_i, col_pos)
+              @chars[row_i][col_pos] = ' '
+              @styles[row_i][col_pos] = current_style.empty? ? nil : current_style
+              col_pos += 1
+            end
+            next
+          end
+
+          next if token == "\e"
+
+          cluster = token == "\n" || token == "\r" ? ' ' : token
           width = EbookReader::Helpers::TextMetrics.display_width_for(cluster)
           next if width <= 0
+
+          remaining = @width - col_pos
+          break if width > remaining
 
           clear_wide_overlap(row_i, col_pos)
 

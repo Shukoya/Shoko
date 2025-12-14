@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../ui/list_helpers'
+require_relative '../ui/text_utils'
 
 module EbookReader
   module Components
@@ -32,13 +33,11 @@ module EbookReader
         private
 
         def metrics_for(bounds)
-          BoundsMetrics.new(x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height)
+          BoundsMetrics.new(x: 1, y: 1, width: bounds.width, height: bounds.height)
         end
 
         def render_empty_message(surface, bounds, metrics)
           reset = Terminal::ANSI::RESET
-          bx = metrics.x
-          by = metrics.y
           bw = metrics.width
           bh = metrics.height
           messages = [
@@ -48,9 +47,10 @@ module EbookReader
             'to create annotations',
           ]
 
-          start_y = by + ((bh - messages.length) / 2)
+          start_y = ((bh - messages.length) / 2) + 1
           messages.each_with_index do |message, i|
-            x = bx + [(bw - message.length) / 2, 2].max
+            msg_width = EbookReader::Helpers::TextMetrics.visible_length(message)
+            x = [(bw - msg_width) / 2, 2].max
             y = start_y + i
             surface.write(bounds, y, x, "#{COLOR_TEXT_DIM}#{message}#{reset}")
           end
@@ -78,7 +78,6 @@ module EbookReader
         def render_annotation_item(surface, bounds, metrics, ctx)
           is_selected = (ctx.index == ctx.selected_index)
           bx = metrics.x
-          metrics.y
           bw = metrics.width
           max_width = bw - 4
 
@@ -89,7 +88,7 @@ module EbookReader
           # Text excerpt (first line)
           text = ann['text'] || ''
           excerpt = text.tr("\n", ' ').strip
-          excerpt = "#{excerpt[0, max_width - 6]}..." if excerpt.length > max_width - 3
+          excerpt = UI::TextUtils.truncate_text(excerpt, [max_width - 6, 1].max)
 
           reset = Terminal::ANSI::RESET
           if is_selected
@@ -110,7 +109,7 @@ module EbookReader
           note = ann['note']
           if note && !note.strip.empty?
             note_text = note.tr("\n", ' ').strip
-            note_text = "#{note_text[0, max_width - 5]}..." if note_text.length > max_width - 2
+            note_text = UI::TextUtils.truncate_text(note_text, [max_width - 5, 1].max)
 
             note_line = "  #{Terminal::ANSI::ITALIC}#{note_style}✎ #{note_text}#{reset}"
             surface.write(bounds, row + 1, col1, note_line)
@@ -118,6 +117,7 @@ module EbookReader
 
           # Location (third line)
           location = format_location(ann)
+          location = UI::TextUtils.truncate_text(location, [max_width, 1].max)
           location_line = "  #{location_style}#{location}#{reset}"
           surface.write(bounds, row + 2, col1, location_line)
         end
