@@ -45,6 +45,21 @@ RSpec.describe EbookReader::Infrastructure::Parsers::XHTMLContentParser do
     expect(paragraph.text).to eq('First paragraph with emphasis.')
   end
 
+  it 'preserves whitespace-only nodes between inline elements' do
+    html = <<~HTML
+      <html>
+        <body>
+          <p><span>Hello</span>
+          <span>world</span></p>
+        </body>
+      </html>
+    HTML
+
+    blocks = described_class.new(html).parse
+    paragraph = blocks.find { |block| block.type == :paragraph }
+    expect(paragraph.text).to eq('Hello world')
+  end
+
   it 'does not flatten container divs containing block children' do
     html = <<~HTML
       <html>

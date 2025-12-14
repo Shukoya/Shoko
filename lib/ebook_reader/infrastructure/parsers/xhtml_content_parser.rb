@@ -86,7 +86,10 @@ module EbookReader
 
         def parse_document(text)
           sanitized = sanitize_for_xml(text.to_s)
-          REXML::Document.new(sanitized, ignore_whitespace_nodes: :all)
+          # Preserve whitespace-only text nodes so inline element boundaries
+          # don't accidentally collapse words (e.g., <em>foo</em>\n<em>bar</em>).
+          # We normalize whitespace later in `normalize_text`.
+          REXML::Document.new(sanitized)
         end
 
         def sanitize_for_xml(text)
