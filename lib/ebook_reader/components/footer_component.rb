@@ -6,6 +6,7 @@ require_relative '../helpers/text_metrics'
 
 module EbookReader
   module Components
+    # Renders the bottom status area (page info + transient message).
     class FooterComponent < BaseComponent
       def initialize(view_model_provider = nil)
         super()
@@ -74,30 +75,36 @@ module EbookReader
         end
       end
 
-      def render_single_page_info(surface, bounds, info, width, row, ui)
+      def render_single_page_info(surface, bounds, info, width, row, ui_constants)
         current = info[:current].to_i
         total = info[:total].to_i
         return if current.zero? && total.zero?
 
         label = page_label(current, total)
         col = center_col(width, EbookReader::Helpers::TextMetrics.visible_length(label))
-        write_colored(surface, bounds, row, col, label, ui::COLOR_TEXT_PRIMARY)
+        write_colored(surface, bounds, row, col, label, ui_constants::COLOR_TEXT_PRIMARY)
       end
 
-      def render_split_page_info(surface, bounds, info, width, row, ui)
+      def render_split_page_info(surface, bounds, info, width, row, ui_constants)
         left = info[:left]
         right = info[:right]
         return unless left
 
         left_label = page_label(left[:current].to_i, left[:total].to_i)
         left_col = quarter_center_col(width, EbookReader::Helpers::TextMetrics.visible_length(left_label), :left)
-        write_colored(surface, bounds, row, left_col, left_label, ui::COLOR_TEXT_PRIMARY) unless left_label.empty?
+        unless left_label.empty?
+          write_colored(surface, bounds, row, left_col, left_label,
+                        ui_constants::COLOR_TEXT_PRIMARY)
+        end
 
         return unless right
 
         right_label = page_label(right[:current].to_i, right[:total].to_i)
         right_col = quarter_center_col(width, EbookReader::Helpers::TextMetrics.visible_length(right_label), :right)
-        write_colored(surface, bounds, row, right_col, right_label, ui::COLOR_TEXT_PRIMARY) unless right_label.empty?
+        return if right_label.empty?
+
+        write_colored(surface, bounds, row, right_col, right_label,
+                      ui_constants::COLOR_TEXT_PRIMARY)
       end
 
       def render_message_overlay(surface, bounds, view_model)

@@ -47,13 +47,13 @@ module EbookReader
         end
 
         # Validate coordinate bounds
-        def validate_coordinates(x, y, max_x, max_y)
-          x.between?(1, max_x) && y >= 1 && y <= max_y
+        def validate_coordinates?(col, row, max_col, max_row)
+          col.between?(1, max_col) && row.between?(1, max_row)
         end
 
         # Calculate distance between two points
-        def calculate_distance(x1, y1, x2, y2)
-          Math.sqrt(((x2 - x1)**2) + ((y2 - y1)**2))
+        def calculate_distance(x_start, y_start, x_end, y_end)
+          Math.sqrt(((x_end - x_start)**2) + ((y_end - y_start)**2))
         end
 
         # Calculate optimal popup position near selection end
@@ -81,12 +81,12 @@ module EbookReader
         end
 
         # Check if coordinates are within bounds
-        def within_bounds?(x, y, bounds)
+        def within_bounds?(col, row, bounds)
           bx = bounds.x
           by = bounds.y
           bw = bounds.width
           bh = bounds.height
-          x >= bx && x < (bx + bw) && y >= by && y < (by + bh)
+          col >= bx && col < (bx + bw) && row >= by && row < (by + bh)
         end
 
         # Convert line-relative coordinates to absolute terminal coordinates

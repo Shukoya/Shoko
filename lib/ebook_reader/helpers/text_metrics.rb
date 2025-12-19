@@ -8,7 +8,7 @@ module EbookReader
     # while respecting grapheme clusters and terminal cell widths.
     module TextMetrics
       TAB_SIZE = 4
-      CSI_REGEX = /\e\[[0-?]*[ -\/]*[@-~]/.freeze
+      CSI_REGEX = %r{\e\[[0-?]*[ -/]*[@-~]}
       ANSI_REGEX = CSI_REGEX
       TOKEN_REGEX = /#{CSI_REGEX}|\X/m
 
@@ -90,20 +90,6 @@ module EbookReader
 
           word_width = visible_length(word)
 
-          if word_width > width_i
-            wrapped << current_line.dup unless current_line.empty?
-            current_line.clear
-            current_width = 0
-
-            chunks = wrap_cells(word, width_i).reject(&:empty?)
-            next if chunks.empty?
-
-            wrapped.concat(chunks[0...-1]) if chunks.length > 1
-            current_line.replace(chunks[-1])
-            current_width = visible_length(current_line)
-            next
-          end
-
           if current_width.zero?
             current_line.replace(word)
             current_width = word_width
@@ -131,8 +117,8 @@ module EbookReader
         return '' if str.empty?
 
         # Fast-path: preserve original when it already fits and contains no tab/newline.
-        unless str.include?("\t") || str.include?("\n") || str.include?("\r")
-          return str if max_width >= visible_length(str)
+        if !(str.include?("\t") || str.include?("\n") || str.include?("\r")) && (max_width >= visible_length(str))
+          return str
         end
 
         buffer = +''
@@ -231,9 +217,7 @@ module EbookReader
             next
           end
 
-          if cluster == "\r"
-            cluster = ' '
-          end
+          cluster = ' ' if cluster == "\r"
 
           if cluster == "\t"
             spaces = TAB_SIZE - (column % TAB_SIZE)

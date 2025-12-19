@@ -184,11 +184,7 @@ module EbookReader
         view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
         line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
         kitty_images = EbookReader::Infrastructure::KittyGraphics.enabled_for?(state)
-        key = if @pagination_cache
-                @pagination_cache.layout_key(width, height, view_mode, line_spacing, kitty_images: kitty_images)
-              else
-                nil
-              end
+        key = @pagination_cache&.layout_key(width, height, view_mode, line_spacing, kitty_images: kitty_images)
         {
           key: key,
           map: page_map,

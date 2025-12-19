@@ -3,10 +3,10 @@
 require 'rexml/document'
 require 'cgi'
 require 'pathname'
-require 'set'
 
 require_relative '../infrastructure/perf_tracer'
 require_relative 'html_processor'
+require_relative 'terminal_sanitizer'
 
 module EbookReader
   module Helpers
@@ -25,6 +25,7 @@ module EbookReader
                   else
                     File.read(opf_path)
                   end
+        content = normalize_xml_text(content)
         @opf = EbookReader::Infrastructure::PerfTracer.measure('opf.parse') do
           REXML::Document.new(content)
         end
@@ -86,9 +87,9 @@ module EbookReader
         ncx_bundle = extract_navigation_from_ncx(manifest)
 
         chosen_entries, chosen_titles = choose_navigation_source(
-          nav_entries: nav_bundle.entries,
+          nav_entries: nav_bundle.toc_entries,
           nav_titles: nav_bundle.titles,
-          ncx_entries: ncx_bundle.entries,
+          ncx_entries: ncx_bundle.toc_entries,
           ncx_titles: ncx_bundle.titles,
           manifest: manifest
         )
@@ -110,7 +111,7 @@ module EbookReader
 
       private
 
-      NavigationBundle = Struct.new(:entries, :titles, keyword_init: true)
+      NavigationBundle = Struct.new(:toc_entries, :titles, keyword_init: true)
       private_constant :NavigationBundle
 
       def find_ncx_path(manifest)
@@ -157,41 +158,41 @@ module EbookReader
 
       def extract_navigation_from_nav
         nav_path = find_nav_path
-        return NavigationBundle.new(entries: [], titles: {}) unless nav_path
+        return NavigationBundle.new(toc_entries: [], titles: {}) unless nav_path
 
         content = safe_read_entry(nav_path)
-        return NavigationBundle.new(entries: [], titles: {}) unless content
+        return NavigationBundle.new(toc_entries: [], titles: {}) unless content
 
         doc = REXML::Document.new(content)
         nav = find_nav_toc_node(doc)
-        return NavigationBundle.new(entries: [], titles: {}) unless nav
+        return NavigationBundle.new(toc_entries: [], titles: {}) unless nav
 
         list = nav.elements['.//*[local-name()="ol"]'] || nav.elements['.//*[local-name()="ul"]']
-        return NavigationBundle.new(entries: [], titles: {}) unless list
+        return NavigationBundle.new(toc_entries: [], titles: {}) unless list
 
         titles = {}
         entries = []
         traverse_nav_list(list, titles, entries, level: 0, source_path: nav_path)
-        NavigationBundle.new(entries: entries, titles: titles)
+        NavigationBundle.new(toc_entries: entries, titles: titles)
       rescue REXML::ParseException
-        NavigationBundle.new(entries: [], titles: {})
+        NavigationBundle.new(toc_entries: [], titles: {})
       end
 
       def extract_navigation_from_ncx(manifest)
         ncx_path = find_ncx_path(manifest)
-        return NavigationBundle.new(entries: [], titles: {}) unless ncx_path
+        return NavigationBundle.new(toc_entries: [], titles: {}) unless ncx_path
 
         chapter_titles = {}
         entries = []
         ncx_content = read_entry(ncx_path)
         ncx = REXML::Document.new(ncx_content)
         nav_map = ncx.elements['//navMap']
-        return NavigationBundle.new(entries: [], titles: {}) unless nav_map
+        return NavigationBundle.new(toc_entries: [], titles: {}) unless nav_map
 
         traverse_nav_points(nav_map, chapter_titles, entries, level: 0, source_path: ncx_path)
-        NavigationBundle.new(entries: entries, titles: chapter_titles)
+        NavigationBundle.new(toc_entries: entries, titles: chapter_titles)
       rescue StandardError
-        NavigationBundle.new(entries: [], titles: {})
+        NavigationBundle.new(toc_entries: [], titles: {})
       end
 
       def process_itemref(itemref, chapter_num, spine_context)
@@ -232,7 +233,8 @@ module EbookReader
       end
 
       def read_entry(path)
-        use_zip? ? @zip.read(path) : File.read(path)
+        raw = use_zip? ? @zip.read(path) : File.read(path)
+        normalize_xml_text(raw)
       end
 
       def traverse_nav_points(node, chapter_titles, entries, level:, source_path:)
@@ -254,9 +256,7 @@ module EbookReader
             opf_href: opf_href,
           }
 
-          if opf_href && (level.positive? || !chapter_titles.key?(opf_href))
-            chapter_titles[opf_href] = title
-          end
+          chapter_titles[opf_href] = title if opf_href && (level.positive? || !chapter_titles.key?(opf_href))
 
           traverse_nav_points(nav_point, chapter_titles, entries, level: level + 1, source_path: source_path)
         end
@@ -395,7 +395,7 @@ module EbookReader
           next unless type
 
           normalized = type.to_s.strip.downcase
-          return nav if normalized == 'toc' || normalized == 'doc-toc'
+          return nav if %w[toc doc-toc].include?(normalized)
         end
 
         nil
@@ -429,18 +429,16 @@ module EbookReader
             opf_href: opf_href,
           }
 
-          if opf_href && (level.positive? || !titles.key?(opf_href))
-            titles[opf_href] = title
-          end
+          titles[opf_href] = title if opf_href && (level.positive? || !titles.key?(opf_href))
 
           nested = child.elements['./*[local-name()="ol"]'] || child.elements['./*[local-name()="ul"]']
           traverse_nav_list(nested, titles, entries, level: level + 1, source_path: source_path) if nested
         end
       end
 
-      def nav_li_label_text(li)
+      def nav_li_label_text(list_item)
         buffer = +''
-        li.children.each do |child|
+        list_item.children.each do |child|
           case child
           when REXML::Text
             buffer << child.value.to_s
@@ -454,12 +452,8 @@ module EbookReader
       end
 
       def choose_navigation_source(nav_entries:, nav_titles:, ncx_entries:, ncx_titles:, manifest:)
-        if nav_entries.any? && ncx_entries.empty?
-          return [nav_entries, ncx_titles.merge(nav_titles)]
-        end
-        if ncx_entries.any? && nav_entries.empty?
-          return [ncx_entries, ncx_titles.merge(nav_titles)]
-        end
+        return [nav_entries, ncx_titles.merge(nav_titles)] if nav_entries.any? && ncx_entries.empty?
+        return [ncx_entries, ncx_titles.merge(nav_titles)] if ncx_entries.any? && nav_entries.empty?
         return [[], {}] if nav_entries.empty? && ncx_entries.empty?
 
         spine = spine_href_set(manifest)
@@ -490,6 +484,27 @@ module EbookReader
           href = entry.is_a?(Hash) ? entry[:opf_href] : nil
           href && spine_set.include?(href)
         end
+      end
+
+      def normalize_xml_text(content)
+        bytes = String(content).dup
+        bytes.force_encoding(Encoding::BINARY)
+        bytes = bytes.delete_prefix("\xEF\xBB\xBF".b)
+
+        declared = bytes[/\A\s*<\?xml[^>]*encoding=["']([^"']+)["']/i, 1]
+        encoding = begin
+          declared ? Encoding.find(declared) : Encoding::UTF_8
+        rescue StandardError
+          Encoding::UTF_8
+        end
+
+        text = bytes.dup
+        text.force_encoding(encoding)
+        text = text.encode(Encoding::UTF_8, invalid: :replace, undef: :replace, replace: "\uFFFD")
+        text = text.delete_prefix("\uFEFF")
+        TerminalSanitizer.sanitize_xml_source(text, preserve_newlines: true, preserve_tabs: true)
+      rescue StandardError
+        TerminalSanitizer.sanitize_xml_source(content.to_s, preserve_newlines: true, preserve_tabs: true)
       end
     end
   end

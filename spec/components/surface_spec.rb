@@ -8,7 +8,7 @@ RSpec.describe EbookReader::Components::Surface do
       attr_reader :writes
 
       def initialize = @writes = []
-      def write(r, c, t) = @writes << [r, c, t]
+      def write(row, col, text) = @writes << [row, col, text]
     end.new
   end
   let(:surface) { described_class.new(output) }

@@ -12,7 +12,7 @@ module EbookReader
       class TocTabRenderer < BaseComponent
         include Constants::UIConstants
 
-        ItemCtx = Struct.new(:entries, :entry, :index, :selected_index, :y, keyword_init: true)
+        ItemCtx = Struct.new(:toc_entries, :entry, :index, :selected_index, :y, keyword_init: true)
 
         def initialize(state, dependencies = nil)
           super()
@@ -192,7 +192,7 @@ module EbookReader
             idx = window_start + row
             y_pos = start_y + row
 
-            ctx = ItemCtx.new(entries: entries,
+            ctx = ItemCtx.new(toc_entries: entries,
                               entry: entry,
                               index: idx,
                               selected_index: selected_entry_index,
@@ -207,7 +207,7 @@ module EbookReader
           bw = metrics.width
           y = ctx.y
           entry = ctx.entry
-          entries = ctx.entries
+          entries = ctx.toc_entries
           max_width = [bw - 2, 0].max
           selected = ctx.index == ctx.selected_index
 
@@ -259,7 +259,7 @@ module EbookReader
           reset = Terminal::ANSI::RESET
           if selected
             line = "#{Terminal::ANSI::BG_GREY}#{Terminal::ANSI::WHITE}"
-            segments.each { |text, _color| line << text }
+            segments.each { |(text, _color)| line << text.to_s }
             line << reset
             line
           else
@@ -278,12 +278,11 @@ module EbookReader
           level = entry.level
           return '' if level <= 0
 
-          segments = []
-          (1..level).each do |depth|
+          segments = (1..level).map do |depth|
             if depth == level
-              segments << (last_child?(entries, idx) ? '└─' : '├─')
+              (last_child?(entries, idx) ? '└─' : '├─')
             else
-              segments << (ancestor_continues?(entries, idx, depth) ? '│ ' : '  ')
+              (ancestor_continues?(entries, idx, depth) ? '│ ' : '  ')
             end
           end
           segments.join
@@ -311,14 +310,14 @@ module EbookReader
         def entry_icon(entries, idx, entry)
           if entry.level.zero?
             ''
-          elsif has_children?(entries, idx)
+          elsif children?(entries, idx)
             ''
           else
             ''
           end
         end
 
-        def has_children?(entries, idx)
+        def children?(entries, idx)
           next_entry = entries[idx + 1]
           return false unless next_entry
 

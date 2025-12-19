@@ -93,7 +93,6 @@ module EbookReader
           when :go_to_start then navigation_command(:go_to_start)
           when :go_to_end then navigation_command(:go_to_end)
           # Application commands
-          when :toggle_view_mode then application_command(:toggle_view_mode)
           when :show_help then application_command(:show_help)
           when :open_toc then application_command(:show_toc)
           when :open_bookmarks then application_command(:show_bookmarks)
@@ -166,11 +165,6 @@ module EbookReader
         # @return [Boolean] True if symbol has Domain command equivalent
         def domain_command?(symbol)
           !symbol_to_command(symbol).nil?
-        end
-
-        # Backward-compatible alias during transition
-        def has_domain_command?(symbol)
-          domain_command?(symbol)
         end
       end
     end

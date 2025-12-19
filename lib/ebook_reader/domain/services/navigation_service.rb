@@ -14,6 +14,7 @@ module EbookReader
       # Pure business logic for book navigation.
       # Replaces the coupled NavigationService with clean domain logic.
       class NavigationService < BaseService
+        # Adapts the legacy two-argument initializer to the DI-backed BaseService API.
         class LegacyDependencyWrapper
           def initialize(state_store, page_calculator)
             @state_store = state_store
@@ -238,7 +239,7 @@ module EbookReader
         end
 
         def dynamic_mode?
-          return false unless has_reader_get?
+          return false unless state_get_available?
 
           EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(@state_store) == :dynamic
         end
@@ -247,12 +248,12 @@ module EbookReader
           ctx.mode == :dynamic
         end
 
-        def has_page_calc? = !@page_calculator.nil?
+        def page_calculator_available? = !@page_calculator.nil?
 
-        def has_reader_get? = @state_store.respond_to?(:get)
+        def state_get_available? = @state_store.respond_to?(:get)
 
         def dynamic_route(ctx)
-          if dynamic?(ctx) && has_page_calc?
+          if dynamic?(ctx) && page_calculator_available?
             yield :dynamic
           else
             yield :absolute
@@ -260,7 +261,7 @@ module EbookReader
         end
 
         def dynamic_route_exec(ctx, dyn_proc, abs_proc)
-          if dynamic?(ctx) && has_page_calc?
+          if dynamic?(ctx) && page_calculator_available?
             dyn_proc.call
           else
             abs_proc.call
@@ -282,12 +283,13 @@ module EbookReader
         def apply_updates(updates)
           return if updates.nil? || updates.empty?
 
-          if @state_store.respond_to?(:update) && (@state_store.respond_to?(:set) ? updates.length > 1 : true)
+          can_update = @state_store.respond_to?(:update)
+          can_set = @state_store.respond_to?(:set)
+
+          if can_update && (!can_set || updates.length > 1)
             @state_store.update(updates)
-          elsif @state_store.respond_to?(:set)
+          elsif can_set
             updates.each { |path, value| @state_store.set(path, value) }
-          elsif @state_store.respond_to?(:update)
-            @state_store.update(updates)
           end
         end
 
@@ -414,7 +416,6 @@ module EbookReader
             updates[%i[reader left_page]] = snapped
             updates[%i[reader current_page]] = snapped
             updates[%i[reader right_page]] = snapped + stride
-            updates
           else
             offset = (updates[%i[reader single_page]] || snapshot.dig(:reader, :single_page) || 0).to_i
             snapped = snap_offset_to_image_start(formatting, doc, chapter_index, col_width, offset, stride)
@@ -422,8 +423,8 @@ module EbookReader
 
             updates[%i[reader single_page]] = snapped
             updates[%i[reader current_page]] = snapped
-            updates
           end
+          updates
         rescue StandardError
           updates
         end
@@ -467,7 +468,7 @@ module EbookReader
         end
 
         def line_metadata(line)
-          return nil unless line && line.respond_to?(:metadata)
+          return nil unless line.respond_to?(:metadata)
 
           meta = line.metadata
           meta.is_a?(Hash) ? meta : nil

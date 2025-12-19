@@ -62,7 +62,11 @@ module EbookReader
       'plum-blossoms', 'Linwosing', 'Chowmushih'
     ].freeze
     HIGHLIGHT_PATTERNS = Regexp.union(HIGHLIGHT_WORDS)
-    QUOTE_PATTERNS = /("[^"]+")|('[^']+')/
+    # Matches basic quoted spans for optional highlighting. Supports:
+    # - ASCII quotes: "..." and '...'
+    # - Curly quotes: “...” and ‘...’
+    # - Guillemets: «...» and ‹...›
+    QUOTE_PATTERNS = /(["“„«‹][^"“”„«»‹›]*["”»›])|(['‘‚][^'‘’‚]*['’])/
 
     # Recent files
     MAX_RECENT_FILES = 10

@@ -12,8 +12,8 @@ module EbookReader
       #
       # @example Getting configuration
       #   repo = ConfigRepository.new(dependencies)
-      #   view_mode = repo.get_view_mode
-      #   line_spacing = repo.get_line_spacing
+      #   view_mode = repo.view_mode
+      #   line_spacing = repo.line_spacing
       #
       # @example Updating configuration
       #   repo.update_view_mode(:split)
@@ -47,7 +47,7 @@ module EbookReader
         # Get the current view mode
         #
         # @return [Symbol] Current view mode (:split or :single)
-        def get_view_mode
+        def view_mode
           get_config_value(:view_mode, DEFAULT_CONFIG[:view_mode])
         end
 
@@ -63,7 +63,7 @@ module EbookReader
         # Get the current page numbering mode
         #
         # @return [Symbol] Current page numbering mode (:absolute or :dynamic)
-        def get_page_numbering_mode
+        def page_numbering_mode
           get_config_value(:page_numbering_mode, DEFAULT_CONFIG[:page_numbering_mode])
         end
 
@@ -79,7 +79,7 @@ module EbookReader
         # Get whether page numbers are shown
         #
         # @return [Boolean] True if page numbers should be shown
-        def get_show_page_numbers
+        def show_page_numbers?
           get_config_value(:show_page_numbers, DEFAULT_CONFIG[:show_page_numbers])
         end
 
@@ -95,7 +95,7 @@ module EbookReader
         # Get the current line spacing
         #
         # @return [Symbol] Current line spacing (:compact, :normal, or :relaxed)
-        def get_line_spacing
+        def line_spacing
           raw = get_config_value(:line_spacing, DEFAULT_CONFIG[:line_spacing])
           normalized = normalize_line_spacing(raw)
           update_config_value(:line_spacing, normalized) if raw != normalized
@@ -115,7 +115,7 @@ module EbookReader
         # Get the input debounce time in milliseconds
         #
         # @return [Integer] Input debounce time in milliseconds
-        def get_input_debounce_ms
+        def input_debounce_ms
           get_config_value(:input_debounce_ms, DEFAULT_CONFIG[:input_debounce_ms])
         end
 
@@ -123,15 +123,15 @@ module EbookReader
         #
         # @param ms [Integer] New debounce time in milliseconds
         # @return [Boolean] True if updated successfully
-        def update_input_debounce_ms(ms)
-          validate_positive_integer(:input_debounce_ms, ms)
-          update_config_value(:input_debounce_ms, ms)
+        def update_input_debounce_ms(milliseconds)
+          validate_positive_integer(:input_debounce_ms, milliseconds)
+          update_config_value(:input_debounce_ms, milliseconds)
         end
 
         # Get all configuration as a hash
         #
         # @return [Hash] All configuration values
-        def get_all_config
+        def all_config
           config_state = @state_store.get(%i[config]) || {}
           DEFAULT_CONFIG.merge(config_state)
         end

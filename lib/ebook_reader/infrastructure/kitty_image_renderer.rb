@@ -29,7 +29,8 @@ module EbookReader
       end
 
       def render(output:, book_sha:, epub_path:, chapter_entry_path:, src:, row:, col:, cols:, rows:,
-                 placement_id:, z: nil)
+                 placement_id:, **options)
+        z = options.fetch(:z, nil)
         return false unless output
         return false unless epub_path && File.file?(epub_path)
 
@@ -66,7 +67,8 @@ module EbookReader
       # Ensure the image is transmitted and has a virtual placement for Unicode placeholders.
       # Returns the image_id on success, otherwise nil.
       def prepare_virtual(output:, book_sha:, epub_path:, chapter_entry_path:, src:, cols:, rows:, placement_id: nil,
-                          z: nil)
+                          **options)
+        z = options.fetch(:z, nil)
         return nil unless output
         return nil unless epub_path && File.file?(epub_path)
 
@@ -90,7 +92,7 @@ module EbookReader
       private
 
       def ensure_transmitted(output, image_id, book_sha, epub_path, entry_path)
-        return true if @transmitted[image_id]
+        return :cached if @transmitted[image_id]
 
         cache_key = png_cache_key(entry_path)
         bytes = @resource_loader.fetch(book_sha: book_sha,
@@ -99,7 +101,7 @@ module EbookReader
                                        cache_key: cache_key,
                                        persist: false)
         png_bytes = @transcoder.to_png(bytes)
-        return false unless png_bytes
+        return nil unless png_bytes
 
         dims = png_dimensions(png_bytes)
         @dimensions[image_id] = dims if dims
@@ -111,10 +113,11 @@ module EbookReader
         end
 
         @transmitted[image_id] = true
-        true
+        :transmitted
       end
 
-      def ensure_virtual_placement(output, image_id, cols, rows, placement_id: nil, z: nil)
+      def ensure_virtual_placement(output, image_id, cols, rows, placement_id: nil, **options)
+        z = options.fetch(:z, nil)
         cols_i = cols.to_i
         rows_i = rows.to_i
         return false if cols_i <= 0 || rows_i <= 0
@@ -158,7 +161,7 @@ module EbookReader
         img_h = dims[:height].to_i
         return { cols: cols_i, rows: rows_i, col_offset: 0, row_offset: 0 } if img_w <= 0 || img_h <= 0
 
-        aspect = img_w.to_f / img_h.to_f
+        aspect = img_w.to_f / img_h
         cell_aspect = DEFAULT_CELL_ASPECT
 
         cols_for_rows = (rows_i.to_f * aspect / cell_aspect)

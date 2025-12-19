@@ -28,13 +28,13 @@ module EbookReader
 
         btn = event[:button]
         rel = event[:released]
-        x = event[:x]
-        y = event[:y]
+        col = event[:x]
+        row = event[:y]
 
         if btn.zero? && !rel # Left button pressed
-          start_selection(x, y)
+          start_selection(col, row)
         elsif btn == 32 && @selecting # Mouse dragged
-          update_selection(x, y)
+          update_selection(col, row)
         elsif rel && @selecting # Button released
           finish_selection
         end
@@ -63,15 +63,15 @@ module EbookReader
 
       private
 
-      def start_selection(x, y)
+      def start_selection(col, row)
         @selecting = true
-        @selection_start = { x: x, y: y }
-        @selection_end = { x: x, y: y }
+        @selection_start = { x: col, y: row }
+        @selection_end = { x: col, y: row }
         { type: :selection_start }
       end
 
-      def update_selection(x, y)
-        @selection_end = { x: x, y: y }
+      def update_selection(col, row)
+        @selection_end = { x: col, y: row }
         { type: :selection_drag }
       end
 

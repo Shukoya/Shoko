@@ -94,6 +94,7 @@ module EbookReader
     end
   end
 
+  # Raised when cached book data cannot be loaded or is incompatible.
   class CacheLoadError < Error
     attr_reader :path
 

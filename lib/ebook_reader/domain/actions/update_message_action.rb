@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_action'
+require_relative '../../helpers/terminal_sanitizer'
 
 module EbookReader
   module Domain
@@ -12,7 +13,14 @@ module EbookReader
         end
 
         def apply(state)
-          state.update({ %i[reader message] => payload[:message] })
+          msg = payload[:message]
+          safe = if msg.nil?
+                   nil
+                 else
+                   EbookReader::Helpers::TerminalSanitizer.sanitize(msg.to_s, preserve_newlines: false,
+                                                                              preserve_tabs: false)
+                 end
+          state.update({ %i[reader message] => safe })
         end
       end
 

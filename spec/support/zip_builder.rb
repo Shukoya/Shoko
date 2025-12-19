@@ -74,10 +74,10 @@ module ZipTestBuilder
     out
   end
 
-  def normalize_method(m)
-    return 0 if m.nil? || m == :store || m == 0
-    return 8 if [:deflate, 8].include?(m)
+  def normalize_method(compression_method)
+    return 0 if compression_method.nil? || compression_method == :store || compression_method == 0
+    return 8 if [:deflate, 8].include?(compression_method)
 
-    m.to_i
+    compression_method.to_i
   end
 end

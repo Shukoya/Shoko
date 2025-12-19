@@ -47,51 +47,44 @@ module EbookReader
       end
 
       def setup_logger(options)
-        debug = debug_enabled?(options)
-        log_path = options[:log_path] || env_log_path
-        log_level = options[:log_level] || env_log_level
+        configure_profiler(options)
 
-        profile_path = options[:profile_path] || ENV['READER_PROFILE_PATH']
-        Infrastructure::PerfTracer.profile_path = profile_path if profile_path && !profile_path.empty?
-
-        output, log_file = logger_output(debug, log_path)
+        output, log_file = logger_output(options)
         Infrastructure::Logger.output = output
-        Infrastructure::Logger.level = logger_level(debug, log_level)
-
-        at_exit do
-          next unless log_file && !log_file.closed?
-
-          begin
-            log_file.close
-          rescue StandardError
-            # ignore close errors on shutdown
-          end
-        end
+        Infrastructure::Logger.level = logger_level(options)
+        register_log_file_closer(log_file)
       end
 
-      def logger_output(debug, log_path)
-        return [$stdout, nil] if debug
+      def configure_profiler(options)
+        profile_path = options[:profile_path] || ENV.fetch('READER_PROFILE_PATH', nil)
+        profile_path = profile_path.to_s.strip
+        return if profile_path.empty?
 
-        path = log_path.to_s.strip
-        return [File.open(File::NULL, 'w'), nil] if path.empty?
+        Infrastructure::PerfTracer.profile_path = profile_path
+      end
+
+      def logger_output(options)
+        return [$stdout, nil] if debug_enabled?(options)
+
+        path = (options[:log_path] || env_log_path).to_s.strip
+        return [IO::NULL, nil] if path.empty?
 
         ensure_log_directory(path)
         file = File.open(path, 'a')
         file.sync = true
         [file, file]
       rescue StandardError
-        [File.open(File::NULL, 'w'), nil]
+        [IO::NULL, nil]
       end
 
       def ensure_log_directory(path)
         FileUtils.mkdir_p(File.dirname(path))
-      rescue StandardError
-        # best effort; fall back to File::NULL if mkdir fails later
       end
 
-      def logger_level(debug, configured_level)
-        return :debug if debug
+      def logger_level(options)
+        return :debug if debug_enabled?(options)
 
+        configured_level = options[:log_level] || env_log_level
         normalize_log_level(configured_level) || :error
       end
 
@@ -105,10 +98,9 @@ module EbookReader
       def debug_enabled?(options)
         return true if options[:debug]
 
-        raw = ENV.fetch('DEBUG', nil)
-        return false if raw.nil?
+        value = ENV.fetch('DEBUG', '').to_s.strip.downcase
+        return false if value.empty?
 
-        value = raw.to_s.strip.downcase
         %w[0 false off no].exclude?(value)
       end
 
@@ -118,6 +110,20 @@ module EbookReader
 
       def env_log_level
         ENV.fetch('READER_LOG_LEVEL', '').strip
+      end
+
+      def register_log_file_closer(log_file)
+        return unless log_file
+
+        at_exit { close_log_file(log_file) }
+      end
+
+      def close_log_file(log_file)
+        return if log_file.closed?
+
+        log_file.close
+      rescue StandardError => e
+        warn("[ebook_reader] Failed to close log file: #{e.class}: #{e.message}")
       end
     end
   end

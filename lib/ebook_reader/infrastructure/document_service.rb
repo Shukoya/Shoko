@@ -34,7 +34,7 @@ module EbookReader
       #
       # @param index [Integer] Chapter index
       # @return [Chapter] Chapter object or nil
-      def get_chapter(index)
+      def chapter_at(index)
         return nil unless @document
 
         @document.get_chapter(index)
@@ -140,12 +140,13 @@ module EbookReader
         return @content_cache[key] if @content_cache.key?(key)
 
         value = yield
+        value = default if value.nil?
         @content_cache[key] = value
         value
       end
 
       def with_chapter(index, default: nil)
-        chapter = get_chapter(index)
+        chapter = chapter_at(index)
         return default unless chapter
 
         yield chapter

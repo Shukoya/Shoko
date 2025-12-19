@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../../constants/ui_constants'
+require_relative '../../helpers/terminal_sanitizer'
 require_relative '../ui/text_utils'
 require_relative '../ui/list_helpers'
 
@@ -107,7 +108,9 @@ module EbookReader
         def render_status(surface, bounds, layout)
           total = @filtered_epubs&.length.to_i
           status = @catalog.scan_status
-          message = @catalog.scan_message.to_s
+          message = EbookReader::Helpers::TerminalSanitizer.sanitize(@catalog.scan_message.to_s,
+                                                                     preserve_newlines: false,
+                                                                     preserve_tabs: false)
 
           count_text = "#{COLOR_TEXT_DIM}Found #{total} #{total == 1 ? 'book' : 'books'}#{Terminal::ANSI::RESET}"
           surface.write(bounds, layout[:status_row], layout[:indent], count_text)

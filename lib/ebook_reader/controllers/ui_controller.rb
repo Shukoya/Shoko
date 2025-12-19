@@ -561,12 +561,6 @@ module EbookReader
         reader_controller&.deactivate_annotation_editor_overlay_session
       end
 
-      def safe_resolve(key)
-        @dependencies.resolve(key)
-      rescue StandardError
-        nil
-      end
-
       def resolve_required(key)
         service = @dependencies.resolve(key)
         raise MissingDependencyError, "Dependency :#{key} not registered" unless service

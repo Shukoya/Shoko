@@ -55,9 +55,9 @@ module EbookReader
 
       private
 
-      def wrap_with_instrumentation(instrumentation, metric)
+      def wrap_with_instrumentation(instrumentation, metric, &)
         if instrumentation
-          instrumentation.time(metric) { yield }
+          instrumentation.time(metric, &)
         else
           yield
         end

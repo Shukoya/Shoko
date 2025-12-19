@@ -152,4 +152,24 @@ RSpec.describe EbookReader::Infrastructure::Parsers::XHTMLContentParser do
     code_block = blocks.find { |block| block.type == :code }
     expect(code_block.segments.first.text).to include('code sample')
   end
+
+  it 'strips terminal control sequences from decoded text' do
+    html = <<~HTML
+      <html>
+        <body>
+          <p>Hello &#x1b;[31mred&#x1b;[0m world</p>
+          <p>Also &#x9b;31mC1&#x9b;0m sequences</p>
+          <p>OSC: \e]2;HACK\a end</p>
+        </body>
+      </html>
+    HTML
+
+    blocks = described_class.new(html).parse
+    combined = blocks.map(&:text).join("\n")
+
+    expect(combined).to include('Hello red world')
+    expect(combined).to include('Also C1 sequences')
+    expect(combined).not_to include("\e")
+    expect(combined).not_to include("\u009B")
+  end
 end

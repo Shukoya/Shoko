@@ -4,6 +4,7 @@ require_relative '../terminal'
 
 module EbookReader
   module Constants
+    # Theme palettes used by the terminal render style system.
     module Themes
       DEFAULT_PALETTE = {
         primary: Terminal::ANSI::WHITE,

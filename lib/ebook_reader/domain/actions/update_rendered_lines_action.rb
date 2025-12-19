@@ -14,9 +14,7 @@ module EbookReader
 
         def apply(state)
           registry = begin
-            if state.respond_to?(:resolve)
-              state.resolve(:render_registry)
-            end
+            state.resolve(:render_registry) if state.respond_to?(:resolve)
           rescue StandardError
             nil
           end

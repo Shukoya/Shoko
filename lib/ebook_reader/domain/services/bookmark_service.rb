@@ -58,7 +58,7 @@ module EbookReader
         # Get all bookmarks for current book
         #
         # @return [Array<Bookmark>] Array of bookmarks
-        def get_bookmarks
+        def bookmarks
           book_path = current_book_path
           return [] unless book_path
 

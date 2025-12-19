@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../../constants/ui_constants'
+require_relative '../../helpers/terminal_sanitizer'
 require_relative '../ui/box_drawer'
 require_relative '../ui/text_utils'
 
@@ -25,7 +26,13 @@ module EbookReader
 
           ann = selected_annotation
           book_path = @state.get(%i[menu selected_annotation_book])
-          book_label = book_path ? File.basename(book_path) : 'Unknown Book'
+          book_label = if book_path
+                         raw = File.basename(book_path)
+                         EbookReader::Helpers::TerminalSanitizer.sanitize(raw, preserve_newlines: false,
+                                                                               preserve_tabs: false)
+                       else
+                         'Unknown Book'
+                       end
 
           # Header
           title_plain = "📝 Annotation • #{book_label}"

@@ -6,6 +6,7 @@ module EbookReader
   module Domain
     module Services
       module Navigation
+        # Chooses the appropriate navigation strategy for the current mode.
         module StrategyFactory
           module_function
 

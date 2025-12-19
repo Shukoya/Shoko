@@ -3,6 +3,7 @@
 require 'digest'
 require 'fileutils'
 require 'json'
+require 'securerandom'
 
 require_relative 'atomic_file_writer'
 require_relative 'cache_paths'
@@ -18,8 +19,9 @@ module EbookReader
     class JsonCacheStore
       ENGINE = 'json'
       FORMAT = 'reader-cache-payload'
-      FORMAT_VERSION = 1
+      FORMAT_VERSION = 2
 
+      # Raw payload read from disk (metadata + chapter/resource indexes + layouts).
       Payload = Struct.new(:metadata_row, :chapters, :resources, :layouts, keyword_init: true)
 
       MANIFEST_FILENAME = 'cache_manifest.json'
@@ -29,6 +31,13 @@ module EbookReader
 
       MAX_LAYOUT_KEY_BYTES = 200
       LAYOUT_KEY_PATTERN = /\A[a-zA-Z0-9][a-zA-Z0-9._-]*\z/
+
+      CHAPTERS_DIRNAME = 'chapters'
+      CHAPTERS_RAW_DIRNAME = 'raw'
+      CHAPTERS_GENERATION_BYTES = 8
+      CHAPTERS_GENERATION_PATTERN = /\A[0-9a-f]{16}\z/i
+      CHAPTER_FILENAME_DIGITS = 6
+      MAX_CHAPTER_COUNT = 20_000
 
       def initialize(cache_root: CachePaths.reader_root)
         @cache_root = cache_root
@@ -40,20 +49,13 @@ module EbookReader
       end
 
       def fetch_payload(sha, include_resources: false)
-        path = payload_path(sha)
-        return nil unless File.file?(path)
-
-        json = File.read(path)
-        data = JSON.parse(json)
-        return nil unless valid_payload_file?(data)
-
-        resources_index = data.fetch('resources', [])
-        resources = include_resources ? hydrate_resources(sha, resources_index) : []
+        data = load_payload_data(sha)
+        return nil unless data
 
         Payload.new(
           metadata_row: data.fetch('metadata_row', {}),
           chapters: data.fetch('chapters', []),
-          resources: resources,
+          resources: include_resources ? hydrate_resources(sha, data.fetch('resources', [])) : [],
           layouts: fetch_layouts(sha)
         )
       rescue StandardError => e
@@ -63,38 +65,20 @@ module EbookReader
 
       def write_payload(sha:, source_path:, source_mtime:, generated_at:, serialized_book:, serialized_chapters:,
                         serialized_resources:, serialized_layouts:)
-        now = Time.now.utc.to_f
         normalized_sha = normalize_sha!(sha)
 
-        metadata_row = stringify_keys(serialized_book)
-        metadata_row['source_sha'] = normalized_sha
-        metadata_row['source_path'] = source_path
-        metadata_row['source_mtime'] = source_mtime&.to_f
-        metadata_row['source_size_bytes'] = safe_file_size(source_path)
-        metadata_row['source_fingerprint'] = SourceFingerprint.compute(source_path)
-        metadata_row['generated_at'] = generated_at&.to_f
-        metadata_row['created_at'] = now
-        metadata_row['updated_at'] = now
-        metadata_row['engine'] = ENGINE
-
-        resources_index, size_bytes = persist_resources(normalized_sha, serialized_resources)
-
-        payload = {
-          'format' => FORMAT,
-          'format_version' => FORMAT_VERSION,
-          'engine' => ENGINE,
-          'metadata_row' => metadata_row,
-          'chapters' => serialized_chapters || [],
-          'resources' => resources_index,
-        }
-
-        AtomicFileWriter.write(payload_path(normalized_sha), JSON.generate(payload))
-        write_layouts(normalized_sha, serialized_layouts || {})
-        update_manifest(metadata_row, cache_size_bytes: size_bytes)
-        cleanup_legacy_marshal_files(normalized_sha)
+        metadata_row = build_metadata_row(serialized_book, normalized_sha, source_path:, source_mtime:, generated_at:)
+        chapters_index, chapter_generation, chapter_bytes = persist_chapters(normalized_sha, serialized_chapters)
+        resources_index, resource_bytes = persist_resources(normalized_sha, serialized_resources)
+        size_bytes = chapter_bytes.to_i + resource_bytes.to_i
+        indexes = { chapters: chapters_index, resources: resources_index }
+        payload = payload_hash(metadata_row, chapter_generation, indexes)
+        write_payload_file(normalized_sha, payload)
+        post_write_housekeeping(normalized_sha, metadata_row, chapter_generation, size_bytes, serialized_layouts:)
         true
       rescue StandardError => e
         Logger.debug('JsonCacheStore: write failed', sha: sha.to_s, error: e.message)
+        cleanup_failed_chapter_generation(normalized_sha, chapter_generation) if normalized_sha && chapter_generation
         false
       end
 
@@ -112,24 +96,31 @@ module EbookReader
         dir = layouts_dir(sha)
         return {} unless Dir.exist?(dir)
 
-        layouts = {}
-        Dir.children(dir).each do |entry|
-          next unless entry.end_with?('.json')
+        Dir.children(dir).each_with_object({}) do |entry, layouts|
+          key = layout_key_for_entry(entry)
+          next unless key
 
-          key = entry.sub(/\.json\z/, '')
-          next unless layout_key_valid?(key)
-
-          begin
-            layouts[key] = JSON.parse(File.read(File.join(dir, entry)))
-          rescue StandardError => e
-            Logger.debug('JsonCacheStore: layout parse failed', sha: sha.to_s, key: key.to_s, error: e.message)
-            next
-          end
+          payload = read_layout_payload(dir, entry, sha: sha, key: key)
+          layouts[key] = payload if payload
         end
-        layouts
       rescue StandardError => e
         Logger.debug('JsonCacheStore: layouts fetch failed', sha: sha.to_s, error: e.message)
         {}
+      end
+
+      def chapters_complete?(sha, generation, expected_count:)
+        normalized_sha = normalize_sha!(sha)
+        gen = normalize_chapter_generation(generation)
+        count = normalize_expected_chapter_count(expected_count)
+        return false unless gen && count
+        return true if count.zero?
+
+        chapter_files_complete?(normalized_sha, gen, count)
+      rescue StandardError => e
+        Logger.debug('JsonCacheStore: chapters completeness check failed',
+                     sha: sha.to_s, generation: generation.to_s, expected: expected_count.to_i,
+                     error: e.message)
+        false
       end
 
       def mutate_layouts(sha)
@@ -147,6 +138,7 @@ module EbookReader
         FileUtils.rm_f(payload_path(normalized_sha))
         FileUtils.rm_rf(layouts_dir(normalized_sha))
         FileUtils.rm_rf(resources_dir(normalized_sha))
+        FileUtils.rm_rf(chapters_dir(normalized_sha))
         remove_from_manifest(normalized_sha)
         true
       rescue StandardError => e
@@ -168,194 +160,12 @@ module EbookReader
       rescue StandardError
         []
       end
-
-      private
-
-      def payload_path(sha)
-        File.join(@cache_root, "#{normalize_sha!(sha)}.json")
-      end
-
-      def layouts_dir(sha)
-        File.join(@cache_root, 'layouts', normalize_sha!(sha))
-      end
-
-      def layout_file(sha, key)
-        File.join(layouts_dir(sha), "#{normalize_layout_key!(key)}.json")
-      end
-
-      def resources_dir(sha)
-        File.join(@cache_root, 'resources', normalize_sha!(sha))
-      end
-
-      def resource_blob_path(sha, blob_key)
-        File.join(resources_dir(sha), "#{blob_key}.bin")
-      end
-
-      def valid_payload_file?(data)
-        return false unless data.is_a?(Hash)
-        return false unless data['format'] == FORMAT
-        return false unless data['format_version'].to_i == FORMAT_VERSION
-        return false unless data['engine'].to_s == ENGINE
-        return false unless data['metadata_row'].is_a?(Hash)
-        return false unless data['chapters'].is_a?(Array)
-        return false unless data['resources'].is_a?(Array)
-
-        true
-      rescue StandardError
-        false
-      end
-
-      def hydrate_resources(sha, index_rows)
-        Array(index_rows).map do |row|
-          path = row.is_a?(Hash) ? (row['path'] || row[:path]) : nil
-          blob = row.is_a?(Hash) ? (row['blob'] || row[:blob]) : nil
-          next nil if path.to_s.empty? || blob.to_s.empty?
-
-          data = File.binread(resource_blob_path(sha, blob.to_s))
-          data.force_encoding(Encoding::BINARY)
-          { path: path.to_s, data: data }
-        rescue StandardError
-          nil
-        end.compact
-      end
-
-      def persist_resources(sha, resources_rows)
-        rows = []
-        total_bytes = 0
-        resources_rows = Array(resources_rows)
-        return [rows, total_bytes] if resources_rows.empty?
-
-        dir = resources_dir(sha)
-        FileUtils.mkdir_p(dir)
-
-        resources_rows.each do |row|
-          path = row.is_a?(Hash) ? (row[:path] || row['path']) : nil
-          data = row.is_a?(Hash) ? (row[:data] || row['data']) : nil
-          next if path.to_s.empty?
-
-          bytes = String(data).dup
-          bytes.force_encoding(Encoding::BINARY)
-          blob_key = Digest::SHA256.hexdigest(path.to_s)
-
-          AtomicFileWriter.write(resource_blob_path(sha, blob_key), bytes, binary: true)
-
-          total_bytes += bytes.bytesize
-          rows << { 'path' => path.to_s, 'blob' => blob_key, 'bytesize' => bytes.bytesize }
-        end
-
-        [rows, total_bytes]
-      end
-
-      def write_layouts(sha, layouts_hash)
-        dir = layouts_dir(sha)
-        FileUtils.mkdir_p(dir)
-        existing = Dir.exist?(dir) ? Dir.children(dir).select { |entry| entry.end_with?('.json') } : []
-
-        written = []
-        layouts_hash.each do |key, payload|
-          normalized_key = normalize_layout_key!(key)
-          file = File.join(dir, "#{normalized_key}.json")
-          AtomicFileWriter.write(file, JSON.generate(payload))
-          written << "#{normalized_key}.json"
-        end
-
-        stale = existing - written
-        stale.each { |entry| FileUtils.rm_f(File.join(dir, entry)) }
-      end
-
-      def manifest_path
-        File.join(@cache_root, MANIFEST_FILENAME)
-      end
-
-      def legacy_manifest_path
-        File.join(@cache_root, LEGACY_MANIFEST_FILENAME)
-      end
-
-      def update_manifest(metadata_row, cache_size_bytes:)
-        row = metadata_row.merge('cache_size_bytes' => cache_size_bytes.to_i)
-        manifest = self.class.manifest_rows(@cache_root)
-        manifest.reject! { |entry| entry['source_sha'] == row['source_sha'] }
-        manifest << row
-        AtomicFileWriter.write(manifest_path, JSON.generate(manifest))
-        FileUtils.rm_f(legacy_manifest_path) if File.file?(legacy_manifest_path)
-      rescue StandardError => e
-        Logger.debug('JsonCacheStore: manifest write failed', error: e.message)
-      end
-
-      def remove_from_manifest(sha)
-        manifest = self.class.manifest_rows(@cache_root)
-        manifest.reject! { |entry| entry['source_sha'] == sha }
-        AtomicFileWriter.write(manifest_path, JSON.generate(manifest))
-        FileUtils.rm_f(legacy_manifest_path) if File.file?(legacy_manifest_path)
-      rescue StandardError
-        nil
-      end
-
-      def self.read_manifest_file(path)
-        return [] unless File.file?(path)
-
-        data = JSON.parse(File.read(path))
-        data.is_a?(Array) ? data : []
-      rescue StandardError
-        []
-      end
-      private_class_method :read_manifest_file
-
-      def stringify_keys(hash)
-        (hash || {}).transform_keys(&:to_s)
-      rescue StandardError
-        hash || {}
-      end
-
-      def normalize_sha!(sha)
-        value = sha.to_s.strip
-        raise ArgumentError, 'sha is blank' if value.empty?
-        raise ArgumentError, 'sha must be a 64-char hex digest' unless SHA256_HEX_PATTERN.match?(value)
-
-        value.downcase
-      end
-
-      def layout_key_valid?(key)
-        normalize_layout_key!(key)
-        true
-      rescue ArgumentError
-        false
-      end
-
-      def normalize_layout_key!(key)
-        value = key.to_s
-        raise ArgumentError, 'layout key is blank' if value.empty?
-        raise ArgumentError, 'layout key too long' if value.bytesize > MAX_LAYOUT_KEY_BYTES
-        raise ArgumentError, 'layout key contains null byte' if value.include?("\0")
-        raise ArgumentError, 'layout key contains path separator' if value.include?('/') || value.include?('\\')
-        raise ArgumentError, 'layout key has invalid characters' unless LAYOUT_KEY_PATTERN.match?(value)
-
-        value
-      end
-
-      def cleanup_legacy_marshal_files(sha)
-        FileUtils.rm_f(File.join(@cache_root, "#{sha}.marshal"))
-
-        legacy_layouts = File.join(@cache_root, 'layouts', sha)
-        if Dir.exist?(legacy_layouts)
-          Dir.children(legacy_layouts).each do |entry|
-            next unless entry.end_with?('.marshal')
-
-            FileUtils.rm_f(File.join(legacy_layouts, entry))
-          end
-        end
-
-      rescue StandardError
-        nil
-      end
-
-      def safe_file_size(path)
-        return nil if path.nil? || path.to_s.empty?
-
-        File.size(path)
-      rescue StandardError
-        nil
-      end
     end
   end
 end
+
+require_relative 'json_cache_store/payload_helpers'
+require_relative 'json_cache_store/chapters'
+require_relative 'json_cache_store/layouts'
+require_relative 'json_cache_store/resources'
+require_relative 'json_cache_store/manifest'

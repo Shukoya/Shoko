@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require 'time'
+
+require_relative '../helpers/terminal_sanitizer'
+
 module EbookReader
   class EPUBFinder
     # Scans directories to locate EPUB files
@@ -104,9 +108,12 @@ module EbookReader
       end
 
       def add_epub(path)
+        raw_name = File.basename(path, '.epub').gsub(/[_-]/, ' ')
+        display_name = Helpers::TerminalSanitizer.sanitize(raw_name, preserve_newlines: false, preserve_tabs: false)
+
         @context.epubs << {
           'path' => path,
-          'name' => File.basename(path, '.epub').gsub(/[_-]/, ' '),
+          'name' => display_name,
           'size' => File.size(path),
           'modified' => File.mtime(path).iso8601,
           'dir' => File.dirname(path),

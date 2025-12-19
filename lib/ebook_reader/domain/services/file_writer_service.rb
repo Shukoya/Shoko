@@ -19,13 +19,13 @@ module EbookReader
         # Ensures the target directory exists before delegating to the underlying writer.
         def write(path, payload)
           dir = File.dirname(path)
-          FileUtils.mkdir_p(dir) unless Dir.exist?(dir)
+          FileUtils.mkdir_p(dir)
 
-            if @writer && @writer.respond_to?(:write)
-              @writer.write(path, payload)
-            else
-              default_write(path, payload)
-            end
+          if @writer.respond_to?(:write)
+            @writer.write(path, payload)
+          else
+            default_write(path, payload)
+          end
         end
 
         private

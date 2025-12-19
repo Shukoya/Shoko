@@ -2,7 +2,10 @@
 
 require 'json'
 require 'fileutils'
+require 'time'
+
 require_relative '../../../constants'
+require_relative '../../../helpers/terminal_sanitizer'
 require_relative '../../models/bookmark'
 require_relative '../../models/bookmark_data'
 require_relative 'file_store_utils'
@@ -31,19 +34,23 @@ module EbookReader
             entry = {
               'chapter' => bookmark_data.chapter,
               'line_offset' => bookmark_data.line_offset,
-              'text' => bookmark_data.text.to_s,
+              'text' => sanitize_text(bookmark_data.text),
               'timestamp' => Time.now.iso8601,
             }
             list << entry
             all[path] = list
             save_all(all)
-            true
+            entry
           end
 
           def get(path)
             all = load_all
             list = all[path.to_s] || []
-            list.map { |h| EbookReader::Domain::Models::Bookmark.from_h(h) }
+            list.map do |h|
+              safe = h.is_a?(Hash) ? h.dup : {}
+              safe['text'] = sanitize_text(safe['text'])
+              EbookReader::Domain::Models::Bookmark.from_h(safe)
+            end
           rescue StandardError
             []
           end
@@ -55,12 +62,14 @@ module EbookReader
             # Delete by matching serialized representation
             predicate = if bookmark.respond_to?(:to_h)
                           target = bookmark.to_h
-                          ->(h) { equivalent?(h, target) }
+                          ->(stored_entry) { equivalent?(stored_entry, target) }
                         else
                           # Best-effort: match by position
                           chapter = bookmark.respond_to?(:chapter_index) ? bookmark.chapter_index : bookmark[:chapter_index]
                           offset = bookmark.respond_to?(:line_offset) ? bookmark.line_offset : bookmark[:line_offset]
-                          ->(h) { h['chapter'] == chapter && h['line_offset'] == offset }
+                          lambda { |stored_entry|
+                            stored_entry['chapter'] == chapter && stored_entry['line_offset'] == offset
+                          }
                         end
             list.reject!(&predicate)
             list.empty? ? all.delete(key) : all[key] = list
@@ -74,10 +83,14 @@ module EbookReader
 
           attr_reader :file_writer, :path_service
 
-          def equivalent?(h, target)
-            h['chapter'] == target['chapter'] &&
-              h['line_offset'] == target['line_offset'] &&
-              (h['text'].to_s == target['text'].to_s)
+          def equivalent?(stored_entry, target)
+            stored_entry['chapter'] == target['chapter'] &&
+              stored_entry['line_offset'] == target['line_offset'] &&
+              (stored_entry['text'].to_s == target['text'].to_s)
+          end
+
+          def sanitize_text(text)
+            EbookReader::Helpers::TerminalSanitizer.sanitize(text.to_s, preserve_newlines: false, preserve_tabs: false)
           end
 
           def load_all

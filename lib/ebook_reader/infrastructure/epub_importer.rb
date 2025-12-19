@@ -6,6 +6,7 @@ require 'rexml/document'
 require_relative '../errors'
 require_relative '../helpers/html_processor'
 require_relative '../helpers/opf_processor'
+require_relative '../helpers/terminal_sanitizer'
 require_relative '../domain/models/chapter'
 require_relative '../domain/models/toc_entry'
 require_relative 'perf_tracer'
@@ -73,7 +74,7 @@ module EbookReader
 
       def read_container(zip)
         Infrastructure::PerfTracer.measure('epub.read_container') do
-          zip.read(CONTAINER_PATH)
+          normalize_text(zip.read(CONTAINER_PATH))
         end
       rescue Zip::Error
         raise EbookReader::EPUBParseError.new('Missing META-INF/container.xml', @epub_path)
@@ -114,7 +115,6 @@ module EbookReader
             blocks: nil,
             raw_content: raw
           )
-          ensure_lines_present(chapter)
 
           chapters << chapter
           hrefs << resolved_href
@@ -154,9 +154,7 @@ module EbookReader
       def resolve_toc_target(opf_path, entry)
         return nil unless entry
 
-        if entry.is_a?(Hash) && entry[:target]
-          return entry[:target].to_s
-        end
+        return entry[:target].to_s if entry.is_a?(Hash) && entry[:target]
 
         href = entry.is_a?(Hash) ? entry[:href] : nil
         return nil unless href
@@ -200,8 +198,22 @@ module EbookReader
       end
 
       def normalize_text(content)
-        content.force_encoding(Encoding::UTF_8)
-        content.delete_prefix('﻿')
+        bytes = String(content).dup
+        bytes.force_encoding(Encoding::BINARY)
+        bytes = bytes.delete_prefix("\xEF\xBB\xBF".b) # UTF-8 BOM
+
+        declared = bytes[/\A\s*<\?xml[^>]*encoding=["']([^"']+)["']/i, 1]
+        encoding = begin
+          declared ? Encoding.find(declared) : Encoding::UTF_8
+        rescue StandardError
+          Encoding::UTF_8
+        end
+
+        text = bytes.dup
+        text.force_encoding(encoding)
+        text = text.encode(Encoding::UTF_8, invalid: :replace, undef: :replace, replace: "\uFFFD")
+        text = text.delete_prefix("\uFEFF")
+        Helpers::TerminalSanitizer.sanitize_xml_source(text, preserve_newlines: true, preserve_tabs: true)
       end
 
       def resolve_href(opf_path, href)
@@ -219,16 +231,9 @@ module EbookReader
         Helpers::HTMLProcessor.extract_title(raw_content) || "Chapter #{number}"
       end
 
-      def ensure_lines_present(chapter)
-        return unless chapter
-        return if chapter.lines && !chapter.lines.empty?
-
-        plain = Helpers::HTMLProcessor.html_to_text(chapter.raw_content.to_s)
-        chapter.lines = plain.split("\n").map(&:rstrip)
-      end
-
       def fallback_title(path)
-        File.basename(path, File.extname(path)).tr('_', ' ')
+        raw = File.basename(path, File.extname(path)).tr('_', ' ')
+        Helpers::TerminalSanitizer.sanitize(raw, preserve_newlines: false, preserve_tabs: false)
       end
     end
   end

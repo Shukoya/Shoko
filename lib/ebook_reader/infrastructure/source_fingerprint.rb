@@ -33,7 +33,7 @@ module EbookReader
           end
         end
 
-        buffer = +"v#{VERSION}\0#{size_bytes}\0"
+        buffer = "v#{VERSION}\0#{size_bytes}\0"
         buffer << head
         buffer << "\0"
         buffer << tail
@@ -55,4 +55,3 @@ module EbookReader
     end
   end
 end
-

@@ -35,7 +35,8 @@ module EbookReader
 
           cancel_plain = '[ESC] Cancel'
           cancel_width = EbookReader::Helpers::TextMetrics.visible_length(cancel_plain)
-          cancel_col = [width - cancel_width - 1, 2 + EbookReader::Helpers::TextMetrics.visible_length(title_plain) + 2].max
+          cancel_col = [width - cancel_width - 1,
+                        2 + EbookReader::Helpers::TextMetrics.visible_length(title_plain) + 2].max
           surface.write(bounds, 1, cancel_col, "#{COLOR_TEXT_DIM}#{cancel_plain}#{reset}")
 
           # File path input

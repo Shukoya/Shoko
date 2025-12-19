@@ -22,7 +22,6 @@ module EbookReader
 
           @queue << block
         end
-        true
       end
 
       def shutdown(timeout: 2.0)

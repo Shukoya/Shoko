@@ -89,9 +89,9 @@ module EbookReader
         @visible = false
       end
 
-      def contains?(x, y)
+      def contains?(col, row)
         bounds = Components::Rect.new(x: @x, y: @y, width: @width, height: @height)
-        @coordinate_service.within_bounds?(x, y, bounds)
+        @coordinate_service.within_bounds?(col, row, bounds)
       end
 
       private

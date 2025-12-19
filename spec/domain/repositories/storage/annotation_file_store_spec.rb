@@ -36,4 +36,18 @@ RSpec.describe EbookReader::Domain::Repositories::Storage::AnnotationFileStore d
     expect(store.delete(path, id)).to be true
     expect(store.get(path)).to be_empty
   end
+
+  it 'sanitizes annotation text and notes' do
+    store = described_class.new(file_writer:, path_service:)
+    path = '/tmp/book.epub'
+    ok = store.add(path, "t\u009B31mX", "n\e]2;HACK\a", { start: 1, end: 2 }, 0)
+    expect(ok).to be true
+
+    list = store.get(path)
+    expect(list.length).to eq(1)
+    expect(list.first['text']).to eq('tX')
+    expect(list.first['note']).to eq('n')
+    expect(list.first['text']).not_to include("\u009B")
+    expect(list.first['note']).not_to include("\e")
+  end
 end

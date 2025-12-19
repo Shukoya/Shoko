@@ -7,9 +7,11 @@ require_relative '../domain/models/chapter'
 require_relative '../domain/models/toc_entry'
 require_relative '../domain/models/content_block'
 require_relative '../errors'
+require_relative '../helpers/terminal_sanitizer'
 require_relative 'cache_paths'
 require_relative 'json_cache_store'
 require_relative 'cache_pointer_manager'
+require_relative 'lazy_file_string'
 require_relative 'logger'
 
 module EbookReader
@@ -18,10 +20,11 @@ module EbookReader
     # Pointer files keep lightweight `.cache` discovery while the bulk payload
     # lives in JSON + binary blobs.
     class EpubCache
-      CACHE_VERSION   = 2
+      CACHE_VERSION   = 3
       CACHE_EXTENSION = '.cache'
       SHA256_HEX_PATTERN = /\A[0-9a-f]{64}\z/i
 
+      # Immutable representation of the persisted cache payload.
       CachePayload = Struct.new(
         :version,
         :source_sha256,
@@ -33,6 +36,7 @@ module EbookReader
         keyword_init: true
       )
 
+      # Normalized in-memory representation of a parsed EPUB.
       BookData = Struct.new(
         :title,
         :language,
@@ -46,6 +50,7 @@ module EbookReader
         :metadata,
         :container_path,
         :container_xml,
+        :chapters_generation,
         keyword_init: true
       )
 
@@ -83,6 +88,7 @@ module EbookReader
         return nil unless payload
 
         return payload unless strict
+
         payload_valid?(payload) ? payload : invalidate_and_nil
       rescue EbookReader::CacheLoadError
         nil
@@ -102,23 +108,10 @@ module EbookReader
 
       def write_book!(book_data)
         ensure_sha!
-        generated_at = Time.now.utc
-        source_mtime = safe_mtime(@source_path)
+        return nil unless persist_payload(book_data, layouts_hash: {})
 
-        persist_payload(@source_sha, @source_path, source_mtime, generated_at, book_data, {})
-
-        payload = CachePayload.new(
-          version: CACHE_VERSION,
-          source_sha256: @source_sha,
-          source_path: @source_path,
-          source_mtime: source_mtime,
-          generated_at: generated_at,
-          book: book_data,
-          layouts: {}
-        )
-        @payload_cache = payload
         @layout_cache = {}
-        payload
+        @payload_cache = load_payload_from_store(@source_sha)
       rescue StandardError => e
         Logger.debug('EpubCache: failed to write cache', path: @cache_path, error: e.message)
         nil
@@ -126,9 +119,7 @@ module EbookReader
 
       def load_layout(key)
         key_str = key.to_s
-        if @layout_cache.key?(key_str)
-          return deep_dup(@layout_cache[key_str])
-        end
+        return deep_dup(@layout_cache[key_str]) if @layout_cache.key?(key_str)
 
         payload = @cache_store.load_layout(@source_sha, key_str)
         return nil unless payload
@@ -141,18 +132,12 @@ module EbookReader
 
       def mutate_layouts!
         ensure_sha!
-        mutated = nil
+        updated_layouts = nil
         success = @cache_store.mutate_layouts(@source_sha) do |layouts|
-          mutated = {}
           yield layouts
-          layouts.each { |k, v| mutated[k.to_s] = deep_dup(v) }
+          updated_layouts = layouts
         end
-        if success
-          @layout_cache = mutated || {}
-          if @payload_cache
-            @payload_cache.layouts = @layout_cache.transform_values { |value| deep_dup(value) }
-          end
-        end
+        update_layout_cache_from_layouts(updated_layouts) if success
         success
       rescue StandardError => e
         Logger.debug('EpubCache: failed to update layouts', path: @cache_path, error: e.message)
@@ -187,446 +172,24 @@ module EbookReader
         []
       end
 
-      private
-
-      def setup_source_reference
-        if self.class.cache_file?(@raw_path)
-          @cache_path = @raw_path
-          @pointer_manager = CachePointerManager.new(@cache_path)
-          pointer = @pointer_manager.read
-          if pointer
-            @source_type = :cache_pointer
-            @pointer_metadata = pointer
-            @source_sha = pointer['sha256']
-            @source_path = pointer['source_path']
-          else
-            raise EbookReader::CacheLoadError.new(@raw_path, 'invalid pointer file')
-          end
-        else
-          raise EbookReader::FileNotFoundError, @raw_path unless File.file?(@raw_path)
-
-          @source_type = :epub
-          @source_path = @raw_path
-          @source_sha = Digest::SHA256.file(@source_path).hexdigest
-          @cache_path = self.class.cache_path_for_sha(@source_sha, cache_root: @cache_root)
-          raise EbookReader::CacheLoadError.new(@raw_path, 'invalid sha256 digest') unless @cache_path
-          @pointer_manager = CachePointerManager.new(@cache_path)
-          @pointer_metadata = @pointer_manager.read
-        end
-      end
-
-      def ensure_sha!
-        return if @source_sha
-
-        if @source_type == :epub
-          @source_sha = Digest::SHA256.file(@source_path).hexdigest
-        elsif @pointer_metadata
-          @source_sha = @pointer_metadata['sha256']
-        end
-      end
-
-      def load_payload
-        return @payload_cache if @payload_cache
-
+      def chapters_complete?(expected_count, generation: nil)
         ensure_sha!
-        payload = load_payload_from_store(@source_sha)
-
-        if payload
-          @payload_cache = payload
-          layouts = payload.layouts || {}
-          @layout_cache = layouts.transform_values { |value| deep_dup(value) }
+        gen = generation
+        if gen.nil? && @payload_cache&.book.respond_to?(:chapters_generation)
+          gen = @payload_cache.book.chapters_generation
         end
-        payload
-      end
+        return false if gen.to_s.strip.empty?
 
-      def load_payload_from_store(sha)
-        return nil unless sha
-
-        raw = @cache_store.fetch_payload(sha)
-        return nil unless raw
-
-        ensure_pointer_from_metadata(raw.metadata_row)
-        Serializer.build_payload_from_store(raw)
-      rescue StandardError => e
-        Logger.debug('EpubCache: failed to load cache', sha:, error: e.message)
-        nil
-      end
-
-      def persist_payload(sha, source_path, source_mtime, generated_at, book_data, layouts_hash)
-        engine = cache_engine
-        pointer_metadata = {
-          'format' => CachePointerManager::POINTER_FORMAT,
-          'version' => CachePointerManager::POINTER_VERSION,
-          'sha256' => sha,
-          'source_path' => source_path,
-          'generated_at' => (generated_at || Time.now.utc).iso8601,
-          'engine' => engine
-        }
-
-        serialized = Serializer.serialize(book_data, json: false)
-        layouts_serialized = Serializer.serialize_layouts(layouts_hash)
-
-        success = @cache_store.write_payload(
-          sha: sha,
-          source_path: source_path,
-          source_mtime: source_mtime,
-          generated_at: generated_at,
-          serialized_book: serialized[:book],
-          serialized_chapters: serialized[:chapters],
-          serialized_resources: serialized[:resources],
-          serialized_layouts: layouts_serialized
-        )
-        return unless success
-
-        @pointer_manager ||= CachePointerManager.new(@cache_path)
-        @pointer_manager.write(pointer_metadata)
-        @pointer_metadata = pointer_metadata
-        @source_type = :cache_pointer
-      end
-
-      def payload_valid?(payload)
-        payload.is_a?(CachePayload) &&
-          payload.version.to_i == CACHE_VERSION &&
-          payload.book.is_a?(BookData)
-      end
-
-      def payload_matches_source?(payload, strict:)
-        return true if cache_file? && !payload.source_path
-
-        ensure_sha!
-        return false unless payload.source_sha256 == @source_sha
-
-        source_mtime = safe_mtime(@source_path)
-        payload_mtime = payload.source_mtime
-        return true unless source_mtime && payload_mtime
-
-        tolerance = strict ? 1e-3 : 1.0
-        (source_mtime.to_f - payload_mtime.to_f).abs <= tolerance
-      end
-
-      def safe_mtime(path)
-        File.mtime(path)&.utc
+        @cache_store.respond_to?(:chapters_complete?) &&
+          @cache_store.chapters_complete?(@source_sha, gen, expected_count: expected_count)
       rescue StandardError
-        nil
-      end
-
-      def cache_layout!(key, payload)
-        @layout_cache ||= {}
-        @layout_cache[key] = deep_dup(payload)
-        if @payload_cache
-          @payload_cache.layouts ||= {}
-          @payload_cache.layouts[key] = deep_dup(payload)
-        end
-      end
-
-      def deep_dup(obj)
-        deep_dup_value(obj)
-      end
-
-      def invalidate_and_nil
-        invalidate!
-        nil
-      end
-
-      def ensure_pointer_from_metadata(record)
-        return unless record
-        ensure_sha!
-        record_engine = Serializer.value_for(record, :engine) || cache_engine
-        pointer_metadata = {
-          'format' => CachePointerManager::POINTER_FORMAT,
-          'version' => CachePointerManager::POINTER_VERSION,
-          'sha256' => Serializer.value_for(record, :source_sha),
-          'source_path' => Serializer.value_for(record, :source_path),
-          'generated_at' => Serializer.coerce_time(Serializer.value_for(record, :generated_at))&.iso8601 || Time.now.utc.iso8601,
-          'engine' => record_engine
-        }
-
-        current = @pointer_manager&.read
-        return if current && current['sha256'] == pointer_metadata['sha256']
-
-        @pointer_manager ||= CachePointerManager.new(@cache_path)
-        @pointer_manager.write(pointer_metadata)
-        @pointer_metadata = pointer_metadata
-        @source_type = :cache_pointer
-      end
-
-      def cache_engine
-        engine = @cache_store&.respond_to?(:engine) ? @cache_store.engine : nil
-        engine || JsonCacheStore::ENGINE
-      rescue StandardError
-        JsonCacheStore::ENGINE
-      end
-
-      def deep_dup_value(value)
-        case value
-        when NilClass, TrueClass, FalseClass, Numeric, Symbol
-          value
-        when String
-          value.dup
-        when Array
-          value.map { |v| deep_dup_value(v) }
-        when Hash
-          value.each_with_object({}) { |(k, v), acc| acc[k] = deep_dup_value(v) }
-        else
-          value
-        end
-      end
-
-      module Serializer
-        module_function
-
-        def serialize(book_data, json: false)
-          {
-            book: serialize_book(book_data, json:),
-            chapters: serialize_chapters(book_data.chapters, json:),
-            resources: serialize_resources(book_data.resources)
-          }
-        end
-
-        def serialize_layouts(layouts_hash)
-          result = {}
-          Array(layouts_hash).each do |key, payload|
-            result[key.to_s] = payload
-          end
-          result
-        end
-
-        def serialize_book(book, json: true)
-          authors = Array(book.authors)
-          metadata = book.metadata || {}
-          spine = Array(book.spine)
-          hrefs = Array(book.chapter_hrefs)
-          toc = Array(book.toc_entries).map { |entry| serialize_toc_entry(entry, json:) }
-          authors_field = json ? JSON.generate(authors) : authors
-          metadata_field = json ? JSON.generate(metadata) : metadata
-          spine_field = json ? JSON.generate(spine) : spine
-          hrefs_field = json ? JSON.generate(hrefs) : hrefs
-          toc_field = json ? JSON.generate(toc) : toc
-          {
-            payload_version: CACHE_VERSION,
-            cache_version: CACHE_VERSION,
-            title: book.title,
-            language: book.language,
-            authors_json: authors_field,
-            metadata_json: metadata_field,
-            opf_path: book.opf_path,
-            spine_json: spine_field,
-            chapter_hrefs_json: hrefs_field,
-            toc_json: toc_field,
-            container_path: book.container_path,
-            container_xml: book.container_xml.to_s
-          }
-        end
-
-        def serialize_chapters(chapters, json: true)
-          Array(chapters).each_with_index.map do |chapter, idx|
-            lines = Array(chapter.lines)
-            metadata = chapter.metadata || {}
-            blocks = serialize_blocks(chapter.blocks, json:)
-            lines_field = json ? JSON.generate(lines) : lines
-            metadata_field = json ? JSON.generate(metadata) : metadata
-            blocks_field = json ? JSON.generate(blocks) : blocks
-            {
-              position: idx,
-              number: chapter.number,
-              title: chapter.title,
-              lines_json: lines_field,
-              metadata_json: metadata_field,
-              blocks_json: blocks_field,
-              raw_content: chapter.raw_content
-            }
-          end
-        end
-
-        def serialize_blocks(blocks, json: true)
-          Array(blocks).map do |block|
-            {
-              type: value_for(block, :type),
-              level: value_for(block, :level),
-              metadata: value_for(block, :metadata),
-              segments: Array(value_for(block, :segments)).map do |segment|
-                {
-                  text: value_for(segment, :text),
-                  styles: value_for(segment, :styles)
-                }
-              end
-            }
-          end
-        end
-
-        def serialize_resources(resources)
-          return [] unless resources
-
-          resources.map do |path, data|
-            data = String(data).dup
-            data.force_encoding(Encoding::BINARY)
-            {
-              path: path.to_s,
-              data: data
-            }
-          end
-        end
-
-        def serialize_toc_entry(entry, json: true)
-          {
-            title: value_for(entry, :title),
-            href: value_for(entry, :href),
-            level: value_for(entry, :level),
-            chapter_index: value_for(entry, :chapter_index),
-            navigable: value_for(entry, :navigable)
-          }
-        end
-
-        def build_payload_from_store(raw_payload)
-          metadata = raw_payload.metadata_row || {}
-          book = deserialize_book(metadata, raw_payload.chapters, raw_payload.resources)
-          layouts = normalize_layouts(raw_payload.layouts)
-
-          CachePayload.new(
-            version: value_for(metadata, :cache_version) || CACHE_VERSION,
-            source_sha256: value_for(metadata, :source_sha),
-            source_path: value_for(metadata, :source_path),
-            source_mtime: coerce_time(value_for(metadata, :source_mtime)),
-            generated_at: coerce_time(value_for(metadata, :generated_at)),
-            book: book,
-            layouts: layouts
-          )
-        end
-
-        def deserialize_book(book_row, chapter_rows, resource_rows)
-          authors = value_for(book_row, :authors_json)
-          authors = JSON.parse(authors || '[]') if authors.is_a?(String)
-          metadata = value_for(book_row, :metadata_json)
-          metadata = JSON.parse(metadata || '{}') if metadata.is_a?(String)
-          spine = value_for(book_row, :spine_json)
-          spine = JSON.parse(spine || '[]') if spine.is_a?(String)
-          hrefs = value_for(book_row, :chapter_hrefs_json)
-          hrefs = JSON.parse(hrefs || '[]') if hrefs.is_a?(String)
-          toc = value_for(book_row, :toc_json)
-          toc = JSON.parse(toc || '[]') if toc.is_a?(String)
-          BookData.new(
-            title: value_for(book_row, :title),
-            language: value_for(book_row, :language),
-            authors: Array(authors),
-            chapters: deserialize_chapters(chapter_rows),
-            toc_entries: deserialize_toc(toc),
-            opf_path: value_for(book_row, :opf_path),
-            spine: Array(spine),
-            chapter_hrefs: Array(hrefs),
-            resources: deserialize_resources(resource_rows),
-            metadata: metadata || {},
-            container_path: value_for(book_row, :container_path),
-            container_xml: value_for(book_row, :container_xml)
-          )
-        end
-
-        def deserialize_chapters(rows)
-          Array(rows).map do |row|
-            lines = value_for(row, :lines_json)
-            lines = JSON.parse(lines || '[]') if lines.is_a?(String)
-            lines = [] unless lines.is_a?(Array)
-            metadata = value_for(row, :metadata_json)
-            metadata = JSON.parse(metadata || '{}') if metadata.is_a?(String)
-            EbookReader::Domain::Models::Chapter.new(
-              number: value_for(row, :number),
-              title: value_for(row, :title),
-              lines: lines,
-              metadata: metadata || {},
-              blocks: deserialize_blocks(value_for(row, :blocks_json)),
-              raw_content: value_for(row, :raw_content)
-            )
-          end
-        end
-
-        def deserialize_blocks(json)
-          return nil unless json
-
-          data = json.is_a?(String) ? JSON.parse(json) : json
-          return nil unless data.is_a?(Array)
-
-          data.map do |block|
-            EbookReader::Domain::Models::ContentBlock.new(
-              type: value_for(block, :type),
-              level: value_for(block, :level),
-              metadata: value_for(block, :metadata),
-              segments: Array(value_for(block, :segments)).map do |seg|
-                EbookReader::Domain::Models::TextSegment.new(
-                  text: value_for(seg, :text),
-                  styles: value_for(seg, :styles) || {}
-                )
-              end
-            )
-          end
-        end
-
-        def deserialize_toc(json)
-          data = json.is_a?(String) ? JSON.parse(json || '[]') : json
-          Array(data).map do |entry|
-            navigable = value_for(entry, :navigable)
-            navigable = true if navigable.nil?
-            EbookReader::Domain::Models::TOCEntry.new(
-              title: value_for(entry, :title),
-              href: value_for(entry, :href),
-              level: value_for(entry, :level),
-              chapter_index: value_for(entry, :chapter_index),
-              navigable: navigable
-            )
-          end
-        end
-
-        def deserialize_resources(rows)
-          Array(rows).each_with_object({}) do |row, acc|
-            data = value_for(row, :data)
-            data = data.to_s.dup
-            data.force_encoding(Encoding::BINARY)
-            path = value_for(row, :path)
-            acc[path] = data if path
-          end
-        end
-
-        def coerce_time(raw)
-          return raw if raw.is_a?(Time)
-          return nil unless raw
-
-          Time.at(raw.to_f).utc
-        rescue StandardError
-          nil
-        end
-
-        def normalize_layouts(raw_layouts)
-          return {} unless raw_layouts
-
-          if raw_layouts.is_a?(Hash)
-            raw_layouts.each_with_object({}) do |(key, payload), acc|
-              normalized = normalize_layout_payload(payload)
-              acc[key.to_s] = normalized if normalized
-            end
-          else
-            Array(raw_layouts).each_with_object({}) do |row, acc|
-              key = value_for(row, :key)
-              payload = value_for(row, :payload_json) || value_for(row, :payload)
-              normalized = normalize_layout_payload(payload)
-              acc[key.to_s] = normalized if key && normalized
-            end
-          end
-        end
-
-        def normalize_layout_payload(payload)
-          return nil unless payload
-
-          payload.is_a?(String) ? JSON.parse(payload) : payload
-        rescue JSON::ParserError
-          nil
-        end
-
-        def value_for(obj, key)
-          if obj.respond_to?(key)
-            obj.public_send(key)
-          elsif obj.respond_to?(:[])
-            obj[key] || obj[key.to_s]
-          end
-        end
+        false
       end
     end
   end
 end
+
+require_relative 'epub_cache/serializer'
+require_relative 'epub_cache/source_reference'
+require_relative 'epub_cache/memory_cache'
+require_relative 'epub_cache/persistence'

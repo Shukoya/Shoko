@@ -107,11 +107,6 @@ module EbookReader
           @subscribers[event_type].any?
         end
 
-        # Backward-compatible alias
-        def has_subscribers?(event_type)
-          subscribers?(event_type)
-        end
-
         # Clear all subscribers (useful for testing)
         def clear_subscribers
           @subscribers.clear

@@ -2,6 +2,7 @@
 
 require_relative '../base_component'
 require_relative '../../constants/ui_constants'
+require_relative '../../helpers/terminal_sanitizer'
 require_relative '../ui/text_utils'
 require_relative '../ui/list_helpers'
 
@@ -86,7 +87,9 @@ module EbookReader
           count = current_annotations.length
           all_mode = (@mode == :all)
           book_label = if @current_book_path
-                         File.basename(@current_book_path)
+                         raw = File.basename(@current_book_path)
+                         EbookReader::Helpers::TerminalSanitizer.sanitize(raw, preserve_newlines: false,
+                                                                               preserve_tabs: false)
                        else
                          (all_mode ? 'All Books' : 'No book selected')
                        end
@@ -218,7 +221,13 @@ module EbookReader
           note_tr = pad_right(truncate_text(note, note_w), note_w)
           if in_all
             bp = annotation[:book_path]
-            book = bp ? File.basename(bp) : ''
+            book = if bp
+                     raw = File.basename(bp)
+                     EbookReader::Helpers::TerminalSanitizer.sanitize(raw, preserve_newlines: false,
+                                                                           preserve_tabs: false)
+                   else
+                     ''
+                   end
             book_col = pad_right(truncate_text(book, book_w), book_w)
             date_col = pad_right(truncate_text(created, date_w), date_w)
             line = [pointer, ' ', idx, '  ', ch_col, '  ', snippet, '  ', note_tr,

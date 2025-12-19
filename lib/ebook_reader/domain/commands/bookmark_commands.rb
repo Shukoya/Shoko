@@ -71,6 +71,7 @@ module EbookReader
         end
       end
 
+      # Command for navigating and mutating the in-reader bookmarks list.
       class BookmarkListCommand < BaseCommand
         def initialize(list_action, name: nil, description: nil)
           @list_action = list_action
@@ -154,7 +155,7 @@ module EbookReader
           bookmark_service.remove_bookmark(bookmark)
 
           # Adjust selection if needed
-          new_bookmarks = bookmark_service.get_bookmarks
+          new_bookmarks = bookmark_service.bookmarks
           nb_size = new_bookmarks.size
           return unless selected_index >= nb_size && nb_size.positive?
 

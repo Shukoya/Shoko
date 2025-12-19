@@ -5,6 +5,7 @@ require_relative 'helpers'
 module EbookReader
   module Input
     module CommandBuilders
+      # Builds key bindings for up/down navigation of a selection field.
       class NavigationBuilder
         include Helpers
 

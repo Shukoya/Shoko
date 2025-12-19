@@ -92,9 +92,7 @@ module EbookReader
           label = label_text(item)
           colors = row_colors(selected)
           line = "#{colors[:prefix]}#{colors[:fg]}#{label}"
-          if value_text && !value_text.to_s.empty?
-            line = "#{line}#{Terminal::ANSI::RESET}  #{value_color}#{value_text}"
-          end
+          line = "#{line}#{Terminal::ANSI::RESET}  #{value_color}#{value_text}" if value_text && !value_text.to_s.empty?
           "#{line}#{Terminal::ANSI::RESET}"
         end
 
@@ -163,7 +161,9 @@ module EbookReader
         end
 
         def button_group_width(buttons)
-          buttons.sum { |_value, label| EbookReader::Helpers::TextMetrics.visible_length(label) + 2 } + (buttons.length - 1)
+          buttons.sum do |_value, label|
+            EbookReader::Helpers::TextMetrics.visible_length(label) + 2
+          end + (buttons.length - 1)
         end
 
         def toggled_action?(action)
@@ -212,11 +212,15 @@ module EbookReader
 
         def format_highlight_quotes
           value = @state.get(%i[config highlight_quotes])
-          (value.nil? ? true : !!value) ? 'On' : 'Off'
+          if value.nil? || !!value
+            'On'
+          else
+            'Off'
+          end
         end
 
         def toggle_kitty_images_value
-          enabled = !!@state.get(%i[config kitty_images])
+          enabled = !@state.get(%i[config kitty_images]).nil?
           text = enabled ? 'Enabled' : 'Disabled'
           color = enabled ? COLOR_TEXT_SUCCESS : COLOR_TEXT_DIM
           [text, color]

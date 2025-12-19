@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'set'
 require_relative '../infrastructure/background_worker'
 require_relative '../infrastructure/atomic_file_writer'
 require_relative '../infrastructure/performance_monitor'
@@ -149,8 +148,8 @@ module EbookReader
         container.register(:pagination_cache, Infrastructure::PaginationCache)
         container.register(:cache_paths, Infrastructure::CachePaths)
         container.register(:atomic_file_writer, Infrastructure::AtomicFileWriter)
-        container.register(:epub_cache_factory, lambda { |path| Infrastructure::EpubCache.new(path) })
-        container.register(:epub_cache_predicate, lambda { |path| Infrastructure::EpubCache.cache_file?(path) })
+        container.register(:epub_cache_factory, ->(path) { Infrastructure::EpubCache.new(path) })
+        container.register(:epub_cache_predicate, ->(path) { Infrastructure::EpubCache.cache_file?(path) })
         container.register(:background_worker_factory,
                            lambda do |name: 'reader-worker'|
                              Infrastructure::BackgroundWorker.new(name:)
@@ -261,8 +260,8 @@ module EbookReader
                            RSpec::Mocks::Double.new('Logger', info: nil, error: nil, debug: nil))
         container.register(:atomic_file_writer, Infrastructure::AtomicFileWriter)
         container.register(:cache_paths, Infrastructure::CachePaths)
-        container.register(:epub_cache_factory, lambda { |path| Infrastructure::EpubCache.new(path) })
-        container.register(:epub_cache_predicate, lambda { |path| Infrastructure::EpubCache.cache_file?(path) })
+        container.register(:epub_cache_factory, ->(path) { Infrastructure::EpubCache.new(path) })
+        container.register(:epub_cache_predicate, ->(path) { Infrastructure::EpubCache.cache_file?(path) })
         container.register(:file_writer, Domain::Services::FileWriterService.new(container))
         container.register(:path_service, Domain::Services::PathService.new(container))
         container.register(:instrumentation_service, Domain::Services::InstrumentationService.new(container))

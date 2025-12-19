@@ -14,6 +14,7 @@ module EbookReader
   module Input
     # Factory for creating common input command patterns
     module CommandFactory
+      # Builders for list-like up/down navigation commands.
       module Navigation
         module_function
 
@@ -27,6 +28,7 @@ module EbookReader
         end
       end
 
+      # Builders for high-level reader control commands (toggles, exit actions).
       module Control
         module_function
 
@@ -39,6 +41,7 @@ module EbookReader
         end
       end
 
+      # Builders for menu selection commands.
       module Menu
         module_function
 
@@ -47,6 +50,7 @@ module EbookReader
         end
       end
 
+      # Builders for editable text input command maps.
       module TextInput
         module_function
 
@@ -57,6 +61,7 @@ module EbookReader
         end
       end
 
+      # Builders for bookmark-mode command maps.
       module Bookmarks
         module_function
 

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../helpers/terminal_sanitizer'
+
 module EbookReader
   module Controllers
     module Menu
@@ -88,7 +90,7 @@ module EbookReader
 
         def handle_character_input(key)
           char = key.to_s
-          return unless char.length == 1 && char.ord >= 32
+          return unless EbookReader::Helpers::TerminalSanitizer.printable_char?(char)
 
           file_input = (selectors.file_input(state) || '').to_s
           state.dispatch(menu_action(file_input: file_input + char))

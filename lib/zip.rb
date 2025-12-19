@@ -15,28 +15,112 @@ require 'zlib'
 module Zip
   class Error < StandardError; end
 
+  # Metadata for a Central Directory entry.
+  Entry = Struct.new(
+    :name,
+    :compressed_size,
+    :uncompressed_size,
+    :compression_method,
+    :gp_flags,
+    :local_header_offset,
+    keyword_init: true
+  )
+
+  EOCD_SIG = [0x06054B50].pack('V').freeze # "PK\x05\x06"
+  CDH_SIG  = [0x02014B50].pack('V').freeze # "PK\x01\x02"
+  LFH_SIG  = [0x04034B50].pack('V').freeze # "PK\x03\x04"
+  MAX_EOCD_SCAN = 66_560 # 64 KiB comment + 2 KiB buffer
+  DEFAULT_MAX_ENTRY_COMPRESSED_BYTES = 64 * 1024 * 1024
+  DEFAULT_MAX_ENTRY_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
+  DEFAULT_MAX_TOTAL_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
+  READ_CHUNK_BYTES = 16 * 1024
+
+  # Helpers for indexing entries via the Central Directory.
+  module IndexBuilder
+    private
+
+    def build_index!
+      cd_offset, cd_size = locate_central_directory
+      @io.seek(cd_offset, ::IO::SEEK_SET)
+      stop = cd_offset + cd_size
+      while @io.pos < stop
+        entry = read_central_directory_entry
+        @entries[entry.name] = entry
+      end
+    end
+
+    def read_central_directory_entry
+      verify_signature!(CDH_SIG, 'invalid central directory header signature')
+      fixed = read_exact(42, error_message: 'truncated central directory header')
+
+      gp_flags, method, csize, usize, name_len, extra_len, comment_len, lfh_off =
+        parse_central_directory_fixed_header(fixed)
+
+      name = @io.read(name_len) || ''
+      skip_bytes(extra_len + comment_len)
+      normalized = normalize_name(name)
+      Entry.new(
+        name: normalized,
+        compressed_size: csize,
+        uncompressed_size: usize,
+        compression_method: method,
+        gp_flags: gp_flags,
+        local_header_offset: lfh_off
+      )
+    end
+
+    def parse_central_directory_fixed_header(fixed)
+      fields = fixed.unpack('v v v v v v V V V v v v v v V V')
+      gp_flags = fields[2]
+      method = fields[3]
+      csize = fields[7]
+      usize = fields[8]
+      name_len = fields[9]
+      extra_len = fields[10]
+      comment_len = fields[11]
+      lfh_off = fields[15]
+      [gp_flags, method, csize, usize, name_len, extra_len, comment_len, lfh_off]
+    end
+
+    def locate_central_directory
+      size = @io.stat.size
+      scan = [size, MAX_EOCD_SCAN].min
+      @io.seek(size - scan, ::IO::SEEK_SET)
+      tail = @io.read(scan)
+      raise Error, 'unable to read file tail' unless tail
+
+      idx = tail.rindex(EOCD_SIG)
+      raise Error, 'end of central directory not found' unless idx
+
+      eocd = tail.byteslice(idx, 22)
+      raise Error, 'truncated EOCD' unless eocd && eocd.bytesize == 22
+
+      cd_size = eocd.byteslice(12, 4).unpack1('V')
+      cd_offset = eocd.byteslice(16, 4).unpack1('V')
+      [cd_offset, cd_size]
+    end
+
+    def skip_bytes(byte_count)
+      return if byte_count.to_i <= 0
+
+      @io.seek(byte_count, ::IO::SEEK_CUR)
+    end
+
+    def normalize_name(name)
+      s = name.is_a?(String) ? name.dup : name.to_s
+      s.force_encoding(Encoding::BINARY)
+      s.tr!('\\', '/')
+      s.sub!(%r{^\./}, '')
+      s
+    end
+  end
+
+  # Read-only ZIP archive reader with explicit size safeguards.
   class File
-    Entry = Struct.new(
-      :name,
-      :compressed_size,
-      :uncompressed_size,
-      :compression_method,
-      :gp_flags,
-      :local_header_offset,
-      keyword_init: true
-    )
+    include IndexBuilder
 
-    EOCD_SIG = [0x06054B50].pack('V').freeze # "PK\x05\x06"
-    CDH_SIG  = [0x02014B50].pack('V').freeze # "PK\x01\x02"
-    LFH_SIG  = [0x04034B50].pack('V').freeze # "PK\x03\x04"
-    MAX_EOCD_SCAN = 66_560 # 64 KiB comment + 2 KiB buffer
-    DEFAULT_MAX_ENTRY_COMPRESSED_BYTES = 64 * 1024 * 1024
-    DEFAULT_MAX_ENTRY_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
-    DEFAULT_MAX_TOTAL_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
-    READ_CHUNK_BYTES = 16 * 1024
-
-    def self.open(path, **options)
-      z = new(path, **options)
+    def self.open(path, **)
+      z = new(path, **)
       return z unless block_given?
 
       begin
@@ -90,54 +174,83 @@ module Zip
     end
 
     def read(path)
-      entry = find_entry(path)
-      raise Error, "entry not found: #{path}" unless entry
-      raise Error, "cannot read directory entry: #{entry.name}" if entry.name.end_with?('/')
-      raise Error, "unsupported encrypted entry: #{entry.name}" if (entry.gp_flags.to_i & 0x1) != 0
-
+      entry = find_entry!(path)
+      ensure_entry_readable!(entry)
       enforce_entry_limits!(entry, requested_name: path)
 
-      # Seek to local file header
-      @io.seek(entry.local_header_offset, ::IO::SEEK_SET)
-      sig = @io.read(4)
-      raise Error, 'invalid local file header signature' unless sig == LFH_SIG
-
-      lfh = @io.read(26)
-      raise Error, 'truncated local file header' unless lfh && lfh.bytesize == 26
-
-      _ver_needed, _, _method_local, _time, _date, _crc32_local,
-        _csize_local, _usize_local, name_len, extra_len = lfh.unpack('v v v v v V V V v v')
-
-      # Skip name + extra to reach data start
-      @io.seek(name_len + extra_len, ::IO::SEEK_CUR)
-
-      case entry.compression_method
-      when 0 # STORE
-        data = @io.read(entry.compressed_size)
-        unless data && data.bytesize == entry.compressed_size
-          raise Error,
-                'truncated compressed data'
-        end
-      when 8 # DEFLATE
-        data = inflate_deflated_entry(entry)
-      else
-        raise Error, "unsupported compression method: #{entry.compression_method}"
-      end
-
-      # Optional sanity check on size
-      if entry.uncompressed_size&.positive? && data.bytesize != entry.uncompressed_size
-        # Some archives may omit sizes in local header and rely on data descriptor;
-        # we trust Central Directory sizes; mismatch indicates corruption.
-        raise Error, 'size mismatch after decompression'
-      end
-
-      # Return binary string
-      enforce_uncompressed_budget!(entry, data.bytesize)
-      @total_uncompressed_bytes += data.bytesize
+      seek_to_entry_data(entry)
+      data = read_entry_payload(entry)
+      verify_uncompressed_size!(entry, data)
+      register_uncompressed_bytes!(entry, data.bytesize)
       data.force_encoding(Encoding::BINARY)
     end
 
     private
+
+    def find_entry!(path)
+      entry = find_entry(path)
+      raise Error, "entry not found: #{path}" unless entry
+
+      entry
+    end
+
+    def ensure_entry_readable!(entry)
+      raise Error, "cannot read directory entry: #{entry.name}" if entry.name.end_with?('/')
+      raise Error, "unsupported encrypted entry: #{entry.name}" if entry.gp_flags.to_i.anybits?(0x1)
+    end
+
+    def seek_to_entry_data(entry)
+      @io.seek(entry.local_header_offset, ::IO::SEEK_SET)
+      verify_signature!(LFH_SIG, 'invalid local file header signature')
+      name_len, extra_len = local_file_header_variable_lengths
+      @io.seek(name_len + extra_len, ::IO::SEEK_CUR)
+    end
+
+    def local_file_header_variable_lengths
+      header = read_exact(26, error_message: 'truncated local file header')
+      fields = header.unpack('v v v v v V V V v v')
+      [fields[-2], fields[-1]]
+    end
+
+    def read_entry_payload(entry)
+      case entry.compression_method
+      when 0 then read_stored_entry(entry)
+      when 8 then inflate_deflated_entry(entry)
+      else raise Error, "unsupported compression method: #{entry.compression_method}"
+      end
+    end
+
+    def read_stored_entry(entry)
+      data = @io.read(entry.compressed_size)
+      return data if data && data.bytesize == entry.compressed_size
+
+      raise Error, 'truncated compressed data'
+    end
+
+    def verify_uncompressed_size!(entry, data)
+      expected = entry.uncompressed_size
+      return unless expected&.positive?
+      return if data.bytesize == expected
+
+      raise Error, 'size mismatch after decompression'
+    end
+
+    def register_uncompressed_bytes!(entry, byte_count)
+      enforce_uncompressed_budget!(entry, byte_count)
+      @total_uncompressed_bytes += byte_count
+    end
+
+    def verify_signature!(expected, error_message)
+      sig = @io.read(expected.bytesize)
+      raise Error, error_message unless sig == expected
+    end
+
+    def read_exact(byte_count, error_message:)
+      data = @io.read(byte_count)
+      return data if data && data.bytesize == byte_count
+
+      raise Error, error_message
+    end
 
     def resolve_limit(value, env:, default:)
       candidate = value
@@ -155,135 +268,62 @@ module Zip
       csize = entry.compressed_size.to_i
       usize = entry.uncompressed_size.to_i
 
-      if csize > @max_entry_compressed_bytes
-        raise Error, "entry too large (compressed): #{requested_name}"
-      end
+      raise Error, "entry too large (compressed): #{requested_name}" if csize > @max_entry_compressed_bytes
 
       if usize.positive? && usize > @max_entry_uncompressed_bytes
         raise Error, "entry too large (uncompressed): #{requested_name}"
       end
 
-      if usize.positive? && (@total_uncompressed_bytes + usize) > @max_total_uncompressed_bytes
-        raise Error, "archive exceeds total uncompressed limit: #{requested_name}"
-      end
+      return unless usize.positive? && (@total_uncompressed_bytes + usize) > @max_total_uncompressed_bytes
+
+      raise Error, "archive exceeds total uncompressed limit: #{requested_name}"
     end
 
     def enforce_uncompressed_budget!(entry, bytes)
-      if bytes > @max_entry_uncompressed_bytes
-        raise Error, "entry too large after decompression: #{entry.name}"
-      end
+      raise Error, "entry too large after decompression: #{entry.name}" if bytes > @max_entry_uncompressed_bytes
 
-      if (@total_uncompressed_bytes + bytes) > @max_total_uncompressed_bytes
-        raise Error, "archive exceeds total uncompressed limit: #{entry.name}"
-      end
+      return unless (@total_uncompressed_bytes + bytes) > @max_total_uncompressed_bytes
+
+      raise Error, "archive exceeds total uncompressed limit: #{entry.name}"
     end
 
     def inflate_deflated_entry(entry)
       remaining = entry.compressed_size.to_i
+      with_inflater do |inflater|
+        inflate_from_io(inflater, entry, remaining)
+      end
+    end
+
+    def with_inflater
       inflater = ::Zlib::Inflate.new(-::Zlib::MAX_WBITS)
-      output = +''
-
+      yield inflater
+    rescue ::Zlib::DataError => e
+      raise Error, "invalid deflate data: #{e.message}"
+    ensure
       begin
-        while remaining.positive?
-          chunk = @io.read([remaining, READ_CHUNK_BYTES].min)
-          raise Error, 'truncated compressed data' unless chunk && !chunk.empty?
-
-          remaining -= chunk.bytesize
-          output << inflater.inflate(chunk)
-          enforce_uncompressed_budget!(entry, output.bytesize)
-        end
-
-        output << inflater.finish
-      rescue ::Zlib::DataError => e
-        raise Error, "invalid deflate data: #{e.message}"
-      ensure
-        begin
-          inflater.close
-        rescue StandardError
-          nil
-        end
-      end
-
-      output
-    end
-
-    def build_index!
-      cd_offset, cd_size, _entries = locate_central_directory
-      @io.seek(cd_offset, ::IO::SEEK_SET)
-      stop = cd_offset + cd_size
-      while @io.pos < stop
-        sig = @io.read(4)
-        raise Error, 'invalid central directory header signature' unless sig == CDH_SIG
-
-        fixed = @io.read(42)
-        raise Error, 'truncated central directory header' unless fixed && fixed.bytesize == 42
-
-        _ver_made, _, gp_flags, method, _time, _date, _crc32,
-          csize, usize, name_len, extra_len, comment_len,
-          _disk_start, _int_attr, _ext_attr, lfh_off = fixed.unpack('v v v v v v V V V v v v v v V V')
-
-        name = @io.read(name_len) || ''
-        # Skip extra + comment
-        skip_bytes(extra_len + comment_len)
-
-        name = normalize_name(name)
-        @entries[name] = Entry.new(
-          name: name,
-          compressed_size: csize,
-          uncompressed_size: usize,
-          compression_method: method,
-          gp_flags: gp_flags,
-          local_header_offset: lfh_off
-        )
+        inflater&.close
+      rescue StandardError
+        nil
       end
     end
 
-    def locate_central_directory
-      size = @io.stat.size
-      scan = [size, MAX_EOCD_SCAN].min
-      @io.seek(size - scan, ::IO::SEEK_SET)
-      tail = @io.read(scan)
-      raise Error, 'unable to read file tail' unless tail
-
-      idx = tail.rindex(EOCD_SIG)
-      raise Error, 'end of central directory not found' unless idx
-
-      eocd = tail.byteslice(idx, tail.bytesize - idx)
-      raise Error, 'truncated EOCD' if eocd.bytesize < 22
-
-      # Parse EOCD (22 bytes fixed + comment)
-      # struct:
-      #  4  signature
-      #  2  disk_no
-      #  2  cd_start_disk
-      #  2  entries_on_disk
-      #  2  entries_total
-      #  4  cd_size
-      #  4  cd_offset
-      #  2  comment_len
-      _disk_no      = eocd.byteslice(4, 2).unpack1('v')
-      _cd_disk      = eocd.byteslice(6, 2).unpack1('v')
-      _entries_disk = eocd.byteslice(8, 2).unpack1('v')
-      _entries_tot  = eocd.byteslice(10, 2).unpack1('v')
-      cd_size       = eocd.byteslice(12, 4).unpack1('V')
-      cd_offset     = eocd.byteslice(16, 4).unpack1('V')
-      _comment_len  = eocd.byteslice(20, 2).unpack1('v')
-
-      [cd_offset, cd_size, _entries_tot]
+    def inflate_from_io(inflater, entry, remaining)
+      output = +''
+      remaining_bytes = remaining.to_i
+      while remaining_bytes.positive?
+        chunk = read_deflate_chunk(remaining_bytes)
+        remaining_bytes -= chunk.bytesize
+        output << inflater.inflate(chunk)
+        enforce_uncompressed_budget!(entry, output.bytesize)
+      end
+      output << inflater.finish
     end
 
-    def skip_bytes(n)
-      return if n.to_i <= 0
+    def read_deflate_chunk(remaining_bytes)
+      chunk = @io.read([remaining_bytes, READ_CHUNK_BYTES].min)
+      raise Error, 'truncated compressed data' unless chunk && !chunk.empty?
 
-      @io.seek(n, ::IO::SEEK_CUR)
-    end
-
-    def normalize_name(name)
-      s = name.is_a?(String) ? name.dup : name.to_s
-      s.force_encoding(Encoding::BINARY)
-      s.tr!('\\', '/')
-      s.sub!(%r{^\./}, '')
-      s
+      chunk
     end
   end
 end

@@ -20,18 +20,18 @@ module EbookReader
 
         protected
 
-        def perform(context, _params = {})
+        def perform(context, params = {})
           state = context.dependencies.resolve(:global_state)
           sidebar_visible = state.get(%i[reader sidebar_visible])
 
           if sidebar_visible
             # Route to sidebar command
             sidebar_command = SidebarCommand.new(@sidebar_action)
-            sidebar_command.execute(context, _params)
+            sidebar_command.execute(context, params)
           else
             # Route to navigation command
             nav_command = NavigationCommand.new(@primary_action)
-            nav_command.execute(context, _params)
+            nav_command.execute(context, params)
           end
 
           sidebar_visible ? @sidebar_action : @primary_action

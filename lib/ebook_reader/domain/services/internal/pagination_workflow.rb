@@ -11,26 +11,26 @@ module EbookReader
         class PaginationWorkflow
           Result = Struct.new(:pages, :cached, keyword_init: true)
 
-        def initialize(metrics_calculator:, dependencies:, pagination_cache: nil)
-          @metrics_calculator = metrics_calculator
-          @dependencies = dependencies
-          @pagination_cache = pagination_cache
-        end
-
-        def build_dynamic(doc:, width:, height:, config:, &on_progress)
-          key = dynamic_cache_key(width, height, config)
-          cached = key ? load_cached_pages(doc, key, config) : nil
-          if cached&.any?
-            annotate_profile(pagination_cache: 'hit')
-            return Result.new(pages: cached, cached: true)
+          def initialize(metrics_calculator:, dependencies:, pagination_cache: nil)
+            @metrics_calculator = metrics_calculator
+            @dependencies = dependencies
+            @pagination_cache = pagination_cache
           end
 
-          layout = layout_for(width, height, config)
-          return Result.new(pages: [], cached: false) if layout[:lines_per_page] <= 0
+          def build_dynamic(doc:, width:, height:, config:, &on_progress)
+            key = dynamic_cache_key(width, height, config)
+            cached = key ? load_cached_pages(doc, key, config) : nil
+            if cached&.any?
+              annotate_profile(pagination_cache: 'hit')
+              return Result.new(pages: cached, cached: true)
+            end
 
-          wrapper = resolve_wrapping_service
-          formatter = resolve_formatting_service
-          pages = Internal::DynamicPageMapBuilder.build(
+            layout = layout_for(width, height, config)
+            return Result.new(pages: [], cached: false) if layout[:lines_per_page] <= 0
+
+            wrapper = resolve_wrapping_service
+            formatter = resolve_formatting_service
+            pages = Internal::DynamicPageMapBuilder.build(
               doc,
               layout[:col_width],
               layout[:lines_per_page],

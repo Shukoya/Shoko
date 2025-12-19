@@ -30,7 +30,7 @@ RSpec.describe EbookReader::Input::Commands do
 
   it 'executes array command [symbol, *args]' do
     ctx = Class.new do
-      def sum(a, b) = a + b
+      def sum(first, second) = first + second
     end.new
     expect(described_class.execute([:sum, 2, 3], ctx)).to eq(5)
   end

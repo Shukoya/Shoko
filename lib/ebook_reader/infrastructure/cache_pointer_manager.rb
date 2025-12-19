@@ -9,7 +9,7 @@ module EbookReader
   module Infrastructure
     # Manages pointer files that reference serialized cache payloads on disk.
     class CachePointerManager
-      POINTER_FORMAT  = 'reader-cache'
+      POINTER_FORMAT = 'reader-cache'
       LEGACY_POINTER_FORMAT = 'reader-marshal-cache'
       POINTER_VERSION = 2
       POINTER_KEYS    = %w[format version sha256 source_path generated_at engine].freeze

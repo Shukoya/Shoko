@@ -5,6 +5,7 @@ require_relative 'base_action'
 module EbookReader
   module Domain
     module Actions
+      # Shared helpers for applying whitelisted state update fields.
       module UpdateFieldHelpers
         module_function
 

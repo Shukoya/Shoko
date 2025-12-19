@@ -5,6 +5,7 @@ require_relative 'helpers'
 module EbookReader
   module Input
     module CommandBuilders
+      # Builds key bindings for reader UI control actions (view mode, spacing, help, etc.).
       class ReaderControlBuilder
         include Helpers
 

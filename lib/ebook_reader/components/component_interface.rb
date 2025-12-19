@@ -55,13 +55,13 @@ module EbookReader
       end
 
       # Validate that a class properly implements the interface
-      def self.validate_implementation(klass)
+      def self.validate_implementation!(klass)
         required_methods = %i[mount unmount render]
         missing = required_methods.reject { |method| klass.method_defined?(method) }
 
-        raise ArgumentError, "#{klass} missing required methods: #{missing.join(', ')}" unless missing.empty?
+        return if missing.empty?
 
-        true
+        raise ArgumentError, "#{klass} missing required methods: #{missing.join(', ')}"
       end
 
       # Helper method to ensure a component follows the interface
@@ -69,9 +69,10 @@ module EbookReader
         base.extend(ClassMethods)
       end
 
+      # Class-level helpers mixed into components implementing the interface.
       module ClassMethods
         def validate_interface!
-          ComponentInterface.validate_implementation(self)
+          ComponentInterface.validate_implementation!(self)
         end
       end
     end

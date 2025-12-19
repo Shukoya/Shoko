@@ -40,7 +40,7 @@ module EbookReader
           surface.write(bounds, row, col, message)
         end
 
-        def write_selection_pointer(surface, bounds, row, selected = true)
+        def write_selection_pointer(surface, bounds, row, selected: true)
           text = selected ? EbookReader::Components::RenderStyle.selection_pointer_colored : '  '
           surface.write(bounds, row, 2, text)
         end

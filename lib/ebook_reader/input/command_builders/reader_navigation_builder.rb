@@ -5,6 +5,7 @@ require_relative 'helpers'
 module EbookReader
   module Input
     module CommandBuilders
+      # Builds key bindings for reader navigation actions (pages, chapters, scrolling).
       class ReaderNavigationBuilder
         include Helpers
 

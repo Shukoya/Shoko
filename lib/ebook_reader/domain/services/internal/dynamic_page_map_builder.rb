@@ -59,9 +59,7 @@ module EbookReader
                   group_len = image_group_length(list, index)
                   remaining = per_page - page_lines.length
 
-                  if group_len && group_len > remaining && !page_lines.empty?
-                    break
-                  end
+                  break if group_len && group_len > remaining && !page_lines.empty?
 
                   if group_len
                     take = [group_len, remaining].min
@@ -101,6 +99,7 @@ module EbookReader
               while index < lines.length
                 cur = metadata_for(lines[index])
                 break unless cur
+
                 block_type = cur[:block_type] || cur['block_type']
                 break unless block_type == :image || block_type.to_s == 'image'
 

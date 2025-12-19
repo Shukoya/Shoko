@@ -46,7 +46,7 @@ module EbookReader
         end
 
         # Selection actions
-        def self.set_selection(selection_data)
+        def self.update_selection(selection_data)
           UpdateSelectionAction.new(selection_data)
         end
 
@@ -72,15 +72,15 @@ module EbookReader
           SwitchReaderModeAction.new(mode)
         end
 
-        def self.set_view_mode(mode)
+        def self.update_view_mode(mode)
           UpdateConfigAction.new(view_mode: mode)
         end
 
-        def self.set_line_spacing(spacing)
+        def self.update_line_spacing(spacing)
           UpdateConfigAction.new(line_spacing: spacing)
         end
 
-        def self.set_theme(theme)
+        def self.update_theme(theme)
           UpdateConfigAction.new(theme: theme)
         end
 

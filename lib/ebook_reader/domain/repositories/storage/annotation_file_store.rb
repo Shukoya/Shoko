@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'time'
 require_relative '../../../constants'
+require_relative '../../../helpers/terminal_sanitizer'
 # Domain storage helpers should operate via injected services to avoid reaching into infrastructure.
 
 module EbookReader
@@ -19,13 +20,13 @@ module EbookReader
           end
 
           def all
-            load_all
+            sanitize_all(load_all)
           rescue StandardError
             {}
           end
 
           def get(path)
-            (load_all[path.to_s] || []).dup
+            sanitize_list(load_all[path.to_s] || []).dup
           rescue StandardError
             []
           end
@@ -37,8 +38,8 @@ module EbookReader
             now = Time.now
             ann = {
               'id' => now.to_f.to_s,
-              'text' => text.to_s,
-              'note' => note.to_s,
+              'text' => sanitize_body(text),
+              'note' => sanitize_body(note),
               'range' => range,
               'chapter_index' => chapter_index,
               'created_at' => now.iso8601,
@@ -63,7 +64,7 @@ module EbookReader
             ann = list.find { |a| a['id'] == id }
             return false unless ann
 
-            ann['note'] = note
+            ann['note'] = sanitize_body(note)
             ann['updated_at'] = Time.now.iso8601
             data[key] = list
             save_all(data)
@@ -92,6 +93,29 @@ module EbookReader
             return {} unless File.exist?(file_path)
 
             JSON.parse(File.read(file_path))
+          end
+
+          def sanitize_all(data)
+            return {} unless data.is_a?(Hash)
+
+            data.transform_values do |list|
+              sanitize_list(list)
+            end
+          end
+
+          def sanitize_list(list)
+            Array(list).map do |ann|
+              next ann unless ann.is_a?(Hash)
+
+              safe = ann.dup
+              safe['text'] = sanitize_body(safe['text'])
+              safe['note'] = sanitize_body(safe['note'])
+              safe
+            end
+          end
+
+          def sanitize_body(text)
+            EbookReader::Helpers::TerminalSanitizer.sanitize(text.to_s, preserve_newlines: true, preserve_tabs: true)
           end
 
           def save_all(data)

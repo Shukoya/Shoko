@@ -9,7 +9,6 @@ module EbookReader
       class QuitToMenuAction < BaseAction
         def apply(state)
           state.update({ %i[reader running] => false })
-          false
         end
       end
     end

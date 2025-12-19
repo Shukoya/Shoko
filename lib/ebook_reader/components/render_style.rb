@@ -64,6 +64,8 @@ module EbookReader
         def color_for(styles, block_type, highlight_allowed)
           if styles[:code] || block_type == :code
             color(:code)
+          elsif styles[:accent] || styles[:highlight] || styles[:keyword]
+            color(:accent)
           elsif block_type == :heading
             highlight_allowed ? color(:heading) : color(:primary)
           elsif block_type == :quote || styles[:quote]

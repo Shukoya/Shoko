@@ -5,6 +5,7 @@ require 'json'
 require 'time'
 require_relative 'infrastructure/atomic_file_writer'
 require_relative 'infrastructure/config_paths'
+require_relative 'helpers/terminal_sanitizer'
 
 module EbookReader
   # Manages a list of recently opened files.
@@ -22,7 +23,8 @@ module EbookReader
       def add(path)
         recent_files = load.reject { |file| file['path'] == path }
 
-        label = File.basename(path, File.extname(path)).tr('_-', ' ')
+        raw_label = File.basename(path, File.extname(path)).tr('_-', ' ')
+        label = Helpers::TerminalSanitizer.sanitize(raw_label, preserve_newlines: false, preserve_tabs: false)
 
         new_entry = {
           'path' => path,
@@ -44,7 +46,15 @@ module EbookReader
                end
         return [] unless file
 
-        JSON.parse(File.read(file))
+        entries = JSON.parse(File.read(file))
+        Array(entries).map do |row|
+          next row unless row.is_a?(Hash)
+
+          safe = row.dup
+          safe['name'] =
+            Helpers::TerminalSanitizer.sanitize(safe['name'].to_s, preserve_newlines: false, preserve_tabs: false)
+          safe
+        end
       rescue JSON::ParserError, Errno::ENOENT
         []
       end
@@ -68,9 +78,7 @@ module EbookReader
         EbookReader::Infrastructure::AtomicFileWriter.write(RECENT_FILE, payload)
 
         # Best-effort migration when XDG paths differ.
-        if LEGACY_RECENT_FILE != RECENT_FILE && File.exist?(LEGACY_RECENT_FILE)
-          FileUtils.rm_f(LEGACY_RECENT_FILE)
-        end
+        FileUtils.rm_f(LEGACY_RECENT_FILE) if LEGACY_RECENT_FILE != RECENT_FILE && File.exist?(LEGACY_RECENT_FILE)
       rescue Errno::EACCES, Errno::ENOENT
         # Silently ignore file system errors, as this is not a critical feature.
       end

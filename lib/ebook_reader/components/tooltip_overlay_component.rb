@@ -13,6 +13,7 @@ module EbookReader
       include Constants::UIConstants
 
       def initialize(controller, coordinate_service:)
+        super()
         @controller = controller
         @coordinate_service = coordinate_service
         @last_selection_segments = []
@@ -37,11 +38,8 @@ module EbookReader
         return unless anns
 
         current_ch = state.get(%i[reader current_chapter])
-        anns
-          .select do |a|
-          a['chapter_index'] == current_ch
-        end
-                   .each do |annotation|
+        chapter_annotations = anns.select { |annotation| annotation['chapter_index'] == current_ch }
+        chapter_annotations.each do |annotation|
           render_text_highlight(surface, bounds, annotation['range'], HIGHLIGHT_BG_SAVED)
         end
       end

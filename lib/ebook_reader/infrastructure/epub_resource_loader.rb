@@ -101,7 +101,8 @@ module EbookReader
           data
         end
       rescue Zip::Error => e
-        Logger.debug('EpubResourceLoader: zip read failed', path: epub_path.to_s, entry: entry_path.to_s, error: e.message)
+        Logger.debug('EpubResourceLoader: zip read failed', path: epub_path.to_s, entry: entry_path.to_s,
+                                                            error: e.message)
         nil
       rescue StandardError => e
         Logger.debug('EpubResourceLoader: read failed', path: epub_path.to_s, entry: entry_path.to_s, error: e.message)

@@ -2,15 +2,21 @@
 
 require 'io/console'
 require_relative 'constants/terminal_constants'
+require_relative 'terminal_input/decoder'
 
 module EbookReader
   # TerminalInput encapsulates input reading, console modes, and size queries.
   class TerminalInput
     SIZE_CACHE_INTERVAL = 0.5
+    READ_CHUNK_BYTES = 4096
 
-    def initialize
+    def initialize(input: $stdin, output: $stdout, esc_timeout: Decoder::DEFAULT_ESC_TIMEOUT,
+                   sequence_timeout: Decoder::DEFAULT_SEQUENCE_TIMEOUT)
       @console = nil
       @size_cache = { width: nil, height: nil, checked_at: nil }
+      @input = input
+      @output = output
+      @decoder = Decoder.new(esc_timeout: esc_timeout, sequence_timeout: sequence_timeout)
     end
 
     def size
@@ -36,9 +42,10 @@ module EbookReader
 
     def read_key
       with_raw_console do
-        read_key_with_escape_handling
+        pump_input
+        @decoder.next_token(now: monotonic_now)
       end
-    rescue IO::WaitReadable, IO::EAGAINWaitReadable
+    rescue IO::WaitReadable, EOFError
       nil
     end
 
@@ -47,37 +54,30 @@ module EbookReader
         key = read_key
         return key if key
 
-        $stdin.wait_readable
+        timeout = @decoder.pending_timeout(now: monotonic_now)
+        if timeout
+          next if timeout <= 0
+
+          @input.wait_readable(timeout)
+        else
+          @input.wait_readable
+        end
       end
     end
 
     # Mouse support
     def enable_mouse
-      $stdout.print "\e[?1003h\e[?1006h"
-      $stdout.flush
+      @output.print "\e[?1003h\e[?1006h"
+      @output.flush
     end
 
     def disable_mouse
-      $stdout.print "\e[?1003l\e[?1006l"
-      $stdout.flush
+      @output.print "\e[?1003l\e[?1006l"
+      @output.flush
     end
 
     def read_input_with_mouse
-      input = read_key_blocking
-      return nil unless input
-
-      if input.start_with?("\e[<")
-        last = input[-1]
-        while last != 'm' && last != 'M'
-          extra = read_key
-          break unless extra
-
-          input += extra
-          last = extra[-1]
-        end
-      end
-
-      input
+      read_key_blocking
     end
 
     def setup_signal_handlers(&cleanup_callback)
@@ -120,20 +120,19 @@ module EbookReader
       console
     end
 
-    def read_key_with_escape_handling
-      input = $stdin.read_nonblock(1)
-      return input unless input == "\e"
-
-      read_escape_sequence(input)
+    def pump_input
+      loop do
+        chunk = @input.read_nonblock(READ_CHUNK_BYTES)
+        @decoder.feed(chunk)
+      end
+    rescue IO::WaitReadable, EOFError
+      nil
     end
 
-    def read_escape_sequence(input)
-      2.times do
-        input << $stdin.read_nonblock(1)
-      rescue IO::WaitReadable
-        break
-      end
-      input
+    def monotonic_now
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    rescue StandardError
+      Time.now.to_f
     end
   end
 end

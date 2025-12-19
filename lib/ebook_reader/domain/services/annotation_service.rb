@@ -29,7 +29,6 @@ module EbookReader
             page_meta: page_meta
           )
 
-          # Publish domain event
           @domain_event_bus.publish(Events::AnnotationAdded.new(
                                       book_path: path,
                                       annotation: annotation
@@ -40,16 +39,14 @@ module EbookReader
         end
 
         def update(path, id, note)
-          # Get old annotation for event (optional, repository might not support find_by_id in tests)
           old_note = ''
           if @annotation_repository.respond_to?(:find_by_id)
             old_annotation = @annotation_repository.find_by_id(path, id)
             old_note = old_annotation ? old_annotation['note'] : ''
           end
 
-          @annotation_repository.update_note(path, id, note)
+          result = @annotation_repository.update_note(path, id, note)
 
-          # Publish domain event
           @domain_event_bus.publish(Events::AnnotationUpdated.new(
                                       book_path: path,
                                       annotation_id: id,
@@ -58,20 +55,14 @@ module EbookReader
                                     ))
 
           notify_updated(path)
-          true
+          result
         end
 
         def delete(path, id)
-          # Get annotation for event before deletion (optional)
-          annotation = nil
-          if @annotation_repository.respond_to?(:find_by_id)
-            annotation = @annotation_repository.find_by_id(path,
-                                                           id)
-          end
+          annotation = @annotation_repository.find_by_id(path, id) if @annotation_repository.respond_to?(:find_by_id)
 
-          @annotation_repository.delete_by_id(path, id)
+          result = @annotation_repository.delete_by_id(path, id)
 
-          # Publish domain event
           @domain_event_bus.publish(Events::AnnotationRemoved.new(
                                       book_path: path,
                                       annotation_id: id,
@@ -79,7 +70,7 @@ module EbookReader
                                     ))
 
           notify_updated(path)
-          true
+          result
         end
 
         protected

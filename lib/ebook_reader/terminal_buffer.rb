@@ -6,6 +6,7 @@ require_relative 'helpers/text_metrics'
 module EbookReader
   # TerminalBuffer manages buffered writes and differential screen updates.
   class TerminalBuffer
+    # In-memory frame buffer storing characters and style runs.
     class Frame
       CONTINUATION = :_wide_continuation
 
@@ -32,7 +33,7 @@ module EbookReader
           if token.start_with?("\e[")
             if token.end_with?('m')
               current_style = '' if token == TerminalOutput::ANSI::RESET
-              current_style = current_style + token unless token == TerminalOutput::ANSI::RESET
+              current_style += token unless token == TerminalOutput::ANSI::RESET
             end
             next
           end
@@ -55,7 +56,14 @@ module EbookReader
 
           next if token == "\e"
 
-          cluster = token == "\n" || token == "\r" ? ' ' : token
+          if ["\n", "\r"].include?(token)
+            cluster = ' '
+          else
+            # Defense-in-depth: never render C0/C1 control characters from content.
+            next if token.match?(/[\u0000-\u001F\u007F-\u009F]/)
+
+            cluster = token
+          end
           width = EbookReader::Helpers::TextMetrics.display_width_for(cluster)
           next if width <= 0
 
@@ -106,7 +114,7 @@ module EbookReader
         chars = @chars[row_i]
         styles = @styles[row_i]
         last_col = last_non_blank_col(chars, styles)
-        return '' if last_col < 0
+        return '' if last_col.negative?
 
         out = +''
         active_style = nil

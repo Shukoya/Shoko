@@ -18,6 +18,7 @@ module EbookReader
       def preload(doc, width:, height:)
         return Result.new(status: :invalid) unless doc
         return Result.new(status: :unavailable) unless dynamic_mode?
+
         width = resolve_width(width)
         height = resolve_height(height)
         return Result.new(status: :no_calculator) unless page_calculator
@@ -38,7 +39,7 @@ module EbookReader
         apply_layout_config(width, height, view_mode, line_spacing)
 
         cached_pages = pagination_cache.load_for_document(doc, key)
-        if cached_pages && cached_pages.any?
+        if cached_pages&.any?
           page_calculator.hydrate_from_cache(cached_pages, state:, width:, height:)
           page_calculator.apply_pending_precise_restore!(state)
           Result.new(status: :hit, key:)
@@ -93,9 +94,7 @@ module EbookReader
 
       def log_failure(error)
         logger = begin
-          if state.respond_to?(:resolve)
-            state.resolve(:logger)
-          end
+          state.resolve(:logger) if state.respond_to?(:resolve)
         rescue StandardError
           nil
         end

@@ -6,6 +6,7 @@ require_relative 'navigation_builder'
 module EbookReader
   module Input
     module CommandBuilders
+      # Builds key bindings for bookmarks-related reader interactions.
       class BookmarkBuilder
         include Helpers
 

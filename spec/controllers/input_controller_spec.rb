@@ -8,10 +8,10 @@ RSpec.describe EbookReader::Controllers::InputController do
   let(:ui) { double('UI', handle_popup_action: nil, cleanup_popup_state: nil, switch_mode: nil) }
 
   class FakeDeps
-    def initialize(ui) = @ui = ui
+    def initialize(ui_controller) = @ui_controller = ui_controller
 
     def resolve(name)
-      name == :ui_controller ? @ui : nil
+      name == :ui_controller ? @ui_controller : nil
     end
   end
 

@@ -3,8 +3,8 @@
 require 'spec_helper'
 
 RSpec.describe EbookReader::Components::Sidebar::TocTabRenderer do
-  let(:controller) { instance_double('Controller', doc: doc) }
-  let(:renderer) { described_class.new(controller) }
+  let(:state) { instance_double('State') }
+  let(:renderer) { described_class.new(state) }
 
   let(:doc) do
     double('Document', chapters: chapters, toc_entries: toc_entries)
@@ -29,10 +29,24 @@ RSpec.describe EbookReader::Components::Sidebar::TocTabRenderer do
   end
 
   it 'keeps ancestor part headings when filtering chapters' do
-    state = double('State')
     allow(state).to receive(:get).with(%i[reader sidebar_toc_filter]).and_return('Chapter Two')
 
     filtered = renderer.send(:get_filtered_entries, toc_entries, state)
     expect(filtered.map(&:title)).to eq(['Part One', 'Chapter Two'])
+  end
+
+  it 'renders selected TOC rows without crashing' do
+    segments = [
+      ['├─', 'dim'],
+      ['', 'primary'],
+      [' ', nil],
+      ['Chapter One', 'primary'],
+    ]
+
+    line = renderer.send(:compose_line, segments, true)
+
+    expect(line).to start_with("#{EbookReader::Terminal::ANSI::BG_GREY}#{EbookReader::Terminal::ANSI::WHITE}")
+    expect(line).to include('├─ Chapter One')
+    expect(line).to end_with(EbookReader::Terminal::ANSI::RESET)
   end
 end

@@ -151,16 +151,19 @@ RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
     expect(result.book.chapters.first.raw_content).to include('Jello')
   end
 
-  it 'rebuilds cache when cached chapters are missing raw content' do
-    pipeline.load(epub_path)
-    cache = EbookReader::Infrastructure::EpubCache.new(epub_path, cache_root: File.join(tmp_dir, '.cache', 'reader'))
-    payload = cache.load_for_source(strict: false)
-    payload.book.chapters.each { |ch| ch.raw_content = nil }
-    cache.send(:persist_payload, payload.source_sha256, payload.source_path, payload.source_mtime, payload.generated_at, payload.book, payload.layouts)
+  it 'rebuilds cache when cached chapter files are missing' do
+    first = pipeline.load(epub_path)
+    sha = first.payload.source_sha256
+    payload_path = File.join(File.dirname(first.cache_path), "#{sha}.json")
+    payload_json = JSON.parse(File.read(payload_path))
+    generation = payload_json.dig('metadata_row', 'chapters_generation')
+
+    raw_file = File.join(File.dirname(first.cache_path), 'chapters', sha, generation, 'raw', '000000.xhtml')
+    FileUtils.rm_f(raw_file)
 
     rebuilt = pipeline.load(epub_path)
     expect(rebuilt.loaded_from_cache).to be(false)
-    expect(rebuilt.book.chapters.first.raw_content).not_to be_nil
+    expect(rebuilt.book.chapters.first.raw_content.to_s).to include('Hello')
   end
 
   it 'repairs the pointer file when it is corrupted' do

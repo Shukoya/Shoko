@@ -3,6 +3,7 @@
 require 'cgi'
 
 require_relative '../infrastructure/perf_tracer'
+require_relative 'terminal_sanitizer'
 
 module EbookReader
   module Helpers
@@ -71,22 +72,23 @@ module EbookReader
         str = text.to_s
         return str if str.empty?
 
-        decoded = str
-          .gsub(/&#x([0-9A-Fa-f]+);/) do |match|
-            [Regexp.last_match(1).to_i(16)].pack('U')
-          rescue StandardError
-            match
-          end
-          .gsub(/&#(\d+);/) do |match|
-            [Regexp.last_match(1).to_i].pack('U')
-          rescue StandardError
-            match
-          end
-          .gsub(/&([A-Za-z][A-Za-z0-9]+);/) do |match|
-            name = Regexp.last_match(1)
-            replacement = HTML_ENTITY_MAP[name] || HTML_ENTITY_MAP[name.downcase]
-            replacement.nil? ? match : replacement
-          end
+        decoded = str.gsub(/&#x([0-9A-Fa-f]+);/) do |match|
+          [Regexp.last_match(1).to_i(16)].pack('U')
+        rescue StandardError
+          match
+        end
+
+        decoded = decoded.gsub(/&#(\d+);/) do |match|
+          [Regexp.last_match(1).to_i].pack('U')
+        rescue StandardError
+          match
+        end
+
+        decoded = decoded.gsub(/&([A-Za-z][A-Za-z0-9]+);/) do |match|
+          name = Regexp.last_match(1)
+          replacement = HTML_ENTITY_MAP[name] || HTML_ENTITY_MAP[name.downcase]
+          replacement.nil? ? match : replacement
+        end
 
         # Decode the built-in XML entities (amp/lt/gt/quot/apos) last.
         CGI.unescapeHTML(decoded).tr("\u00A0", ' ')
@@ -100,7 +102,8 @@ module EbookReader
         text = replace_block_elements(text)
         text = strip_tags(text)
         text = decode_entities(text)
-        clean_whitespace(text)
+        cleaned = clean_whitespace(text)
+        TerminalSanitizer.sanitize(cleaned, preserve_newlines: true, preserve_tabs: false)
       end
 
       private_class_method def self.handle_cdata_sections(text)
@@ -132,7 +135,8 @@ module EbookReader
       end
 
       def self.clean_html(text)
-        decode_entities(text.to_s.strip)
+        decoded = decode_entities(text.to_s.strip)
+        TerminalSanitizer.sanitize(decoded, preserve_newlines: false, preserve_tabs: false)
       end
     end
   end

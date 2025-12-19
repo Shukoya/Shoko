@@ -69,6 +69,7 @@ module EbookReader
         end
       end
 
+      # Command that scrolls within the current chapter by a number of lines.
       class ScrollCommand < BaseCommand
         def initialize(direction, lines: 1, name: nil, description: nil)
           @direction = direction
@@ -103,6 +104,7 @@ module EbookReader
         end
       end
 
+      # Command that jumps to a specific chapter index.
       class JumpToChapterCommand < BaseCommand
         def initialize(chapter_index = nil, name: nil, description: nil)
           @chapter_index = chapter_index

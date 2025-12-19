@@ -40,11 +40,11 @@ RSpec.describe EbookReader::Helpers::TextMetrics do
     end
 
     it 'truncates kitty placeholder lines by cell width' do
+      grid = (0 << 8) | 3
       placeholder = EbookReader::Helpers::KittyUnicodePlaceholders.line(
         image_id: 42,
         placement_id: 7,
-        row: 0,
-        cols: 3
+        grid: grid
       )
 
       truncated = described_class.truncate_to(placeholder, 1)

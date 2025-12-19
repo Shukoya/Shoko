@@ -4,6 +4,7 @@ require_relative 'commands'
 
 module EbookReader
   module Input
+    # Dispatches keys through a stack of active input modes.
     class Dispatcher
       def initialize(context)
         @context = context

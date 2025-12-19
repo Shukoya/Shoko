@@ -13,6 +13,7 @@ module EbookReader
       # Responsible for transforming chapter XHTML into semantic blocks and
       # producing display-ready wrapped lines (with style metadata) for renderers.
       class FormattingService < BaseService
+        # Cached chapter formatting results.
         FormattedChapter = Struct.new(:blocks, :plain_lines, :checksum, keyword_init: true)
         private_constant :FormattedChapter
 
@@ -38,33 +39,7 @@ module EbookReader
         # @param chapter_index [Integer]
         # @param chapter [Domain::Models::Chapter]
         def ensure_formatted!(document, chapter_index, chapter)
-          return unless chapter
-
-          raw = chapter.respond_to?(:raw_content) ? chapter.raw_content : nil
-          key = chapter_cache_key(document, chapter_index)
-          checksum = checksum_for(raw)
-
-          cached = @chapter_cache[key]
-          if cached && cached.checksum == checksum
-            apply_formatted_to_chapter(chapter, cached)
-            return cached
-          end
-
-          return cached unless raw
-
-          parser = build_parser(raw)
-          return cached unless parser
-
-          blocks = parser.parse
-          formatted = FormattedChapter.new(
-            blocks: blocks,
-            plain_lines: build_plain_lines(blocks),
-            checksum: checksum
-          )
-          @chapter_cache[key] = formatted
-          @wrapped_cache.delete(key)
-          apply_formatted_to_chapter(chapter, formatted)
-          formatted
+          ensure_formatted_core(document, chapter_index, chapter)
         rescue EbookReader::FormattingError
           raise
         rescue StandardError => e
@@ -84,24 +59,23 @@ module EbookReader
         # @param config [Object,nil] state store-like object responding to #get
         # @param lines_per_page [Integer,nil] optional page height hint for image sizing
         # @return [Array<Domain::Models::DisplayLine,String>]
-        def wrap_window(document, chapter_index, width, offset, length, config: nil, lines_per_page: nil)
-          return [] if width.to_i <= 0 || length.to_i <= 0
+        def wrap_window(document, chapter_index, width, offset:, length:, config: nil, lines_per_page: nil)
+          width_i = width.to_i
+          length_i = length.to_i
+          offset_i = offset.to_i
+          return [] if width_i <= 0 || length_i <= 0
 
           chapter = document&.get_chapter(chapter_index)
           return [] unless chapter
 
           formatted = ensure_formatted!(document, chapter_index, chapter)
-          unless formatted
-            # Fallback to plain lines when formatting unavailable
-            lines = (chapter.lines || [])[offset, length] || []
-            return lines
-          end
+          return plain_window(chapter, offset: offset_i, length: length_i) unless formatted
 
           chapter_source_path = chapter_source_path_for(chapter)
-          wrapped = wrapped_lines_for(document, chapter_index, formatted, width.to_i,
+          wrapped = wrapped_lines_for(document, chapter_index, formatted, width_i,
                                       chapter_source_path: chapter_source_path, config: config,
                                       lines_per_page: lines_per_page)
-          wrapped[offset, length] || []
+          window_slice(wrapped, offset: offset_i, length: length_i)
         end
 
         # Retrieve all wrapped lines for a chapter at the provided width.
@@ -124,30 +98,22 @@ module EbookReader
 
         private
 
-        def wrapped_lines_for(document, chapter_index, formatted, width, chapter_source_path:, config:, lines_per_page: nil)
+        def wrapped_lines_for(document, chapter_index, formatted, width, chapter_source_path:, config:,
+                              lines_per_page: nil)
           width_key = width.to_i
           cache_key = chapter_cache_key(document, chapter_index)
           variant = wrap_variant(config)
-          max_image_rows = lines_per_page.to_i
-          max_image_rows = nil if max_image_rows <= 0
-          composite_key = if variant == 'img' && max_image_rows
-                            "#{width_key}|#{variant}|#{max_image_rows}"
-                          else
-                            "#{width_key}|#{variant}"
-                          end
-          cached = @wrapped_cache[cache_key][composite_key]
-          return cached if cached
-
-          assembler = LineAssembler.new(
-            width_key,
+          max_image_rows = max_image_rows_for(lines_per_page)
+          composite_key = wrapped_composite_key(width_key, variant, max_image_rows)
+          cache_for_chapter = @wrapped_cache[cache_key]
+          cache_for_chapter[composite_key] ||= build_wrapped_lines(
+            formatted.blocks,
+            width: width_key,
             chapter_index: chapter_index,
             chapter_source_path: chapter_source_path,
-            image_rendering: variant == 'img',
+            rendering_mode: rendering_mode_for(variant),
             max_image_rows: max_image_rows
           )
-          lines = assembler.build(formatted.blocks)
-          @wrapped_cache[cache_key][composite_key] = lines
-          lines
         end
 
         def checksum_for(content)
@@ -175,36 +141,7 @@ module EbookReader
         end
 
         def build_plain_lines(blocks)
-          return [] unless blocks
-
-          lines = []
-          blocks.each do |block|
-            case block.type
-            when :heading
-              lines << block.text
-              lines << ''
-            when :paragraph
-              lines << block.text
-              lines << ''
-            when :image
-              lines << block.text
-              lines << ''
-            when :list_item
-              indent = '  ' * [block.level.to_i - 1, 0].max
-              marker = (block.metadata && block.metadata[:marker]) || '•'
-              lines << "#{indent}#{marker} #{block.text}"
-            when :quote
-              lines << "> #{block.text}"
-              lines << ''
-            when :code, :table
-              block.text.split(/\r?\n/).each { |row| lines << row.rstrip }
-              lines << ''
-            when :separator
-              lines << ('╌' * 40)
-            end
-          end
-          lines.pop while lines.last&.strip&.empty?
-          lines
+          PlainLinesBuilder.build(blocks)
         end
 
         def chapter_source_path_for(chapter)
@@ -222,381 +159,91 @@ module EbookReader
           'txt'
         end
 
-        # Helper responsible for converting semantic blocks into display-ready
-        # lines, preserving inline styles and metadata.
-        class LineAssembler
-          include EbookReader::Domain::Models
+        def raw_content_for(chapter)
+          chapter.respond_to?(:raw_content) ? chapter.raw_content : nil
+        end
 
-          MAX_ID = 4_294_967_295
-          RENDERABLE_IMAGE_EXTENSIONS = %w[.png .jpg .jpeg].freeze
+        def formatted_chapter_from_blocks(blocks, checksum)
+          FormattedChapter.new(
+            blocks: blocks,
+            plain_lines: build_plain_lines(blocks),
+            checksum: checksum
+          )
+        end
 
-          def initialize(width, chapter_index: nil, chapter_source_path: nil, image_rendering: false, max_image_rows: nil)
-            @width = [width.to_i, 10].max
-            @lines = []
-            @chapter_index = chapter_index
-            @chapter_source_path = chapter_source_path
-            @image_rendering = !!image_rendering
-            @max_image_rows = max_image_rows.to_i
-            @max_image_rows = nil if @max_image_rows <= 0
-            @inline_image_counter = 0
-          end
+        def plain_window(chapter, offset:, length:)
+          (chapter.lines || [])[offset, length] || []
+        end
 
-          def build(blocks)
-            @lines.clear
-            blocks.each_with_index do |block, index|
-              case block.type
-              when :paragraph
-                append_wrapped_block(block, metadata_for(block))
-                append_blank_line_if_needed(blocks, index)
-              when :image
-                if @image_rendering && renderable_block_image?(block)
-                  append_image_block(block, index)
-                else
-                  append_wrapped_block(block, metadata_for(block))
-                end
-                append_blank_line_if_needed(blocks, index, force: true)
-              when :heading
-                append_wrapped_block(block, metadata_for(block), prefix: '', continuation_prefix: '')
-                append_blank_line_if_needed(blocks, index)
-              when :list_item
-                append_list_item(block)
-                append_blank_line_if_needed(blocks, index)
-              when :quote
-                append_wrapped_block(block, metadata_for(block).merge(block_type: :quote),
-                                     prefix: '│ ', continuation_prefix: '│ ')
-                append_blank_line_if_needed(blocks, index)
-              when :code, :table
-                append_preformatted(block)
-                append_blank_line_if_needed(blocks, index, force: true)
-              when :separator
-                append_separator
-              when :break
-                append_blank_line
-              else
-                append_wrapped_block(block, metadata_for(block))
-              end
-            end
-            @lines
-          end
+        def window_slice(lines, offset:, length:)
+          (lines || [])[offset, length] || []
+        end
 
-          private
+        def max_image_rows_for(lines_per_page)
+          rows = lines_per_page.to_i
+          rows.positive? ? rows : nil
+        end
 
-          def metadata_for(block)
-            base = (block.metadata || {}).merge(block_type: block.type)
-            base[:chapter_index] = @chapter_index if @chapter_index
-            base[:chapter_source_path] = @chapter_source_path if @chapter_source_path
-            base
-          end
+        def wrapped_composite_key(width_key, variant, max_image_rows)
+          return "#{width_key}|#{variant}" unless variant == 'img' && max_image_rows
 
-          def append_image_block(block, block_index)
-            meta = metadata_for(block)
-            render = meta.merge(
-              image_render: {
-                cols: @width,
-                rows: image_rows_for(@width),
-                placement_id: placement_id_for(block, block_index)
-              }
-            )
+          "#{width_key}|#{variant}|#{max_image_rows}"
+        end
 
-            rows = render.dig(:image_render, :rows).to_i
-            rows.times do |i|
-              @lines << DisplayLine.new(
-                text: '',
-                segments: [],
-                metadata: render.merge(
-                  image_render_line: i.zero?,
-                  image_line_index: i,
-                  image_spacer: !i.zero?
-                )
-              )
-            end
-          end
+        def rendering_mode_for(variant)
+          variant == 'img' ? :images : :text
+        end
 
-          def image_rows_for(cols)
-            estimate = (cols.to_i * 0.5).round
-            estimate = 4 if estimate < 4
-            estimate = 18 if estimate > 18
-            estimate = [estimate, @max_image_rows].min if @max_image_rows
-            estimate = 1 if estimate < 1
-            estimate
-          rescue StandardError
-            8
-          end
+        def build_wrapped_lines(blocks, width:, chapter_index:, chapter_source_path:, rendering_mode:, max_image_rows:)
+          LineAssembler.new(
+            width,
+            chapter_index: chapter_index,
+            chapter_source_path: chapter_source_path,
+            rendering_mode: rendering_mode,
+            max_image_rows: max_image_rows
+          ).build(blocks)
+        end
 
-          def placement_id_for(block, block_index)
-            image = (block.metadata || {})[:image] || (block.metadata || {})['image'] || {}
-            src = image[:src] || image['src'] || ''
-            seed = "#{@chapter_source_path}|#{src}|#{block_index}"
-            hashed_id(seed)
-          rescue StandardError
-            clamp_id(block_index.to_i + 1)
-          end
+        def ensure_formatted_core(document, chapter_index, chapter)
+          return nil unless chapter
 
-          def hashed_id(seed)
-            raw = Digest::SHA1.digest(seed.to_s)
-            int = raw.unpack1('N')
-            int.zero? ? 1 : int
-          rescue StandardError
-            1
-          end
+          raw = raw_content_for(chapter)
+          cache_key = chapter_cache_key(document, chapter_index)
+          cached = @chapter_cache[cache_key]
+          checksum = checksum_for(raw)
+          return cached if cache_hit?(cached, checksum, chapter)
+          return cached if raw.nil?
 
-          def clamp_id(value)
-            int = value.to_i
-            int = 1 if int <= 0
-            if int > MAX_ID
-              int %= MAX_ID
-              int = 1 if int.zero?
-            end
-            int
-          end
+          formatted = build_formatted_from_raw(raw, checksum)
+          return cached unless formatted
 
-          def append_wrapped_block(block, metadata, prefix: nil, continuation_prefix: nil)
-            tokens = tokenize(block.segments)
-            return if tokens.empty?
+          store_formatted_chapter(cache_key, formatted, chapter)
+        end
 
-            first_prefix_tokens = prefix_tokens(prefix)
-            continuation_tokens = prefix_tokens(continuation_prefix.nil? ? prefix_indent(prefix) : continuation_prefix)
+        def cache_hit?(cached, checksum, chapter)
+          return false unless cached && cached.checksum == checksum
 
-            emit_wrapped_lines(tokens, first_prefix_tokens, continuation_tokens, metadata)
-          end
+          apply_formatted_to_chapter(chapter, cached)
+          true
+        end
 
-          def append_list_item(block)
-            indent = '  ' * [block.level.to_i - 1, 0].max
-            marker = (block.metadata && block.metadata[:marker]) || '•'
-            first_prefix = "#{indent}#{marker} "
-            continuation_prefix = indent + (' ' * (marker.to_s.length + 1))
-            append_wrapped_block(block, metadata_for(block).merge(list: true),
-                                 prefix: first_prefix, continuation_prefix: continuation_prefix)
-          end
+        def build_formatted_from_raw(raw, checksum)
+          parser = build_parser(raw)
+          return nil unless parser
 
-          def append_preformatted(block)
-            text = block.segments.map(&:text).join
-            lines = text.split(/\r?\n/)
-            style = merge_styles(block.segments.first&.styles, code: true)
-            lines.each do |line|
-              plain = line.rstrip
-              @lines << DisplayLine.new(
-                text: plain,
-                segments: [TextSegment.new(text: plain, styles: style)],
-                metadata: metadata_for(block)
-              )
-            end
-          end
+          formatted_chapter_from_blocks(parser.parse, checksum)
+        end
 
-          def append_separator
-            bar = '─' * [@width, 40].min
-            segment = TextSegment.new(text: bar, styles: { separator: true })
-            @lines << DisplayLine.new(text: bar, segments: [segment], metadata: { block_type: :separator })
-          end
-
-          def append_blank_line
-            @lines << DisplayLine.new(text: '', segments: [], metadata: { spacer: true })
-          end
-
-          def append_blank_line_if_needed(blocks, index, force: false)
-            return if index == blocks.length - 1
-
-            next_block = blocks[index + 1]
-            return if next_block&.type == :list_item && !force
-
-            append_blank_line if force || next_block&.type != :list_item
-          end
-
-          def prefix_indent(prefix)
-            return nil unless prefix
-
-            ' ' * prefix.to_s.length
-          end
-
-          def prefix_tokens(prefix)
-            return [] unless prefix && !prefix.empty?
-
-            [token_from_string(prefix, styles: { prefix: true })]
-          end
-
-          def emit_wrapped_lines(content_tokens, first_prefix_tokens, continuation_tokens, metadata)
-            tokens = content_tokens.dup
-            current_tokens = first_prefix_tokens.dup
-            current_width = visible_length(current_tokens)
-            prefix_for_next = continuation_tokens
-
-            tokens.each do |token|
-              if token[:image]
-                finalize_line(current_tokens, metadata) unless current_tokens.empty?
-                indent_cols = visible_length(prefix_for_next)
-                append_inline_image(token[:inline_image], indent_cols)
-                current_tokens = prefix_for_next.dup
-                current_width = visible_length(current_tokens)
-                next
-              end
-
-              if token[:newline]
-                finalize_line(current_tokens, metadata)
-                current_tokens = prefix_for_next.dup
-                current_width = visible_length(current_tokens)
-                next
-              end
-
-              token_width = EbookReader::Helpers::TextMetrics.visible_length(token[:text])
-
-              if exceeds_width?(current_width, token_width)
-                finalize_line(current_tokens, metadata)
-                current_tokens = prefix_for_next.dup
-                current_width = visible_length(current_tokens)
-                next if token[:text].strip.empty?
-              end
-
-              next if current_tokens.empty? && token[:text].strip.empty?
-
-              current_tokens << token
-              current_width += token_width
-            end
-
-            finalize_line(current_tokens, metadata) unless current_tokens.empty?
-          end
-
-          def finalize_line(tokens, metadata)
-            plain = tokens.select { |token| token[:text] }.map { |tok| tok[:text] }.join.rstrip
-            segments = merge_tokens_into_segments(tokens)
-            padded_segments = segments.reject { |seg| seg.text.empty? }
-            @lines << DisplayLine.new(
-              text: plain,
-              segments: padded_segments,
-              metadata: metadata
-            )
-          end
-
-          def merge_tokens_into_segments(tokens)
-            merged = []
-            tokens.each do |token|
-              next unless token[:text]
-
-              styles = token[:styles] || {}
-              if merged.empty? || merged.last.styles != styles
-                merged << TextSegment.new(text: token[:text], styles: styles)
-              else
-                merged[-1] = TextSegment.new(text: merged[-1].text + token[:text], styles: styles)
-              end
-            end
-            merged
-          end
-
-          def exceeds_width?(current_width, token_width)
-            current_width.positive? && current_width + token_width > @width
-          end
-
-          def visible_length(tokens)
-            tokens
-              .select { |token| token[:text] }
-              .sum { |token| EbookReader::Helpers::TextMetrics.visible_length(token[:text]) }
-          end
-
-          def tokenize(segments)
-            tokens = []
-            segments.to_a.each do |segment|
-              text = segment.text.to_s
-              styles = segment.styles || {}
-
-              inline = styles[:inline_image] || styles['inline_image']
-              if @image_rendering && inline && renderable_image_src?(inline.is_a?(Hash) ? (inline[:src] || inline['src']) : nil)
-                tokens << { image: true, inline_image: inline }
-                next
-              end
-
-              if text.include?("\n")
-                text.split(/(\n)/).each do |piece|
-                  if piece == "\n"
-                    tokens << { newline: true }
-                  elsif !piece.empty?
-                    tokens.concat(split_token(piece, styles))
-                  end
-                end
-              else
-                tokens.concat(split_token(text, styles))
-              end
-            end
-            tokens
-          end
-
-          def split_token(text, styles)
-            return [] if text.nil? || text.empty?
-
-            parts = text.scan(/\S+\s*/)
-            return [{ text:, styles: styles.dup }] if parts.empty?
-
-            parts.map { |part| { text: part, styles: styles.dup } }
-          end
-
-          def merge_styles(base, overrides)
-            (base || {}).merge(overrides)
-          end
-
-          def token_from_string(text, styles: {})
-            { text: text, styles: styles.dup }
-          end
-
-          def append_inline_image(inline, indent_cols)
-            @inline_image_counter += 1
-
-            src = inline.is_a?(Hash) ? (inline[:src] || inline['src']) : nil
-            alt = inline.is_a?(Hash) ? (inline[:alt] || inline['alt']) : nil
-            cols_available = [@width - indent_cols.to_i, 1].max
-            rows = image_rows_for(cols_available)
-            placement_id = placement_id_for_inline(src, @inline_image_counter)
-
-            base_metadata = {
-              block_type: :image,
-              chapter_index: @chapter_index,
-              chapter_source_path: @chapter_source_path,
-              image: { src: src, alt: alt },
-              inline_image: true,
-              image_render: {
-                cols: cols_available,
-                rows: rows,
-                placement_id: placement_id,
-                col_offset: indent_cols.to_i
-              }
-            }
-
-            rows.times do |i|
-              @lines << DisplayLine.new(
-                text: '',
-                segments: [],
-                metadata: base_metadata.merge(
-                  image_render_line: i.zero?,
-                  image_line_index: i,
-                  image_spacer: !i.zero?
-                )
-              )
-            end
-          end
-
-          def placement_id_for_inline(src, index)
-            seed = "#{@chapter_source_path}|#{src}|inline|#{index}"
-            hashed_id(seed)
-          rescue StandardError
-            clamp_id(index.to_i + 1)
-          end
-
-          def renderable_block_image?(block)
-            image = (block.metadata || {})[:image] || (block.metadata || {})['image'] || {}
-            src = image[:src] || image['src']
-            renderable_image_src?(src)
-          rescue StandardError
-            false
-          end
-
-          def renderable_image_src?(src)
-            return false if src.nil? || src.to_s.empty?
-
-            core = src.to_s.split(/[?#]/, 2).first.to_s
-            ext = File.extname(core).downcase
-            RENDERABLE_IMAGE_EXTENSIONS.include?(ext)
-          rescue StandardError
-            false
-          end
+        def store_formatted_chapter(cache_key, formatted, chapter)
+          @chapter_cache[cache_key] = formatted
+          @wrapped_cache.delete(cache_key)
+          apply_formatted_to_chapter(chapter, formatted)
+          formatted
         end
       end
     end
   end
 end
+
+require_relative 'formatting_service/line_assembler'
+require_relative 'formatting_service/plain_lines_builder'

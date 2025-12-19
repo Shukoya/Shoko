@@ -12,8 +12,8 @@ module EbookReader
       module_function
 
       ESC = "\e"
-      APC_START = "#{ESC}_G"
-      APC_END = "#{ESC}\\"
+      APC_START = "#{ESC}_G".freeze
+      APC_END = "#{ESC}\\".freeze
       MAX_CHUNK_BYTES = 4096
 
       def supported?
@@ -28,7 +28,7 @@ module EbookReader
 
       def enabled_for?(config_store)
         return false unless supported?
-        return false unless config_store && config_store.respond_to?(:get)
+        return false unless config_store.respond_to?(:get)
 
         !!config_store.get(%i[config kitty_images])
       rescue StandardError
@@ -42,20 +42,19 @@ module EbookReader
         chunks = chunk_payload(payload)
         chunks.map.with_index do |chunk, index|
           more = index < chunks.length - 1 ? 1 : 0
-          control = if index.zero?
-                      keys = { a: 't', f: 100, t: 'd', i: image_id.to_i, m: more }
-                      keys[:q] = 2 if quiet
-                      serialize_keys(keys)
-                    else
-                      keys = { m: more }
-                      keys[:q] = 2 if quiet
-                      serialize_keys(keys)
-                    end
+          keys = if index.zero?
+                   { a: 't', f: 100, t: 'd', i: image_id.to_i, m: more }
+                 else
+                   { m: more }
+                 end
+          keys[:q] = 2 if quiet
+          control = serialize_keys(keys)
           "#{APC_START}#{control};#{chunk}#{APC_END}"
         end
       end
 
-      def place(image_id, placement_id:, cols:, rows:, quiet: true, z: nil)
+      def place(image_id, placement_id:, cols:, rows:, quiet: true, **options)
+        z = options.fetch(:z, nil)
         keys = {
           a: 'p',
           i: image_id.to_i,
@@ -69,7 +68,8 @@ module EbookReader
         "#{APC_START}#{serialize_keys(keys)}#{APC_END}"
       end
 
-      def virtual_place(image_id, cols:, rows:, placement_id: nil, quiet: true, z: nil)
+      def virtual_place(image_id, cols:, rows:, placement_id: nil, quiet: true, **options)
+        z = options.fetch(:z, nil)
         keys = {
           a: 'p',
           U: 1,

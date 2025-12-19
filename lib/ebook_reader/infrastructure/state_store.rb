@@ -6,6 +6,7 @@ begin
 rescue NameError => e
   raise unless e.name == :Fragment
 
+  # Ensure JSON::Fragment exists for compatibility with JSON parsing in some environments.
   module JSON
     Fragment = Object unless const_defined?(:Fragment)
   end
@@ -21,6 +22,30 @@ module EbookReader
     # Single source of truth for application state with validation.
     class StateStore
       attr_reader :event_bus
+
+      SYMBOL_KEYS = %i[view_mode line_spacing page_numbering_mode theme].freeze
+      LINE_SPACING_ALIASES = {
+        tight: :compact,
+        wide: :relaxed,
+      }.freeze
+      private_constant :SYMBOL_KEYS, :LINE_SPACING_ALIASES
+
+      # Configuration file management (used by persistence + specs).
+      def self.config_dir
+        EbookReader::Infrastructure::ConfigPaths.reader_root
+      end
+
+      def self.config_file
+        File.join(config_dir, 'config.json')
+      end
+
+      def self.legacy_config_dir
+        EbookReader::Infrastructure::ConfigPaths.legacy_reader_root
+      end
+
+      def self.legacy_config_file
+        File.join(legacy_config_dir, 'config.json')
+      end
 
       def initialize(event_bus = EventBus.new)
         @event_bus = event_bus
@@ -249,7 +274,7 @@ module EbookReader
 
       def apply_updates(state, updates)
         # Copy only the branches we need to touch instead of duplicating the entire tree.
-        clones = {}
+        clones = {}.compare_by_identity
         new_root = duplicate_node(state, clones)
 
         updates.each do |path, value|
@@ -279,7 +304,7 @@ module EbookReader
         when %i[reader view_mode], %i[config view_mode]
           raise ArgumentError, 'invalid view_mode' unless %i[single split].include?(value)
         when %i[config kitty_images]
-          raise ArgumentError, 'kitty_images must be boolean' unless value == true || value == false
+          raise ArgumentError, 'kitty_images must be boolean' unless [true, false].include?(value)
         when %i[ui terminal_width], %i[ui terminal_height]
           raise ArgumentError, 'terminal dimensions must be positive' if value <= 0
         end
@@ -303,10 +328,10 @@ module EbookReader
 
       def duplicate_node(node, clones)
         return node unless node.is_a?(Hash)
-        return clones[node.object_id] if clones.key?(node.object_id)
+        return clones[node] if clones.key?(node)
 
         duped = node.dup
-        clones[node.object_id] = duped
+        clones[node] = duped
         duped
       rescue StandardError
         node
@@ -348,29 +373,6 @@ module EbookReader
         path.reduce(hash) { |h, key| h&.dig(key) }
       end
 
-      # Configuration file management
-      def self.config_dir
-        EbookReader::Infrastructure::ConfigPaths.reader_root
-      end
-
-      def self.config_file
-        File.join(config_dir, 'config.json')
-      end
-
-      def self.legacy_config_dir
-        EbookReader::Infrastructure::ConfigPaths.legacy_reader_root
-      end
-
-      def self.legacy_config_file
-        File.join(legacy_config_dir, 'config.json')
-      end
-
-      SYMBOL_KEYS = %i[view_mode line_spacing page_numbering_mode theme].freeze
-      LINE_SPACING_ALIASES = {
-        tight: :compact,
-        wide: :relaxed,
-      }.freeze
-
       def ensure_config_dir
         FileUtils.mkdir_p(self.class.config_dir)
       rescue StandardError
@@ -399,9 +401,7 @@ module EbookReader
         apply_config_data(data) if data
 
         # Best-effort migration when XDG paths differ and only legacy exists.
-        if path == legacy_file && config_file != legacy_file && !File.exist?(config_file)
-          save_config
-        end
+        save_config if path == legacy_file && config_file != legacy_file && !File.exist?(config_file)
       rescue StandardError
         # Use defaults on error
       end

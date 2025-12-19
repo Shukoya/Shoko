@@ -5,6 +5,7 @@ require_relative 'helpers'
 module EbookReader
   module Input
     module CommandBuilders
+      # Builds key bindings for exiting a mode/screen via the cancel action.
       class ExitBuilder
         include Helpers
 

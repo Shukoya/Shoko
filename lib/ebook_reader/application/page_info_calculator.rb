@@ -5,7 +5,8 @@ module EbookReader
     # Computes reader page information (current/total pages) for single and split view modes.
     # Encapsulates sizing logic so ReaderController can delegate without duplicating calculations.
     class PageInfoCalculator
-      def initialize(state:, doc:, page_calculator:, layout_service:, terminal_service:, pagination_orchestrator:, defer_page_map:)
+      def initialize(state:, doc:, page_calculator:, layout_service:, terminal_service:, pagination_orchestrator:,
+                     defer_page_map:)
         @state = state
         @doc = doc
         @page_calculator = page_calculator
@@ -139,9 +140,9 @@ module EbookReader
         return if defer_page_map
         return unless page_calculator
 
-        if page_map.empty? || size_changed?(width, height)
-          pagination_orchestrator.build_full_map!(doc, state, page_calculator, [width, height])
-        end
+        return unless page_map.empty? || size_changed?(width, height)
+
+        pagination_orchestrator.build_full_map!(doc, state, page_calculator, [width, height])
       end
 
       def default_single

@@ -7,6 +7,7 @@ require_relative '../helpers/text_metrics'
 
 module EbookReader
   module Components
+    # Renders the top header row (document title).
     class HeaderComponent < BaseComponent
       include Constants::UIConstants
 

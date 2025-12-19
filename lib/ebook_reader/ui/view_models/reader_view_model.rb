@@ -79,15 +79,15 @@ module EbookReader
           view_mode == :single
         end
 
-        def has_message?
+        def message?
           !message.nil? && !message.empty?
         end
 
-        def has_bookmarks?
+        def bookmarks?
           !bookmarks.empty?
         end
 
-        def has_toc?
+        def toc?
           !toc_entries.empty?
         end
 
@@ -118,6 +118,7 @@ module EbookReader
         end
       end
 
+      # View model for menu screens (main/browse/settings/annotations).
       class MenuViewModel
         attr_reader :mode, :selected_index, :items, :search_query, :search_active,
                     :message, :title
@@ -145,11 +146,11 @@ module EbookReader
           items[selected_index]
         end
 
-        def has_items?
+        def items?
           !items.empty?
         end
 
-        def has_message?
+        def message?
           !message.nil? && !message.empty?
         end
 

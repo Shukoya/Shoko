@@ -47,10 +47,10 @@ RSpec.describe 'Repository Service Integration' do
 
   let(:test_config_repository) do
     instance_double(EbookReader::Domain::Repositories::ConfigRepository).tap do |repo|
-      allow(repo).to receive(:get_view_mode).and_return(:split)
+      allow(repo).to receive(:view_mode).and_return(:split)
       allow(repo).to receive(:update_view_mode).and_return(true)
-      allow(repo).to receive(:get_line_spacing).and_return(:normal)
-      allow(repo).to receive(:get_all_config).and_return(default_config)
+      allow(repo).to receive(:line_spacing).and_return(:normal)
+      allow(repo).to receive(:all_config).and_return(default_config)
     end
   end
 
@@ -125,7 +125,7 @@ RSpec.describe 'Repository Service Integration' do
     it 'retrieves bookmarks through repository' do
       expect(test_bookmark_repository).to receive(:find_by_book_path).with(book_path)
 
-      result = bookmark_service.get_bookmarks
+      result = bookmark_service.bookmarks
       expect(result).to eq([test_bookmark])
     end
 

@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'json'
+require 'time'
+
 module EbookReader
   module Infrastructure
     # Centralized logging system for the EPUB Reader application.

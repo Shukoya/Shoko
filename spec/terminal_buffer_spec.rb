@@ -82,5 +82,14 @@ RSpec.describe EbookReader::TerminalBuffer do
 
     expect(drain_io).to include(EbookReader::TerminalOutput::ANSI.move(1, 1))
   end
-end
 
+  it 'drops C1 control characters from rendered output' do
+    buffer.start_frame(width: 20, height: 1)
+    buffer.write(1, 1, "Hi\u009B31mX")
+    buffer.end_frame
+
+    out = drain_io
+    expect(out).to include('Hi')
+    expect(out).not_to include("\u009B")
+  end
+end

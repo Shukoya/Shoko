@@ -225,9 +225,9 @@ RSpec.describe 'Render contract validator' do
     bounds = EbookReader::Components::Rect.new(x: 10, y: 6, width: 60, height: 20)
 
     coord = Class.new do
-      def calculate_popup_position(_end_pos, _w, _h) = { x: 25, y: 12 }
+      def calculate_popup_position(_end_pos, _width, _height) = { x: 25, y: 12 }
       def within_bounds?(*_args) = true
-      def normalize_selection_range(r, _rendered_lines = nil) = r
+      def normalize_selection_range(selection_range, _rendered_lines = nil) = selection_range
     end.new
 
     clipboard = double('Clipboard', available?: false)

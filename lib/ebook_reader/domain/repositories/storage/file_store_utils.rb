@@ -6,6 +6,7 @@ module EbookReader
   module Domain
     module Repositories
       module Storage
+        # Small, shared helpers for file-backed JSON stores.
         module FileStoreUtils
           module_function
 

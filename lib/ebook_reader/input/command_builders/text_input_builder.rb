@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
 require_relative 'helpers'
+require_relative '../../helpers/terminal_sanitizer'
 
 module EbookReader
   module Input
     module CommandBuilders
+      # Builds key bindings for editable text fields (search, file input, editors).
       class TextInputBuilder
         include Helpers
 
@@ -54,7 +56,7 @@ module EbookReader
         def configure_default(commands)
           commands[:__default__] = lambda do |ctx, key|
             char = key.to_s
-            if char.length == 1 && char.ord >= 32
+            if EbookReader::Helpers::TerminalSanitizer.printable_char?(char)
               handle_character(ctx, key)
             else
               :pass

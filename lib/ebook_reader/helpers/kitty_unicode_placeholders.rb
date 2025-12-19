@@ -10,96 +10,126 @@ module EbookReader
       PLACEHOLDER_CHAR = "\u{10EEEE}"
       RESET_FG = "\e[39m"
       RESET_UNDERLINE = "\e[59m"
+      DIACRITIC_CODEPOINTS_PATH = ::File.join(__dir__, 'kitty_unicode_placeholders_diacritic_codepoints.txt')
 
-      DIACRITIC_CODEPOINTS = %w[
-        0305 030D 030E 0310 0312 033D 033E 033F 0346 034A 034B 034C 0350 0351 0352 0357
-        035B 0363 0364 0365 0366 0367 0368 0369 036A 036B 036C 036D 036E 036F 0483 0484
-        0485 0486 0487 0592 0593 0594 0595 0597 0598 0599 059C 059D 059E 059F 05A0 05A1
-        05A8 05A9 05AB 05AC 05AF 05C4 0610 0611 0612 0613 0614 0655 0656 0657 0658 0659
-        065A 065B 065C 065D 065E 06D6 06D7 06D8 06D9 06DA 06DB 06DC 06DF 06E0 06E1 06E2
-        06E4 06E7 06E8 06EA 06EB 06EC 06ED 0711 0730 0731 0732 0733 0734 0735 0736 0737
-        0738 0739 073A 073B 073C 073D 073E 073F 0740 0741 0742 0743 0744 0745 0746 0747
-        0748 0749 074A 07EB 07EC 07ED 07EE 07EF 07F0 07F1 07F3 0816 0817 0818 0819 081B
-        081C 081D 081E 081F 0820 0821 0822 0823 0825 0826 0827 0829 082A 082B 082C 082D
-        0859 085A 08E4 08E5 08E6 08E7 08E8 08E9 08EA 08EB 08EC 08ED 08EE 08EF 08F0 08F1
-        08F2 08F3 08F4 08F5 08F6 08F7 08F8 08F9 08FA 08FB 08FC 08FD 08FE 093A 093C 094D
-        0951 0952 0953 0954 0971 09BC 09CD 0A3C 0A4D 0ABC 0ACD 0B3C 0B4D 0BCD 0C4D 0CBC
-        0CCD 0D3B 0D3C 0D4D 0DCA 0E38 0E39 0E3A 0E48 0E49 0E4A 0E4B 0EB8 0EB9 0EBA 0EC8
-        0EC9 0ECA 0ECB 0F18 0F19 0F35 0F37 0F39 0F71 0F72 0F74 0F7A 0F7B 0F7C 0F7D 0F80
-        0F82 0F83 0F84 0F86 0F87 0FC6 1037 1039 17C6 17C9 17CA 17CB 17CC 17CD 17CE 17CF
-        17D0 17D1 17D2 17D3 17DD 1AB0 1AB1 1AB2 1AB3 1AB4 1AB5 1AB6 1AB7 1AB8 1AB9 1ABA
-        1ABB 1ABC 1ABD 1ABF 1AC0 1AC1 1AC2 1AC3 1AC4 1AC5 1AC6 1AC7 1AC8 1AC9 1ACA 1ACB
-        1ACC 1ACD 1ACE 1B6B 1B6D 1B6E 1B6F 1B70 1B71 1B72 1B73 1CD0 1CD1 1CD2 1CD4 1CD5
-        1CD6 1CD7 1CD8 1CD9 1CDA 1CDB 1CDC 1CDD 1CDE 1CDF 1CE0 1CE2 1CE3 1CE4 1CE5 1CE6
-        1CE7 1CE8 1CED 1CF4 1CF8 1CF9 1DC0 1DC1 1DC2 1DC3 1DC4 1DC5 1DC6 1DC7 1DC8 1DC9
-        1DCB 1DCC 1DD1 1DD2 1DD3 1DD4 1DD5 1DD6 1DD7 1DD8 1DD9 1DDA 1DDB 1DDC 1DDD 1DDE
-        1DDF 1DE0 1DE1 1DE2 1DE3 1DE4 1DE5 1DE6 1DFE 20D0 20D1 20D4 20D5 20D6 20D7 20DB
-        20DC 20E1 20E7 20E9 20F0 2CEF 2CF0 2CF1 2DE0 2DE1 2DE2 2DE3 2DE4 2DE5 2DE6 2DE7
-        2DE8 2DE9 2DEA 2DEB 2DEC 2DED 2DEE 2DEF 2DF0 2DF1 2DF2 2DF3 2DF4 2DF5 2DF6 2DF7
-        2DF8 2DF9 2DFA 2DFB 2DFC 2DFD 2DFE 2DFF A66F A67C A67D A6F0 A6F1 A802 A806 A80B
-        A825 A826 A8C4 A8E0 A8E1 A8E2 A8E3 A8E4 A8E5
-      ].freeze
+      def line(image_id:, grid:, placement_id: nil)
+        key = cache_key(image_id, grid, placement_id)
+        return '' unless key
 
-      DIACRITICS = DIACRITIC_CODEPOINTS.map { |hex| [hex.to_i(16)].pack('U') }.freeze
+        cache = (@line_cache ||= {})
+        cache.fetch(key) { cache[key] = render_line(key) }
+      end
 
-      def line(image_id:, row:, cols:, placement_id: nil)
-        image_i = image_id.to_i
-        row_i = row.to_i
-        cols_i = cols.to_i
-        return '' if cols_i <= 0
-        return '' unless row_i.between?(0, 255)
-        return '' unless cols_i.between?(1, 255)
-
-        placement_i = placement_id.to_i
-        placement_i = 0 if placement_i.negative?
-        cache_key = [image_i, placement_i, row_i, cols_i]
-        cached = (@line_cache ||= {})[cache_key]
-        return cached if cached
-
-        row_mark = DIACRITICS.fetch(row_i)
-        col0_mark = DIACRITICS.fetch(0)
-
-        msb = (image_i >> 24) & 0xFF
-        msb_mark = msb.zero? ? '' : DIACRITICS.fetch(msb)
-
-        first_cell = PLACEHOLDER_CHAR + row_mark + col0_mark + msb_mark
-        rest = cols_i > 1 ? (PLACEHOLDER_CHAR * (cols_i - 1)) : ''
-
-        rendered = foreground(image_i)
-        rendered += underline(placement_i) if placement_i.positive?
-        rendered += first_cell + rest
-        rendered += RESET_FG
-        rendered += RESET_UNDERLINE if placement_i.positive?
-        @line_cache[cache_key] = rendered
+      def diacritics
+        @diacritics ||= build_diacritics
       end
 
       def foreground(image_id)
-        image_i = image_id.to_i
-        cached = (@fg_cache ||= {})[image_i]
-        return cached if cached
-
-        low = image_i & 0xFF_FF_FF
-        r = (low >> 16) & 0xFF
-        g = (low >> 8) & 0xFF
-        b = low & 0xFF
-
-        seq = "\e[38;2;#{r};#{g};#{b}m"
-        @fg_cache[image_i] = seq
+        rgb_sgr(image_id, sgr: 38, cache: (@fg_cache ||= {}))
       end
 
       def underline(placement_id)
-        placement_i = placement_id.to_i
-        cached = (@ul_cache ||= {})[placement_i]
-        return cached if cached
-
-        low = placement_i & 0xFF_FF_FF
-        r = (low >> 16) & 0xFF
-        g = (low >> 8) & 0xFF
-        b = low & 0xFF
-
-        seq = "\e[58;2;#{r};#{g};#{b}m"
-        @ul_cache[placement_i] = seq
+        rgb_sgr(placement_id, sgr: 58, cache: (@ul_cache ||= {}))
       end
+
+      def build_diacritics
+        codepoints = load_diacritic_codepoints
+        loaded = codepoints.map { |hex| [Integer(hex, 16)].pack('U') }.freeze
+        raise ArgumentError, 'not enough diacritics to support Kitty placeholders' if loaded.length < 256
+
+        loaded
+      end
+
+      def cache_key(image_id, grid, placement_id)
+        image_i = positive_integer(image_id)
+        grid_i = valid_grid(grid)
+        return unless image_i && grid_i
+
+        placement_i = (integer_or_nil(placement_id) || 0).clamp(0, 0xFF_FF_FF)
+        (image_i << 40) | (placement_i << 16) | grid_i
+      end
+
+      def integer_or_nil(value)
+        Integer(value)
+      rescue ArgumentError, TypeError
+        nil
+      end
+
+      def load_diacritic_codepoints
+        ::File.read(DIACRITIC_CODEPOINTS_PATH, encoding: Encoding::UTF_8).split
+      end
+
+      def positive_integer(value)
+        int = integer_or_nil(value)
+        return unless int&.positive?
+
+        int & 0xFFFF_FFFF
+      end
+
+      def valid_grid(value)
+        grid_i = integer_or_nil(value)
+        return unless grid_i && (0..0xFFFF).cover?(grid_i) && (1..255).cover?(grid_i & 0xFF)
+
+        grid_i
+      end
+
+      def placeholder_cells(key)
+        marks = diacritics
+        cols = key & 0xFF
+        first = PLACEHOLDER_CHAR + marks.fetch((key >> 8) & 0xFF) + marks.fetch(0) + msb_diacritic(marks, key)
+        first + (cols > 1 ? (PLACEHOLDER_CHAR * (cols - 1)) : '')
+      end
+
+      def msb_diacritic(marks, key)
+        msb = (key >> 64) & 0xFF
+        msb.zero? ? '' : marks.fetch(msb)
+      end
+
+      def render_line(key)
+        cells = placeholder_cells(key)
+        wrap_sequences(key, cells)
+      end
+
+      def wrap_sequences(key, cells)
+        image_id = (key >> 40) & 0xFFFF_FFFF
+        placement_id = (key >> 16) & 0xFF_FF_FF
+        fg = foreground(image_id)
+
+        return "#{fg}#{cells}#{RESET_FG}" unless placement_id.positive?
+
+        "#{fg}#{underline(placement_id)}#{cells}#{RESET_FG}#{RESET_UNDERLINE}"
+      end
+
+      def rgb_sgr(value, sgr:, cache:)
+        bits = integer_or_nil(value)
+        return '' unless bits
+
+        bits &= 0xFF_FF_FF
+        cache.fetch(bits) { cache[bits] = build_rgb_sgr(sgr, bits) }
+      end
+
+      def build_rgb_sgr(sgr, bits)
+        red = (bits >> 16) & 0xFF
+        green = (bits >> 8) & 0xFF
+        blue = bits & 0xFF
+        "\e[#{sgr};2;#{red};#{green};#{blue}m"
+      end
+
+      private_class_method :build_diacritics,
+                           :build_rgb_sgr,
+                           :cache_key,
+                           :diacritics,
+                           :foreground,
+                           :integer_or_nil,
+                           :load_diacritic_codepoints,
+                           :msb_diacritic,
+                           :placeholder_cells,
+                           :positive_integer,
+                           :render_line,
+                           :rgb_sgr,
+                           :underline,
+                           :valid_grid,
+                           :wrap_sequences
     end
   end
 end

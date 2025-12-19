@@ -2,6 +2,7 @@
 
 module EbookReader
   module Infrastructure
+    # Cache path helpers (XDG-compatible) for on-disk reader artifacts.
     module CachePaths
       module_function
 

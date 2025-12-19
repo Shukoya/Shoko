@@ -4,6 +4,7 @@ require_relative 'domain_command_bridge'
 
 module EbookReader
   module Input
+    # Generic command execution helpers used by the input system.
     module Commands
       module_function
 

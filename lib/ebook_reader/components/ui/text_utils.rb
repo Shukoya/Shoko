@@ -5,6 +5,7 @@ require_relative '../../helpers/text_metrics'
 module EbookReader
   module Components
     module UI
+      # Shared text layout utilities for terminal UI rendering.
       module TextUtils
         module_function
 

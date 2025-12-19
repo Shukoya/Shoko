@@ -15,7 +15,7 @@ RSpec.describe EbookReader::Domain::Services::WrappingService do
   it 'delegates to formatting service when available' do
     display_line = EbookReader::Domain::Models::DisplayLine.new(text: 'Formatted line', segments: [], metadata: {})
     expect(formatting_service).to receive(:wrap_window)
-      .with(document, 0, 40, 0, 2)
+      .with(document, 0, 40, offset: 0, length: 2)
       .and_return([display_line])
 
     service = described_class.new(container)

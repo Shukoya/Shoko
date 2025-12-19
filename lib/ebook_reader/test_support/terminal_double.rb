@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 module EbookReader
+  # Test-only helpers and doubles for terminal interactions.
   module TestSupport
     # Lightweight replacement for the production Terminal facade that keeps
     # tests deterministic and side-effect free. All terminal operations become

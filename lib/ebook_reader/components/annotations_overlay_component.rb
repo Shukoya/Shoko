@@ -155,8 +155,11 @@ module EbookReader
           line_row = list_top + offset
           pointer = (start_index + offset) == @selected_index ? '▸' : ' '
           line_color = (start_index + offset) == @selected_index ? SELECTION_HIGHLIGHT : COLOR_TEXT_PRIMARY
-          snippet = UI::TextUtils.pad_right(UI::TextUtils.truncate_text(annotation[:text].to_s.tr("\n", ' '), snippet_width), snippet_width)
-          note = UI::TextUtils.pad_right(UI::TextUtils.truncate_text(annotation[:note].to_s.tr("\n", ' '), note_width), note_width)
+          snippet = UI::TextUtils.pad_right(
+            UI::TextUtils.truncate_text(annotation[:text].to_s.tr("\n", ' '), snippet_width), snippet_width
+          )
+          note = UI::TextUtils.pad_right(UI::TextUtils.truncate_text(annotation[:note].to_s.tr("\n", ' '), note_width),
+                                         note_width)
           saved_at = annotation[:updated_at] || annotation[:created_at]
           saved_text = saved_at ? saved_at.to_s.split('T').first : '-'
           saved = UI::TextUtils.pad_right(UI::TextUtils.truncate_text(saved_text, date_width), date_width)
@@ -183,12 +186,16 @@ module EbookReader
 
       def calculate_width(total_width)
         base = [(total_width * 0.6).floor, total_width - 8].min
-        [[base, 48].max, total_width - 8].min
+        upper = total_width - 8
+        lower = [48, upper].min
+        base.clamp(lower, upper)
       end
 
       def calculate_height(total_height)
         base = [(total_height * 0.5).floor, total_height - 6].min
-        [[base, 12].max, total_height - 6].min
+        upper = total_height - 6
+        lower = [12, upper].min
+        base.clamp(lower, upper)
       end
 
       def up_key?(key)

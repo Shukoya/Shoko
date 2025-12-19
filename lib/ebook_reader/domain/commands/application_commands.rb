@@ -147,6 +147,7 @@ module EbookReader
         end
       end
 
+      # Command that switches the reader into a specific UI mode.
       class ModeCommand < BaseCommand
         def initialize(mode, name: nil, description: nil)
           @mode = mode
@@ -203,7 +204,7 @@ module EbookReader
           return unless deps.registered?(:bookmark_service)
 
           bookmark_service = deps.resolve(:bookmark_service)
-          bookmarks = bookmark_service.get_bookmarks
+          bookmarks = bookmark_service.bookmarks
 
           state_store = deps.resolve(:state_store)
           state_store.set(%i[reader bookmarks], bookmarks)

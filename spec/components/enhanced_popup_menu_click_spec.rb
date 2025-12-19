@@ -4,15 +4,15 @@ require 'spec_helper'
 
 RSpec.describe EbookReader::Components::EnhancedPopupMenu do
   class FakeCoord
-    def calculate_popup_position(_end_pos, _w, _h)
+    def calculate_popup_position(_end_pos, _width, _height)
       { x: 10, y: 5 }
     end
 
-    def within_bounds?(x, y, rect)
-      x >= rect.x && x < (rect.x + rect.width) && y >= rect.y && y < (rect.y + rect.height)
+    def within_bounds?(col, row, rect)
+      col >= rect.x && col < (rect.x + rect.width) && row >= rect.y && row < (rect.y + rect.height)
     end
 
-    def normalize_selection_range(r, _rendered_lines = nil) = r
+    def normalize_selection_range(selection_range, _rendered_lines = nil) = selection_range
   end
 
   class FakeClipboard

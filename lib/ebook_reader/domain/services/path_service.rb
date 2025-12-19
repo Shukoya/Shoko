@@ -29,7 +29,7 @@ module EbookReader
         end
 
         def cache_root
-          if @cache_paths && @cache_paths.respond_to?(:reader_root)
+          if @cache_paths.respond_to?(:reader_root)
             @cache_paths.reader_root
           else
             xdg = ENV.fetch('XDG_CACHE_HOME', nil)

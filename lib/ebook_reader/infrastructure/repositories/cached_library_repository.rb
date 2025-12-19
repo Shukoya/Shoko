@@ -7,6 +7,7 @@ require_relative '../cache_paths'
 require_relative '../json_cache_store'
 require_relative '../cache_pointer_manager'
 require_relative '../epub_cache'
+require_relative '../../helpers/terminal_sanitizer'
 
 module EbookReader
   module Infrastructure
@@ -23,7 +24,7 @@ module EbookReader
           rows = fetch_rows if rows.empty?
           return [] if rows.empty?
 
-          rows.map { |row| build_entry_from_row(row) }.compact
+          rows.filter_map { |row| build_entry_from_row(row) }
         end
 
         private
@@ -44,10 +45,10 @@ module EbookReader
           ensure_pointer_file(row, pointer_path)
 
           metadata = parse_json_object(row['metadata_json'])
-          authors = parse_json_array(row['authors_json']).map(&:to_s)
+          authors = parse_json_array(row['authors_json']).map { |name| sanitize_display(name.to_s) }
 
           {
-            title: present_or_default(row['title'], 'Unknown'),
+            title: sanitize_display(present_or_default(row['title'], 'Unknown')),
             authors: authors.join(', '),
             year: extract_year(metadata),
             size_bytes: (row['cache_size_bytes'] || safe_file_size(pointer_path)).to_i,
@@ -72,7 +73,7 @@ module EbookReader
             'sha256' => row['source_sha'],
             'source_path' => row['source_path'],
             'generated_at' => generated_at,
-            'engine' => Infrastructure::JsonCacheStore::ENGINE
+            'engine' => Infrastructure::JsonCacheStore::ENGINE,
           }
 
           Infrastructure::CachePointerManager.new(path).write(metadata)
@@ -117,6 +118,12 @@ module EbookReader
           File.size(path)
         rescue StandardError
           0
+        end
+
+        def sanitize_display(text)
+          EbookReader::Helpers::TerminalSanitizer.sanitize(text.to_s, preserve_newlines: false, preserve_tabs: false)
+        rescue StandardError
+          text.to_s
         end
       end
     end

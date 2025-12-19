@@ -4,6 +4,7 @@ module EbookReader
   module Domain
     module Services
       module Navigation
+        # Helpers for extracting navigation-relevant values from a state snapshot.
         module ContextHelpers
           module_function
 

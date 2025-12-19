@@ -6,50 +6,52 @@ RSpec.describe EbookReader::Domain::Repositories::ConfigRepository do
   let(:state) { EbookReader::Infrastructure::StateStore.new }
   let(:test_logger) { double('Logger', error: nil, debug: nil, info: nil) }
 
-  class CtnCfg
-    def initialize(state, logger)
-      (@state = state
-       @logger = logger)
-    end
+  let(:container) do
+    Class.new do
+      def initialize(state, logger)
+        @state = state
+        @logger = logger
+      end
 
-    def resolve(name)
-      return @state if name == :global_state
-      return @logger if name == :logger
+      def resolve(name)
+        return @state if name == :global_state
+        return @logger if name == :logger
 
-      nil
-    end
+        nil
+      end
+    end.new(state, test_logger)
   end
 
-  subject(:repo) { described_class.new(CtnCfg.new(state, test_logger)) }
+  subject(:repo) { described_class.new(container) }
 
   it 'reads and updates core config values' do
-    expect(repo.get_view_mode).to eq(:split)
+    expect(repo.view_mode).to eq(:split)
     expect(repo.update_view_mode(:single)).to be true
-    expect(repo.get_view_mode).to eq(:single)
+    expect(repo.view_mode).to eq(:single)
 
-    expect(repo.get_page_numbering_mode).to eq(:dynamic)
+    expect(repo.page_numbering_mode).to eq(:dynamic)
     expect(repo.update_page_numbering_mode(:absolute)).to be true
-    expect(repo.get_page_numbering_mode).to eq(:absolute)
+    expect(repo.page_numbering_mode).to eq(:absolute)
 
-    expect(repo.get_show_page_numbers).to be true
+    expect(repo.show_page_numbers?).to be true
     expect(repo.update_show_page_numbers(false)).to be true
-    expect(repo.get_show_page_numbers).to be false
+    expect(repo.show_page_numbers?).to be false
 
-    expect(repo.get_line_spacing).to eq(:compact)
+    expect(repo.line_spacing).to eq(:compact)
     expect(repo.update_line_spacing(:wide)).to be true
-    expect(repo.get_line_spacing).to eq(:relaxed)
+    expect(repo.line_spacing).to eq(:relaxed)
     expect(repo.update_line_spacing(:tight)).to be true
-    expect(repo.get_line_spacing).to eq(:compact)
+    expect(repo.line_spacing).to eq(:compact)
   end
 
   it 'updates multiple and resets to defaults' do
     expect(repo.update_multiple({ view_mode: :single, show_page_numbers: false })).to be true
-    expect(repo.get_view_mode).to eq(:single)
-    expect(repo.get_show_page_numbers).to be false
+    expect(repo.view_mode).to eq(:single)
+    expect(repo.show_page_numbers?).to be false
 
     expect(repo.reset_to_defaults).to be true
-    expect(repo.get_view_mode).to eq(:split)
-    expect(repo.get_show_page_numbers).to be true
+    expect(repo.view_mode).to eq(:split)
+    expect(repo.show_page_numbers?).to be true
   end
 
   it 'detects customized values' do

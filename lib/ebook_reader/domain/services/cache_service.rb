@@ -67,7 +67,6 @@ module EbookReader
         rescue EbookReader::Error, StandardError
           nil
         end
-      private
 
         def resolve_required(name)
           resolve(name)

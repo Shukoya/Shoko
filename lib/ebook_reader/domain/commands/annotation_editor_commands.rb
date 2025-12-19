@@ -26,10 +26,10 @@ module EbookReader
 
           case @action
           when :save
-            return :handled if dispatch_to_mode(mode, :save_annotation)
+            return :handled if dispatched_to_mode?(mode, :save_annotation)
           when :cancel
             # Reader: cleanup + back to read; Menu: back to annotations
-            if dispatch_to_mode(mode, :cancel_annotation)
+            if dispatched_to_mode?(mode, :cancel_annotation)
               # Mode handled the cancel path completely
             elsif ui
               begin
@@ -51,14 +51,14 @@ module EbookReader
               end
             end
           when :backspace
-            return :handled if dispatch_to_mode(mode, :handle_backspace)
+            return :handled if dispatched_to_mode?(mode, :handle_backspace)
           when :enter
-            return :handled if dispatch_to_mode(mode, :handle_enter)
+            return :handled if dispatched_to_mode?(mode, :handle_enter)
           when :insert_char
             ch = (params[:key] || '').to_s
             return :pass if ch.empty?
 
-            return :handled if dispatch_to_mode(mode, :handle_character, ch)
+            return :handled if dispatched_to_mode?(mode, :handle_character, ch)
           else
             return :pass
           end
@@ -68,14 +68,15 @@ module EbookReader
 
         private
 
-        def dispatch_to_mode(mode, method, *)
-          return false unless mode.respond_to?(method)
+        def dispatched_to_mode?(mode, method_name, *)
+          return false unless mode.respond_to?(method_name)
 
-          mode.public_send(method, *)
+          mode.public_send(method_name, *)
           true
         end
       end
 
+      # Factory methods for building AnnotationEditor commands.
       module AnnotationEditorCommandFactory
         def self.save
           AnnotationEditorCommand.new(:save)

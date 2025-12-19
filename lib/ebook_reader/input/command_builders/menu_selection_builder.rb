@@ -5,6 +5,7 @@ require_relative 'helpers'
 module EbookReader
   module Input
     module CommandBuilders
+      # Builds key bindings for selecting a menu item via confirm keys.
       class MenuSelectionBuilder
         include Helpers
 

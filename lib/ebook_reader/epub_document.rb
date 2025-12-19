@@ -5,6 +5,7 @@ require_relative 'infrastructure/performance_monitor'
 require_relative 'infrastructure/perf_tracer'
 require_relative 'infrastructure/book_cache_pipeline'
 require_relative 'helpers/html_processor'
+require_relative 'helpers/terminal_sanitizer'
 require_relative 'domain/models/chapter'
 require_relative 'domain/models/toc_entry'
 
@@ -90,11 +91,13 @@ module EbookReader
 
     def apply_pipeline_result(result)
       book = result.book
-      Infrastructure::PerfTracer.annotate(
-        cache_hit: result.loaded_from_cache,
-        chapters: Array(book&.chapters).size,
-        book: result.source_path || @open_path
-      ) if defined?(Infrastructure::PerfTracer)
+      if defined?(Infrastructure::PerfTracer)
+        Infrastructure::PerfTracer.annotate(
+          cache_hit: result.loaded_from_cache,
+          chapters: Array(book&.chapters).size,
+          book: result.source_path || @open_path
+        )
+      end
       @cache_path = result.cache_path
       @cache_sha = derive_cache_sha(@cache_path)
       @source_path = result.source_path || @open_path
@@ -168,12 +171,13 @@ module EbookReader
     def fallback_plain_lines(content)
       return [] unless content
 
-      text = Helpers::HTMLProcessor.html_to_text(content)
+      text = Helpers::HTMLProcessor.html_to_text(content.to_s)
       text.split("\n").map(&:rstrip)
     end
 
     def fallback_title(path)
-      File.basename(path, File.extname(path)).tr('_', ' ')
+      raw = File.basename(path, File.extname(path)).tr('_', ' ')
+      Helpers::TerminalSanitizer.sanitize(raw, preserve_newlines: false, preserve_tabs: false)
     end
 
     def enqueue_async_formatting(index, chapter)

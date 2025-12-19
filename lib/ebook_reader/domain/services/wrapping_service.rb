@@ -183,7 +183,7 @@ module EbookReader
           return unless document
 
           formatting = resolve(:formatting_service)
-          lines = formatting.wrap_window(document, chapter_index, width, offset, length)
+          lines = formatting.wrap_window(document, chapter_index, width, offset: offset, length: length)
           return unless lines && !lines.empty?
 
           lines.map { |line| line.respond_to?(:text) ? line.text : line }

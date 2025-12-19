@@ -16,7 +16,7 @@ module EbookReader
             total = context.dynamic_total_pages.to_i
             return {} if total <= 0
 
-            new_index = [[context.current_page_index + inc, 0].max, total - 1].min
+            new_index = (context.current_page_index + inc).clamp(0, total - 1)
             { current_page_index: new_index }
           end
 
@@ -25,7 +25,7 @@ module EbookReader
             total = context.dynamic_total_pages.to_i
             return {} if total <= 0
 
-            new_index = [[context.current_page_index - dec, 0].max, total - 1].min
+            new_index = (context.current_page_index - dec).clamp(0, total - 1)
             { current_page_index: new_index }
           end
 

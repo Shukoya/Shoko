@@ -26,7 +26,8 @@ RSpec.describe EbookReader::Domain::Repositories::Storage::BookmarkFileStore do
   it 'adds, lists and deletes bookmarks' do
     store = described_class.new(file_writer:, path_service:)
     data = EbookReader::Domain::Models::BookmarkData.new(path: '/tmp/a.epub', chapter: 1, line_offset: 10, text: 'x')
-    expect(store.add(data)).to be true
+    created = store.add(data)
+    expect(created).to be_a(Hash)
     expect(File).to exist(file_path)
 
     list = store.get('/tmp/a.epub')
@@ -37,5 +38,19 @@ RSpec.describe EbookReader::Domain::Repositories::Storage::BookmarkFileStore do
     bm = list.first
     expect(store.delete('/tmp/a.epub', bm)).to be true
     expect(store.get('/tmp/a.epub')).to be_empty
+  end
+
+  it 'sanitizes bookmark text snippets' do
+    store = described_class.new(file_writer:, path_service:)
+    dangerous = "hi\u009B31mX\e]2;HACK\a"
+    data = EbookReader::Domain::Models::BookmarkData.new(path: '/tmp/a.epub', chapter: 1, line_offset: 10, text: dangerous)
+    created = store.add(data)
+    expect(created).to include('text' => 'hiX')
+
+    list = store.get('/tmp/a.epub')
+    expect(list.length).to eq(1)
+    expect(list.first.text_snippet).to eq('hiX')
+    expect(list.first.text_snippet).not_to include("\u009B")
+    expect(list.first.text_snippet).not_to include("\e")
   end
 end

@@ -128,9 +128,7 @@ module EbookReader
       if @doc.respond_to?(:cached?) && @doc.cached?
         @pending_initial_calculation = false
         @defer_page_map = true
-        if @page_calculator && @page_calculator.total_pages.to_i.positive?
-          @defer_page_map = false
-        end
+        @defer_page_map = false if @page_calculator && @page_calculator.total_pages.to_i.positive?
       else
         @defer_page_map = false
       end
@@ -300,19 +298,17 @@ module EbookReader
       return unless doc
 
       entries = doc.respond_to?(:toc_entries) ? Array(doc.toc_entries) : []
-      entries = if entries.empty?
-                  Array(doc.chapters).each_with_index.map do |chapter, idx|
-                    Domain::Models::TOCEntry.new(
-                      title: chapter&.title || "Chapter #{idx + 1}",
-                      href: nil,
-                      level: 0,
-                      chapter_index: idx,
-                      navigable: true
-                    )
-                  end
-                else
-                  entries
-                end
+      if entries.empty?
+        entries = Array(doc.chapters).each_with_index.map do |chapter, idx|
+          Domain::Models::TOCEntry.new(
+            title: chapter&.title || "Chapter #{idx + 1}",
+            href: nil,
+            level: 0,
+            chapter_index: idx,
+            navigable: true
+          )
+        end
+      end
 
       selected = (@state.get(%i[reader toc_selected]) || 0).to_i
       selected = selected.clamp(0, [entries.length - 1, 0].max)
@@ -651,9 +647,13 @@ module EbookReader
     end
 
     def activate_annotation_editor_overlay_session
-      @overlay_session ||= EbookReader::Application::AnnotationEditorOverlaySession.new(@state,
-                                                                                        @dependencies,
-                                                                                        @ui_controller)
+      return @overlay_session if @overlay_session
+
+      @overlay_session = EbookReader::Application::AnnotationEditorOverlaySession.new(
+        @state,
+        @dependencies,
+        @ui_controller
+      )
     end
 
     def deactivate_annotation_editor_overlay_session
@@ -694,16 +694,16 @@ module EbookReader
         @state = state
         @metrics_start_time = metrics_start_time
         @instrumentation = instrumentation
+        @tti_recorded = false
       end
 
       def run
         controller.perform_first_paint
-        tti_recorded = false
         startup_reference = metrics_start_time
 
         while running?
           keys = controller.read_input_keys
-          tti_recorded = record_tti(tti_recorded, startup_reference, keys)
+          record_tti(startup_reference, keys)
           next if keys.empty?
 
           controller.dispatch_input_keys(keys)
@@ -719,16 +719,16 @@ module EbookReader
         EbookReader::Domain::Selectors::ReaderSelectors.running?(state)
       end
 
-      def record_tti(already_recorded, startup_reference, keys)
-        return true if already_recorded
-        return false unless startup_reference && keys.any?
+      def record_tti(startup_reference, keys)
+        return if @tti_recorded
+        return unless startup_reference && keys.any?
 
         instrumentation&.record_metric(
           'render.tti',
           Process.clock_gettime(Process::CLOCK_MONOTONIC) - startup_reference,
           0
         )
-        true
+        @tti_recorded = true
       end
     end
   end

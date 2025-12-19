@@ -40,9 +40,10 @@ RSpec.describe EbookReader::Domain::Repositories::ProgressRepository do
         @store = {}
       end
 
-      def save(path, ch, off)
-        @store[path] = { 'chapter' => ch, 'line_offset' => off, 'timestamp' => Time.now.iso8601 }
-        true
+      def save(path, chapter_index, line_offset)
+        entry = { 'chapter' => chapter_index, 'line_offset' => line_offset, 'timestamp' => Time.now.iso8601 }
+        @store[path] = entry
+        entry
       end
 
       def load(path)

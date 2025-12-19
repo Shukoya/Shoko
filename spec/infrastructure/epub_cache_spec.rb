@@ -64,7 +64,8 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
 
     reloaded = described_class.new(epub_path).load_for_source(strict: true)
     expect(reloaded.book.title).to eq('Spec Book')
-    expect(reloaded.book.chapters.first.lines).to eq(['hello'])
+    expect(reloaded.book.chapters.first.lines).to eq([])
+    expect(reloaded.book.chapters.first.raw_content.to_s).to include('<p>hello</p>')
   end
 
   it 'stores layout metadata inside the cache file' do
@@ -133,5 +134,44 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
     pointer = JSON.parse(File.read(pointer_path))
     expect(pointer['format']).to eq(EbookReader::Infrastructure::CachePointerManager::POINTER_FORMAT)
     expect(pointer['sha256']).to eq(cache.sha256)
+  end
+
+  it 'sanitizes cached strings on reload (defense-in-depth)' do
+    unsafe_book = EbookReader::Infrastructure::EpubCache::BookData.new(
+      title: "Bad\u009B31mTitle",
+      language: "en\u009B0m_US",
+      authors: ["Auth\e]2;HACK\a"],
+      chapters: [
+        EbookReader::Domain::Models::Chapter.new(
+          number: '1',
+          title: "Ch\e[31m1",
+          lines: ["hi\u009B31mX"],
+          metadata: nil,
+          blocks: nil,
+          raw_content: "<p>hi\u009B31mX</p>"
+        ),
+      ],
+      toc_entries: [],
+      opf_path: 'OPS/content.opf',
+      spine: ['xhtml/1.xhtml'],
+      chapter_hrefs: ['xhtml/1.xhtml'],
+      resources: {},
+      metadata: {},
+      container_path: 'META-INF/container.xml',
+      container_xml: "<xml>\e]2;HACK\a</xml>"
+    )
+
+    cache = described_class.new(epub_path)
+    cache.write_book!(unsafe_book)
+
+    reloaded = described_class.new(epub_path).load_for_source(strict: true)
+    expect(reloaded.book.title).to eq('BadTitle')
+    expect(reloaded.book.language).to eq('en_US')
+    expect(reloaded.book.authors).to eq(['Auth'])
+    expect(reloaded.book.chapters.first.title).to eq('Ch1')
+    expect(reloaded.book.chapters.first.lines).to eq([])
+    expect(reloaded.book.chapters.first.raw_content.to_s).to include('<p>hiX</p>')
+    expect(reloaded.book.chapters.first.raw_content.to_s).not_to include("\u009B")
+    expect(reloaded.book.container_xml).not_to include("\e")
   end
 end

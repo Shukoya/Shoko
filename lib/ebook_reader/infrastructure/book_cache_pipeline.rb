@@ -43,7 +43,7 @@ module EbookReader
         payload ||= cache.load_for_source(strict: false)
 
         if payload
-          rebuilt = cache_incomplete?(payload.book)
+          rebuilt = cache_incomplete?(cache, payload)
           payload = rebuild_cache(cache, formatting_service) if rebuilt
           return Result.new(
             book: payload.book,
@@ -83,11 +83,18 @@ module EbookReader
 
       private
 
-      def cache_incomplete?(book)
+      def cache_incomplete?(cache, payload)
+        book = payload&.book
         chapters = Array(book&.chapters)
         return true if chapters.empty?
 
-        chapters.any? { |ch| ch.nil? || ch.raw_content.nil? || ch.raw_content.to_s.empty? }
+        return true if chapters.any?(&:nil?)
+
+        generation = book.respond_to?(:chapters_generation) ? book.chapters_generation : nil
+        return true unless cache.respond_to?(:chapters_complete?)
+        return true unless cache.chapters_complete?(chapters.length, generation: generation)
+
+        false
       rescue StandardError
         true
       end
@@ -130,7 +137,7 @@ module EbookReader
         end
         return nil unless payload
 
-        rebuilt = cache_incomplete?(payload.book)
+        rebuilt = cache_incomplete?(cache, payload)
         if rebuilt
           loaded_from_cache = false
           payload = rebuild_cache(cache, formatting_service)
@@ -202,7 +209,7 @@ module EbookReader
           'sha256' => sha,
           'source_path' => source_path,
           'generated_at' => Time.now.utc.iso8601,
-          'engine' => JsonCacheStore::ENGINE
+          'engine' => JsonCacheStore::ENGINE,
         }
 
         manager.write(metadata)
@@ -218,7 +225,7 @@ module EbookReader
 
         rebuilt = load(source, formatting_service: formatting_service)
         begin
-          if rebuilt && rebuilt.cache_path && File.expand_path(rebuilt.cache_path) != File.expand_path(cache.cache_path)
+          if rebuilt&.cache_path && File.expand_path(rebuilt.cache_path) != File.expand_path(cache.cache_path)
             FileUtils.rm_f(cache.cache_path)
           end
         rescue StandardError

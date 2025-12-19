@@ -38,9 +38,9 @@ module EbookReader
           return {} unless @recent_repository
 
           items = @recent_repository.all
-          Array(items).each_with_object({}) do |it, acc|
-            path = it['path']
-            accessed = it['accessed']
+          Array(items).each_with_object({}) do |recent_item, acc|
+            path = recent_item['path']
+            accessed = recent_item['accessed']
             acc[path] = accessed if path && accessed
           end
         end

@@ -6,6 +6,7 @@ module EbookReader
       # Enhanced base command with proper error handling and validation.
       # Replaces the mixed command patterns with consistent implementation.
       class BaseCommand
+        # Base error type for command execution and validation failures.
         class CommandError < StandardError
           attr_reader :command_name, :context
 

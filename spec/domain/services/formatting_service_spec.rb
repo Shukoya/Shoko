@@ -59,7 +59,7 @@ RSpec.describe EbookReader::Domain::Services::FormattingService do
     end
 
     it 'returns display lines with styling metadata' do
-      lines = service.wrap_window(document, 0, 40, 0, 5)
+      lines = service.wrap_window(document, 0, 40, offset: 0, length: 5)
       expect(lines).not_to be_empty
       first = lines.first
       expect(first).to respond_to(:segments)

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'time'
+
 require_relative 'base_repository'
 require_relative 'storage/progress_file_store'
 

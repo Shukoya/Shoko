@@ -14,14 +14,11 @@ module EbookReader
           @tracer  = resolve_optional(:perf_tracer)
         end
 
-        def time(metric)
-          if block_given?
-            return yield unless @monitor&.respond_to?(:time)
+        def time(metric, &)
+          raise ArgumentError, 'block required for #time' unless block_given?
+          return yield unless @monitor.respond_to?(:time)
 
-            @monitor.time(metric) { yield }
-          else
-            raise ArgumentError, 'block required for #time'
-          end
+          @monitor.time(metric, &)
         end
 
         def record_metric(name, value, count = 1)
@@ -41,7 +38,7 @@ module EbookReader
         end
 
         def start_trace(path)
-          @tracer&.respond_to?(:start_open) ? @tracer.start_open(path) : nil
+          @tracer.respond_to?(:start_open) ? @tracer.start_open(path) : nil
         end
 
         private

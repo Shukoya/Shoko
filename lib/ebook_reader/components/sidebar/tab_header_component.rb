@@ -10,6 +10,13 @@ module EbookReader
       class TabHeaderComponent < BaseComponent
         include Constants::UIConstants
 
+        RenderTarget = Struct.new(:surface, :bounds, keyword_init: true) do
+          def write(row, col, text)
+            surface.write(bounds, row, col, text)
+          end
+        end
+        private_constant :RenderTarget
+
         TABS = %i[toc annotations bookmarks].freeze
         TAB_INFO = {
           toc: { label: 'Contents', icon: '◉', key: 'g' },
@@ -23,91 +30,104 @@ module EbookReader
         end
 
         def do_render(surface, bounds)
-          # Draw separator line
-          draw_separator(surface, bounds)
-
-          # Render tab navigation
-          render_tab_navigation(surface, bounds)
+          target = RenderTarget.new(surface: surface, bounds: bounds)
+          draw_separator(target)
+          render_tab_navigation(target)
         end
+
+        # Internal context for rendering a single tab button.
+        TabButtonCtx = Struct.new(
+          :tab,
+          :x,
+          :width,
+          :active,
+          :icon,
+          :label,
+          :key,
+          :row_top,
+          :row_bottom,
+          keyword_init: true
+        )
+        private_constant :TabButtonCtx
 
         private
 
-        def draw_separator(surface, bounds)
-          # Draw subtle separator line at top
-          separator_char = "#{COLOR_TEXT_DIM}─#{Terminal::ANSI::RESET}"
-          (1..(bounds.width - 1)).each do |x|
-            surface.write(bounds, 1, x, separator_char)
-          end
+        def draw_separator(target)
+          width = target.bounds.width
+          line_width = [width - 1, 0].max
+          return if line_width.zero?
+
+          reset = Terminal::ANSI::RESET
+          target.write(1, 1, "#{COLOR_TEXT_DIM}#{'─' * line_width}#{reset}")
         end
 
-        def render_tab_navigation(surface, bounds)
-          # Calculate tab positions
-          tab_width = (bounds.width - 2) / TABS.length
-          start_y = 1
+        def render_tab_navigation(target)
+          tab_width = (target.bounds.width - 2) / TABS.length
+          row_top = 2
+          row_bottom = 3
 
           active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(@state)
           TABS.each_with_index do |tab, index|
             x_pos = 2 + (index * tab_width)
-            ctx = TabButtonCtx.new(tab: tab, x: x_pos, y: start_y, width: tab_width, active: (active_tab == tab))
-            render_tab_button(surface, bounds, ctx)
+            active = (active_tab == tab)
+            ctx = build_tab_button_ctx(tab, x_pos, tab_width, active, row_top: row_top, row_bottom: row_bottom)
+            render_tab_button(target, ctx)
           end
         end
 
-        TabButtonCtx = Struct.new(:tab, :x, :y, :width, :active, keyword_init: true)
+        def build_tab_button_ctx(tab, x_pos, width, active, row_top:, row_bottom:)
+          info = TAB_INFO.fetch(tab)
+          TabButtonCtx.new(
+            tab: tab,
+            x: x_pos,
+            width: width,
+            active: active,
+            icon: info[:icon],
+            label: info[:label],
+            key: info[:key],
+            row_top: row_top,
+            row_bottom: row_bottom
+          )
+        end
 
-        def render_tab_button(surface, bounds, ctx)
-          info = TAB_INFO[ctx.tab]
-          icon = info[:icon]
-          label = info[:label]
-          key = info[:key]
+        def render_tab_button(target, ctx)
+          ctx.active ? render_active(target, ctx) : render_inactive(target, ctx)
+        end
+
+        def render_active(target, ctx)
           reset = Terminal::ANSI::RESET
-          x = ctx.x
-          y = ctx.y
-          w = ctx.width
+          icon_text = "#{COLOR_TEXT_ACCENT}#{ctx.icon}#{reset}"
+          label_text = "#{COLOR_TEXT_PRIMARY}#{ctx.label}#{reset}"
 
-          y1 = y + 1
-          y2 = y + 2
-          return render_active(surface, bounds, x, y1, y2, w, icon, label, reset) if ctx.active
-
-          render_inactive(surface, bounds, x, y1, y2, w, icon, key, reset)
-        end
-
-        def write_at(surface, bounds, y, x, text)
-          surface.write(bounds, y, x, text)
-        end
-
-        def write_pair(surface, bounds, y, x, left_text, right_text)
-          write_at(surface, bounds, y, x, left_text)
-          write_at(surface, bounds, y, x + 2, right_text)
-        end
-
-        def xpad_for(x, padding)
-          x + padding
-        end
-
-        def render_active(surface, bounds, x, y1, y2, w, icon, label, reset)
-          icon_text = "#{COLOR_TEXT_ACCENT}#{icon}#{reset}"
-          label_text = "#{COLOR_TEXT_PRIMARY}#{label}#{reset}"
-          content = "#{icon} #{label}"
+          content = "#{ctx.icon} #{ctx.label}"
           content_len = EbookReader::Helpers::TextMetrics.visible_length(content)
-          padding = [(w - content_len) / 2, 0].max
-          xpad = xpad_for(x, padding)
-          write_pair(surface, bounds, y1, xpad, icon_text, label_text)
-          indicator_char = "#{COLOR_TEXT_ACCENT}▬#{reset}"
-          indicator_width = [content_len, w - 2].min
-          indicator_start = x + [(w - indicator_width) / 2, 0].max
-          (0...indicator_width).each { |i| write_at(surface, bounds, y2, indicator_start + i, indicator_char) }
+          padding = [(ctx.width - content_len) / 2, 0].max
+          padded_col = ctx.x + padding
+
+          target.write(ctx.row_top, padded_col, icon_text)
+          target.write(ctx.row_top, padded_col + 2, label_text)
+          render_active_indicator(target, ctx, content_len, reset)
         end
 
-        def render_inactive(surface, bounds, x, y1, y2, w, icon, key, reset)
-          icon_text = "#{COLOR_TEXT_DIM}#{icon}#{reset}"
-          key_hint = "#{COLOR_TEXT_DIM}[#{key}]#{reset}"
-          content_width = 1
-          padding = [(w - content_width) / 2, 0].max
-          xpad = xpad_for(x, padding)
-          write_at(surface, bounds, y1, xpad, icon_text)
-          key_padding = [(w - 3) / 2, 0].max
-          write_at(surface, bounds, y2, x + key_padding, key_hint)
+        def render_active_indicator(target, ctx, content_len, reset)
+          indicator_width = [content_len, ctx.width - 2].min
+          return if indicator_width <= 0
+
+          start = ctx.x + [(ctx.width - indicator_width) / 2, 0].max
+          line = "#{COLOR_TEXT_ACCENT}#{'▬' * indicator_width}#{reset}"
+          target.write(ctx.row_bottom, start, line)
+        end
+
+        def render_inactive(target, ctx)
+          reset = Terminal::ANSI::RESET
+          icon_text = "#{COLOR_TEXT_DIM}#{ctx.icon}#{reset}"
+          key_hint = "#{COLOR_TEXT_DIM}[#{ctx.key}]#{reset}"
+
+          icon_padding = [(ctx.width - 1) / 2, 0].max
+          target.write(ctx.row_top, ctx.x + icon_padding, icon_text)
+
+          key_padding = [(ctx.width - 3) / 2, 0].max
+          target.write(ctx.row_bottom, ctx.x + key_padding, key_hint)
         end
       end
     end

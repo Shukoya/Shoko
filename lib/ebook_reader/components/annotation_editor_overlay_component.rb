@@ -4,6 +4,7 @@ require_relative 'base_component'
 require_relative 'ui/box_drawer'
 require_relative 'ui/text_utils'
 require_relative '../input/key_definitions'
+require_relative '../helpers/terminal_sanitizer'
 
 module EbookReader
   module Components
@@ -93,12 +94,16 @@ module EbookReader
 
       def calculate_width(total_width)
         base = [(total_width * 0.7).floor, total_width - 6].min
-        [[base, 50].max, total_width - 6].min
+        upper = total_width - 6
+        lower = [50, upper].min
+        base.clamp(lower, upper)
       end
 
       def calculate_height(total_height)
         base = [(total_height * 0.6).floor, total_height - 6].min
-        [[base, 14].max, total_height - 6].min
+        upper = total_height - 6
+        lower = [14, upper].min
+        base.clamp(lower, upper)
       end
 
       def fill_background(surface, bounds, origin_x, origin_y, width, height)
@@ -140,7 +145,7 @@ module EbookReader
         end
 
         cursor_display_row = cursor_line_index - visible_start
-        cursor_display_row = [[cursor_display_row, 0].max, note_rows - 1].min
+        cursor_display_row = cursor_display_row.clamp(0, note_rows - 1)
         cursor_row = note_top + cursor_display_row
         cursor_line = cursor_lines.last || ''
         cursor_col = text_x + [EbookReader::Helpers::TextMetrics.visible_length(cursor_line), text_width - 1].min
@@ -202,7 +207,7 @@ module EbookReader
       end
 
       def printable?(key)
-        key.is_a?(String) && key.length == 1 && key.ord >= 32
+        EbookReader::Helpers::TerminalSanitizer.printable_char?(key.to_s)
       end
 
       def save_key?(key)
@@ -217,12 +222,12 @@ module EbookReader
         { type: :save, note: @note }
       end
 
-      def handle_click(x, y)
+      def handle_click(col, row)
         return nil unless @visible && @button_regions
 
         @button_regions.each do |key, region|
-          next unless y == region[:row]
-          next unless x.between?(region[:col], region[:col] + region[:width] - 1)
+          next unless row == region[:row]
+          next unless col.between?(region[:col], region[:col] + region[:width] - 1)
 
           return handle_save if key == :save
           return { type: :cancel } if key == :cancel
@@ -233,11 +238,11 @@ module EbookReader
 
       private
 
-      def draw_button(surface, bounds, row, col, label, bg, width)
+      def draw_button(surface, bounds, row, col, label, background, width)
         reset = Terminal::ANSI::RESET
         text = " #{label} "
         padded = UI::TextUtils.pad_right(text, width)
-        surface.write(bounds, row, col, "#{bg}#{BUTTON_FG}#{padded}#{reset}")
+        surface.write(bounds, row, col, "#{background}#{BUTTON_FG}#{padded}#{reset}")
       end
 
       def build_geometry(origin_x, origin_y, width, height)

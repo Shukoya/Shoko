@@ -6,6 +6,7 @@ require 'rexml/parsers/pullparser'
 
 require_relative '../../domain/models/content_block'
 require_relative '../../helpers/html_processor'
+require_relative '../../helpers/terminal_sanitizer'
 require_relative '../../errors'
 require_relative '../logger'
 
@@ -85,7 +86,9 @@ module EbookReader
         private_constant :ListContext
 
         def parse_document(text)
-          sanitized = sanitize_for_xml(text.to_s)
+          safe = EbookReader::Helpers::TerminalSanitizer.sanitize_xml_source(text.to_s, preserve_newlines: true,
+                                                                                        preserve_tabs: true)
+          sanitized = sanitize_for_xml(safe)
           # Preserve whitespace-only text nodes so inline element boundaries
           # don't accidentally collapse words (e.g., <em>foo</em>\n<em>bar</em>).
           # We normalize whitespace later in `normalize_text`.
@@ -371,13 +374,15 @@ module EbookReader
 
         def normalize_text(text, styles)
           decoded = EbookReader::Helpers::HTMLProcessor.decode_entities(text.to_s)
+          decoded = EbookReader::Helpers::TerminalSanitizer.sanitize(decoded, preserve_newlines: true,
+                                                                              preserve_tabs: true)
           return decoded if styles[:code] || styles[:preserve_whitespace]
 
           if styles[:break]
-            return text == INLINE_NEWLINE ? INLINE_NEWLINE : text
+            return decoded == INLINE_NEWLINE ? INLINE_NEWLINE : decoded
           end
 
-          decoded.delete("\r").gsub(/\n/, ' ').gsub(WHITESPACE_PATTERN, ' ')
+          decoded.delete("\r").tr("\n", ' ').gsub(WHITESPACE_PATTERN, ' ')
         end
 
         def extract_raw_text(element)
@@ -433,7 +438,7 @@ module EbookReader
           )
         end
 
-        def image_placeholder_segment(element, inherited_styles)
+        def image_placeholder_segment(_element, inherited_styles)
           text = '[Image]'
           text_segment(" #{text} ", inherited_styles.merge(dim: true))
         end
