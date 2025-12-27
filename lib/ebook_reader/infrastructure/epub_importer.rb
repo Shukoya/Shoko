@@ -7,6 +7,7 @@ require_relative '../errors'
 require_relative '../helpers/html_processor'
 require_relative '../helpers/opf_processor'
 require_relative '../helpers/terminal_sanitizer'
+require_relative '../helpers/xml_text_normalizer'
 require_relative '../domain/models/chapter'
 require_relative '../domain/models/toc_entry'
 require_relative 'perf_tracer'
@@ -104,21 +105,21 @@ module EbookReader
         hrefs    = []
         spine    = []
 
-        processor.process_spine(manifest, chapter_titles) do |file_path, number, title, href|
-          raw = read_text_entry(zip, file_path)
-          resolved_href = resolve_href(opf_path, href)
+        processor.process_spine(manifest, chapter_titles) do |item|
+          raw = read_text_entry(zip, item.file_path)
+          resolved_href = resolve_href(opf_path, item.href)
           chapter = Domain::Models::Chapter.new(
-            number: number.to_s,
-            title: extract_chapter_title(raw, number, title),
+            number: item.number.to_s,
+            title: extract_chapter_title(raw, item.number, item.title),
             lines: nil,
-            metadata: { source_path: file_path, href: resolved_href },
+            metadata: { source_path: item.file_path, href: resolved_href },
             blocks: nil,
             raw_content: raw
           )
 
           chapters << chapter
           hrefs << resolved_href
-          spine << file_path
+          spine << item.file_path
         end
 
         { chapters:, hrefs:, spine: }
@@ -198,22 +199,7 @@ module EbookReader
       end
 
       def normalize_text(content)
-        bytes = String(content).dup
-        bytes.force_encoding(Encoding::BINARY)
-        bytes = bytes.delete_prefix("\xEF\xBB\xBF".b) # UTF-8 BOM
-
-        declared = bytes[/\A\s*<\?xml[^>]*encoding=["']([^"']+)["']/i, 1]
-        encoding = begin
-          declared ? Encoding.find(declared) : Encoding::UTF_8
-        rescue StandardError
-          Encoding::UTF_8
-        end
-
-        text = bytes.dup
-        text.force_encoding(encoding)
-        text = text.encode(Encoding::UTF_8, invalid: :replace, undef: :replace, replace: "\uFFFD")
-        text = text.delete_prefix("\uFEFF")
-        Helpers::TerminalSanitizer.sanitize_xml_source(text, preserve_newlines: true, preserve_tabs: true)
+        Helpers::XmlTextNormalizer.normalize(content)
       end
 
       def resolve_href(opf_path, href)

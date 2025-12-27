@@ -1,5 +1,5 @@
 Inspecting 270 files
-....CC...CC.......CW....CC..C..C..............C.....C.CCC.CCCC.CCCCC........CCC.CCC.......................CCCC...CCC.C..........C.CC..CC.....C.C..CC..........C..C...C....C...C..CCC..C..CCCC.C...C........CC.........C....CCC..CCC.......C...C.C............CCCC.C...C..C....
+....CC...CC.......CW....CC..C..C..............C.....C.CCC.CCCC..CCCC........CCC.CCC.......................CCCC...CCC.C..........C.CC..CC.....C.C..CC..........C..C...C....C...C..CCC..C..CCCC.C...C........CC.........C....CCC..CCC.......C...C.C............CCCC.C...C..C....
 
 Offenses:
 
@@ -255,12 +255,6 @@ lib/ebook_reader/components/sidebar/bookmarks_tab_renderer.rb:81:9: C: Metrics/A
 lib/ebook_reader/components/sidebar/bookmarks_tab_renderer.rb:81:9: C: Metrics/MethodLength: Method has too many lines. [34/15]
         def render_bookmark_item(surface, bounds, metrics, ctx) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/sidebar/toc_tab_renderer.rb:598:23: C: Metrics/ParameterLists: Avoid parameter lists longer than 4 parameters. [5/4]
-        def initialize(entries, selected_index, start_y, height, max_width)
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/sidebar/toc_tab_renderer.rb:994:18: C: Naming/PredicatePrefix: Rename has_children? to children?.
-        def self.has_children?(entries, index)
-                 ^^^^^^^^^^^^^
 lib/ebook_reader/components/sidebar_panel_component.rb:64:7: C: Metrics/AbcSize: Assignment Branch Condition size for do_render is too high. [<15, 21, 5> 26.29/20]
       def do_render(surface, bounds) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1246,7 +1240,7 @@ lib/ebook_reader/ui/view_models/reader_view_model.rb:95:9: C: Metrics/MethodLeng
         def with(**changes) ...
         ^^^^^^^^^^^^^^^^^^^
 
-270 files inspected, 414 offenses detected
+270 files inspected, 412 offenses detected
 
 The following RuboCop extension libraries are installed but not loaded in config:
   * rubocop-rspec

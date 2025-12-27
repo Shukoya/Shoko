@@ -9,7 +9,6 @@ module EbookReader
   module Components
     module Sidebar
       # TOC tab renderer for sidebar
-      # Orchestrates rendering of table of contents with filtering and navigation
       class TocTabRenderer < BaseComponent
         include Constants::UIConstants
 
@@ -51,16 +50,13 @@ module EbookReader
       class RenderContext
         include Constants::UIConstants
 
-        attr_reader :surface, :bounds, :state, :document, :metrics
+        attr_reader :surface, :bounds, :state, :document
 
         def initialize(surface, bounds, state, document)
           @surface = surface
           @bounds = bounds
           @state = state
           @document = document
-          @metrics = calculate_metrics
-          @entries_cache = nil
-          @selected_index_cache = nil
         end
 
         def entries
@@ -68,7 +64,7 @@ module EbookReader
         end
 
         def selected_index
-          @selected_index ||= SelectedIndexCalculator.new(self).calculate
+          @selected_index ||= SelectedIndexCalculator.new(entries).calculate
         end
 
         def filter_active?
@@ -77,6 +73,10 @@ module EbookReader
 
         def filter_text
           state.get(%i[reader sidebar_toc_filter]) || ''
+        end
+
+        def metrics
+          @metrics ||= calculate_metrics
         end
 
         def write(row, col, text)
@@ -97,15 +97,33 @@ module EbookReader
 
       # Calculates the selected index in filtered list
       class SelectedIndexCalculator
-        def initialize(context)
-          @context = context
+        def initialize(entries)
+          @entries = entries
         end
 
         def calculate
-          entries = @context.entries
-          selected_entry = entries.full[entries.selected_full_index]
-          index = selected_entry ? entries.filtered.index(selected_entry) : 0
-          index || 0
+          selected_entry = full_entries[selected_full_index]
+          find_filtered_index(selected_entry)
+        end
+
+        private
+
+        def full_entries
+          @entries.full
+        end
+
+        def filtered_entries
+          @entries.filtered
+        end
+
+        def selected_full_index
+          @entries.selected_full_index
+        end
+
+        def find_filtered_index(selected_entry)
+          return 0 unless selected_entry
+
+          filtered_entries.index(selected_entry) || 0
         end
       end
 
@@ -117,40 +135,38 @@ module EbookReader
 
         def calculate
           full_entries = DocumentEntriesExtractor.new(@context.document).extract
-          filtered = filter_entries(full_entries)
+          filtered = apply_filter(full_entries)
 
           EntriesCollection.new(
             full: full_entries,
             filtered: filtered,
-            selected_full_index: calculate_selected_full_index(full_entries)
+            selected_full_index: calculate_selected_index(full_entries)
           )
         end
 
         private
 
-        def filter_entries(entries)
+        def apply_filter(entries)
           return entries unless @context.filter_active?
 
           EntryFilter.new(entries, @context.filter_text).filter
         end
 
-        def calculate_selected_full_index(entries)
-          index = (@context.state.get(%i[reader sidebar_toc_selected]) || 0).to_i
+        def calculate_selected_index(entries)
+          raw_index = @context.state.get(%i[reader sidebar_toc_selected]) || 0
           max_index = [entries.length - 1, 0].max
-          index.clamp(0, max_index)
+          raw_index.to_i.clamp(0, max_index)
         end
       end
 
       # Extracts entries from document
       class DocumentEntriesExtractor
         def initialize(document)
-          @document = document
+          @document = NullDocument.wrap(document)
         end
 
         def extract
-          return [] unless @document
-
-          toc_entries = extract_toc_entries
+          toc_entries = @document.toc_entries
           return toc_entries unless toc_entries.empty?
 
           create_fallback_entries
@@ -158,18 +174,37 @@ module EbookReader
 
         private
 
-        def extract_toc_entries
-          return [] unless @document.respond_to?(:toc_entries)
-
-          entries = @document.toc_entries
-          entries.nil? || entries.empty? ? [] : entries
-        end
-
         def create_fallback_entries
-          return [] unless @document.respond_to?(:chapters)
-
           chapters = @document.chapters
           FallbackEntriesBuilder.build(chapters)
+        end
+      end
+
+      # Null object pattern for missing documents
+      class NullDocument
+        EMPTY_ARRAY = [].freeze
+        EMPTY_HASH = {}.freeze
+
+        def self.wrap(document)
+          return document if document
+
+          new
+        end
+
+        def toc_entries
+          EMPTY_ARRAY
+        end
+
+        def chapters
+          EMPTY_ARRAY
+        end
+
+        def metadata
+          EMPTY_HASH
+        end
+
+        def title
+          nil
         end
       end
 
@@ -177,14 +212,18 @@ module EbookReader
       module FallbackEntriesBuilder
         def self.build(chapters)
           chapters.each_with_index.map do |chapter, idx|
-            Domain::Models::TOCEntry.new(
-              title: chapter.title || "Chapter #{idx + 1}",
-              href: nil,
-              level: 1,
-              chapter_index: idx,
-              navigable: true
-            )
+            create_entry(chapter, idx)
           end
+        end
+
+        def self.create_entry(chapter, index)
+          Domain::Models::TOCEntry.new(
+            title: chapter.title || "Chapter #{index + 1}",
+            href: nil,
+            level: 1,
+            chapter_index: index,
+            navigable: true
+          )
         end
       end
 
@@ -213,14 +252,23 @@ module EbookReader
       # Resolves document from dependencies
       class DocumentResolver
         def initialize(dependencies)
-          @dependencies = dependencies
+          @dependencies = NullDependencies.wrap(dependencies)
         end
 
         def resolve
-          return nil unless @dependencies.respond_to?(:resolve)
-
           @dependencies.resolve(:document)
-        rescue StandardError
+        end
+      end
+
+      # Null object for dependencies
+      class NullDependencies
+        def self.wrap(dependencies)
+          return dependencies if dependencies
+
+          new
+        end
+
+        def resolve(_key)
           nil
         end
       end
@@ -229,16 +277,21 @@ module EbookReader
       class EntryFilter
         def initialize(entries, filter_text)
           @entries = entries
-          @filter_text = filter_text
+          @filter_text = filter_text.to_s.strip
         end
 
         def filter
-          stripped = @filter_text&.strip
-          return @entries if stripped.nil? || stripped.empty?
+          return @entries if @filter_text.empty?
 
           matching_indices = MatchingIndicesFinder.new(@entries, @filter_text).find
           return [] if matching_indices.empty?
 
+          select_matching_entries(matching_indices)
+        end
+
+        private
+
+        def select_matching_entries(matching_indices)
           @entries.select.with_index { |_, idx| matching_indices.include?(idx) }
         end
       end
@@ -247,43 +300,90 @@ module EbookReader
       class MatchingIndicesFinder
         def initialize(entries, filter_text)
           @entries = entries
-          @filter_text = filter_text
+          @filter_text = filter_text.downcase
         end
 
         def find
-          term = @filter_text.downcase
           required = Set.new
-
-          @entries.each_with_index do |entry, idx|
-            next unless entry.title.to_s.downcase.include?(term)
-
-            required << idx
-            add_ancestor_indices(idx, required)
-          end
-
+          find_matches(required)
           required
         end
 
         private
 
-        def add_ancestor_indices(start_idx, required)
-          entry = @entries[start_idx]
-          entry_level = entry.level
-          target_level = entry_level - 1
-          current_idx = start_idx - 1
+        def find_matches(required)
+          @entries.each_with_index do |entry, idx|
+            next unless entry_matches?(entry)
 
-          while current_idx >= 0 && target_level >= 0
-            ancestor = @entries[current_idx]
-            ancestor_level = ancestor.level
-
-            if ancestor_level < entry_level
-              required << current_idx
-              entry_level = ancestor_level
-              target_level = entry_level - 1
-            end
-
-            current_idx -= 1
+            required << idx
+            add_ancestor_indices(idx, required)
           end
+        end
+
+        def entry_matches?(entry)
+          entry.title.to_s.downcase.include?(@filter_text)
+        end
+
+        def add_ancestor_indices(start_idx, required)
+          ancestor_finder = AncestorFinder.new(@entries, start_idx)
+          ancestor_finder.find_all.each { |idx| required << idx }
+        end
+      end
+
+      # Finds ancestor entries in tree structure
+      class AncestorFinder
+        def initialize(entries, start_idx)
+          @entries = entries
+          @start_idx = start_idx
+          @start_level = entries[start_idx].level
+        end
+
+        def find_all
+          ancestors = []
+          tracker = LevelTracker.new(@start_level)
+
+          scan_backwards do |idx|
+            break if tracker.finished?
+
+            process_ancestor(idx, tracker, ancestors)
+          end
+
+          ancestors
+        end
+
+        private
+
+        def scan_backwards(&)
+          (@start_idx - 1).downto(0, &)
+        end
+
+        def process_ancestor(idx, tracker, ancestors)
+          ancestor_level = @entries[idx].level
+          return unless tracker.ancestor?(ancestor_level)
+
+          ancestors << idx
+          tracker.descend_to(ancestor_level)
+        end
+      end
+
+      # Tracks level traversal for ancestor finding
+      class LevelTracker
+        def initialize(start_level)
+          @current_level = start_level
+          @target_level = start_level - 1
+        end
+
+        def finished?
+          @target_level.negative?
+        end
+
+        def ancestor?(level)
+          level < @current_level
+        end
+
+        def descend_to(level)
+          @current_level = level
+          @target_level = level - 1
         end
       end
 
@@ -310,12 +410,16 @@ module EbookReader
         private
 
         def write_centered_message(message, offset)
-          msg_width = EbookReader::Helpers::TextMetrics.visible_length(message)
-          x_pos = [(@context.metrics.width - msg_width) / 2, 2].max
+          x_pos = calculate_x_position(message)
           y_pos = start_y + offset
+          styled_text = "#{COLOR_TEXT_DIM}#{message}#{Terminal::ANSI::RESET}"
 
-          text = "#{COLOR_TEXT_DIM}#{message}#{Terminal::ANSI::RESET}"
-          @context.write(y_pos, x_pos, text)
+          @context.write(y_pos, x_pos, styled_text)
+        end
+
+        def calculate_x_position(message)
+          msg_width = EbookReader::Helpers::TextMetrics.visible_length(message)
+          [(@context.metrics.width - msg_width) / 2, 2].max
         end
 
         def start_y
@@ -351,9 +455,8 @@ module EbookReader
         end
 
         def should_show_subtitle?
-          metrics = @context.metrics
           subtitle_width = EbookReader::Helpers::TextMetrics.visible_length(subtitle_content.plain)
-          metrics.width > subtitle_width + 2
+          @context.metrics.width > subtitle_width + 2
         end
       end
 
@@ -362,14 +465,12 @@ module EbookReader
         DEFAULT_TITLE = 'CONTENTS'
 
         def initialize(document)
-          @document = document
+          @document = NullDocument.wrap(document)
         end
 
         def extract
-          return default_content unless @document
-
           title = extract_title_text
-          return default_content unless title_valid?(title)
+          return default_content if title.empty?
 
           TitleContent.new(title.strip.upcase)
         end
@@ -381,25 +482,8 @@ module EbookReader
         end
 
         def extract_title_text
-          metadata_title = extract_from_metadata
-          metadata_title || extract_from_document
-        end
-
-        def extract_from_metadata
-          return nil unless @document.respond_to?(:metadata)
-
-          @document.metadata&.fetch(:title, nil)
-        end
-
-        def extract_from_document
-          @document.respond_to?(:title) ? @document.title : nil
-        end
-
-        def title_valid?(title)
-          return false unless title
-
-          stripped = title.to_s.strip
-          !stripped.empty?
+          metadata_title = @document.metadata.fetch(:title, nil)
+          metadata_title || @document.title || ''
         end
       end
 
@@ -506,7 +590,6 @@ module EbookReader
         def render
           write_input_line
           write_help_text
-
           start_y + 2
         end
 
@@ -514,9 +597,7 @@ module EbookReader
 
         def write_input_line
           prompt = "#{COLOR_TEXT_ACCENT}SEARCH ▸#{Terminal::ANSI::RESET} "
-          input = styled_input_text
-
-          @context.write(start_y, x_pos, "#{prompt}#{input}")
+          @context.write(start_y, x_pos, "#{prompt}#{styled_input_text}")
         end
 
         def write_help_text
@@ -525,10 +606,9 @@ module EbookReader
         end
 
         def styled_input_text
-          reset = Terminal::ANSI::RESET
-          text = "#{COLOR_TEXT_PRIMARY}#{@context.filter_text}#{reset}"
-          text += "#{Terminal::ANSI::REVERSE} #{reset}" if @context.filter_active?
-          text
+          base = "#{COLOR_TEXT_PRIMARY}#{@context.filter_text}#{Terminal::ANSI::RESET}"
+          cursor = @context.filter_active? ? "#{Terminal::ANSI::REVERSE} #{Terminal::ANSI::RESET}" : ''
+          base + cursor
         end
 
         def start_y
@@ -549,9 +629,7 @@ module EbookReader
         def render
           return if @context.entries.empty? || available_height <= 0
 
-          visible_items.each do |item|
-            render_entry_item(item)
-          end
+          visible_items.each { |item| render_entry_item(item) }
         end
 
         private
@@ -561,46 +639,49 @@ module EbookReader
         end
 
         def visible_items
+          viewport = create_viewport_config
           calculator = VisibleItemsCalculator.new(
             @context.entries.filtered,
             @context.selected_index,
-            content_start_y,
-            available_height,
-            max_width
+            viewport
           )
           calculator.calculate
         end
 
+        def create_viewport_config
+          ViewportConfig.new(
+            start_y: content_start_y,
+            height: available_height,
+            max_width: max_width
+          )
+        end
+
         def content_start_y
-          metrics = @context.metrics
-          base = metrics.y + 2
+          base = @context.metrics.y + 2
           base += 2 if @context.filter_active?
           base
         end
 
         def available_height
           metrics = @context.metrics
-          total = metrics.height - (content_start_y - metrics.y) - footer_height
+          total = metrics.height - (content_start_y - metrics.y) - 2
           [total, 0].max
         end
 
         def max_width
           [@context.metrics.width - 2, 0].max
         end
-
-        def footer_height
-          2
-        end
       end
+
+      # Configuration for viewport
+      ViewportConfig = Struct.new(:start_y, :height, :max_width, keyword_init: true)
 
       # Calculates which entries are visible in viewport
       class VisibleItemsCalculator
-        def initialize(entries, selected_index, start_y, height, max_width)
+        def initialize(entries, selected_index, viewport)
           @entries = entries
           @selected_index = selected_index
-          @start_y = start_y
-          @height = height
-          @max_width = max_width
+          @viewport = viewport
         end
 
         def calculate
@@ -608,121 +689,297 @@ module EbookReader
 
           items = create_all_items
           visible_items = find_visible_items(items)
-          assign_screen_positions(visible_items)
+          position_items_on_screen(visible_items)
         end
 
         private
 
         def create_all_items
+          ItemCollectionBuilder.new(@entries, @selected_index, @viewport.max_width).build
+        end
+
+        def find_visible_items(items)
+          ViewportSelector.new(items, @selected_index, @viewport.height).select
+        end
+
+        def position_items_on_screen(visible_items)
+          ScreenPositioner.new(visible_items, @viewport.start_y).position
+        end
+      end
+
+      # Builds collection of visible entry items
+      class ItemCollectionBuilder
+        def initialize(entries, selected_index, max_width)
+          @entries = entries
+          @selected_index = selected_index
+          @max_width = max_width
+        end
+
+        def build
           y_position = 0
 
           @entries.each_with_index.map do |entry, idx|
-            item = VisibleEntryItem.new(
-              entries: @entries,
-              entry: entry,
-              index: idx,
-              selected_index: @selected_index,
-              logical_y: y_position,
-              max_width: @max_width
-            )
-
+            item = create_item(entry, idx, y_position)
             y_position += item.height
             item
           end
         end
 
-        def find_visible_items(items)
-          selected_item = items[@selected_index]
-          return [] unless selected_item
+        private
 
-          # Calculate viewport to include selected item
-          viewport_start = calculate_viewport_start(selected_item, items)
-          viewport_end = viewport_start + @height
+        def create_item(entry, index, y_position)
+          config = ItemConfig.new(
+            item_entries: @entries,
+            entry: entry,
+            index: index,
+            selected_index: @selected_index,
+            logical_y: y_position,
+            max_width: @max_width
+          )
+          VisibleEntryItem.new(config)
+        end
+      end
 
-          items.select do |item|
-            item_end = item.logical_y + item.height
-            # Item is visible if it overlaps with viewport
-            item.logical_y < viewport_end && item_end > viewport_start
-          end
+      # Configuration for creating visible entry items
+      ItemConfig = Struct.new(
+        :item_entries, :entry, :index, :selected_index, :logical_y, :max_width,
+        keyword_init: true
+      )
+
+      # Selects items visible in viewport
+      class ViewportSelector
+        def initialize(items, selected_index, viewport_height)
+          @items = items
+          @selected_index = selected_index
+          @viewport_height = viewport_height
         end
 
-        def calculate_viewport_start(selected_item, items)
-          # Try to center selected item
-          ideal_start = selected_item.logical_y - (@height / 2)
+        def select
+          selected_item = @items[@selected_index]
+          return [] unless selected_item
 
-          # Don't scroll past start
-          ideal_start = [ideal_start, 0].max
+          viewport_range = calculate_viewport_range(selected_item)
+          ItemRangeSelector.new(@items, viewport_range).select
+        end
 
-          # Don't scroll past end
-          total_height = items.last.logical_y + items.last.height
-          max_start = [total_height - @height, 0].max
+        private
 
+        def calculate_viewport_range(selected_item)
+          viewport_start = ViewportStartCalculator.new(
+            selected_item,
+            @items,
+            @viewport_height
+          ).calculate
+          viewport_end = viewport_start + @viewport_height
+          viewport_start..viewport_end
+        end
+      end
+
+      # Calculates viewport start position
+      class ViewportStartCalculator
+        def initialize(selected_item, items, viewport_height)
+          @selected_item = selected_item
+          @items = items
+          @viewport_height = viewport_height
+        end
+
+        def calculate
+          ideal_start = calculate_ideal_start
+          max_start = calculate_max_start
           [ideal_start, max_start].min
         end
 
-        def assign_screen_positions(visible_items)
-          return [] if visible_items.empty?
+        private
 
-          viewport_start = visible_items.first.logical_y
+        def calculate_ideal_start
+          raw_start = @selected_item.logical_y - (@viewport_height / 2)
+          [raw_start, 0].max
+        end
 
-          visible_items.each do |item|
-            item.screen_y = @start_y + (item.logical_y - viewport_start)
+        def calculate_max_start
+          last_item = @items.last
+          total_height = last_item.logical_y + last_item.height
+          [total_height - @viewport_height, 0].max
+        end
+      end
+
+      # Selects items within a range
+      class ItemRangeSelector
+        def initialize(items, range)
+          @items = items
+          @range = range
+        end
+
+        def select
+          @items.select { |item| item_overlaps_range?(item) }
+        end
+
+        private
+
+        def item_overlaps_range?(item)
+          logical_y = item.logical_y
+          item_end = logical_y + item.height
+          logical_y < @range.end && item_end > @range.begin
+        end
+      end
+
+      # Positions items on screen coordinates
+      class ScreenPositioner
+        def initialize(visible_items, start_y)
+          @visible_items = visible_items
+          @start_y = start_y
+        end
+
+        def position
+          return [] if @visible_items.empty?
+
+          viewport_start = @visible_items.first.logical_y
+
+          @visible_items.map do |item|
+            screen_y = @start_y + (item.logical_y - viewport_start)
+            item.with_screen_position(screen_y)
           end
-
-          visible_items
         end
       end
 
       # Represents a single entry item with rendering info
       class VisibleEntryItem
-        attr_reader :entries, :entry, :index, :selected_index, :logical_y, :max_width
-        attr_accessor :screen_y
+        attr_reader :entry, :index, :logical_y, :max_width
 
-        def initialize(entries:, entry:, index:, selected_index:, logical_y:, max_width:)
-          @entries = entries
-          @entry = entry
-          @index = index
-          @selected_index = selected_index
-          @logical_y = logical_y
-          @max_width = max_width
-          @screen_y = 0
-          @height = nil
+        def initialize(config)
+          @config = config
+          @entry = config.entry
+          @index = config.index
+          @logical_y = config.logical_y
+          @max_width = config.max_width
+        end
+
+        def with_screen_position(screen_y)
+          PositionedEntryItem.new(self, screen_y)
         end
 
         def selected?
-          index == selected_index
+          index == @config.selected_index
         end
 
         def height
           @height ||= calculate_height
         end
 
+        def components
+          @components ||= EntryComponents.new(@config.item_entries, @entry, @index)
+        end
+
         private
 
         def calculate_height
-          components = EntryComponents.new(entries, entry, index)
-          available_width = max_width - components.width_without_title - 1
-          available_width = [available_width, 10].max # Minimum 10 chars
+          available_width = @max_width - components.width_without_title - 1
+          available_width = [available_width, 10].max
 
-          lines = wrap_text(components.title, available_width)
-          lines.length
+          TextWrapper.new(components.title, available_width).line_count
+        end
+      end
+
+      # Item with screen position
+      class PositionedEntryItem
+        attr_reader :screen_y
+
+        def initialize(item, screen_y)
+          @item = item
+          @screen_y = screen_y
         end
 
-        def wrap_text(text, width)
-          return [text] if text.length <= width
+        def entry
+          @item.entry
+        end
 
+        def index
+          @item.index
+        end
+
+        def logical_y
+          @item.logical_y
+        end
+
+        def max_width
+          @item.max_width
+        end
+
+        def selected?
+          @item.selected?
+        end
+
+        def height
+          @item.height
+        end
+
+        def components
+          @item.components
+        end
+      end
+
+      # Wraps text to fit within width
+      class TextWrapper
+        def initialize(text, width)
+          @text = text
+          @width = width
+        end
+
+        def line_count
+          wrap_lines.length
+        end
+
+        def wrap_lines
+          @wrap_lines ||= calculate_wrapped_lines
+        end
+
+        private
+
+        def calculate_wrapped_lines
+          return [@text] if fits_in_width?
+
+          LineBuilder.new(@text, @width).build
+        end
+
+        def fits_in_width?
+          @text.length <= @width
+        end
+      end
+
+      # Builds wrapped lines from text
+      class LineBuilder
+        def initialize(text, width)
+          @text = text
+          @width = width
+        end
+
+        def build
           lines = []
-          remaining = text
+          text = @text
 
-          while remaining.length > width
-            # Find last space before width
-            break_point = remaining[0...width].rindex(' ') || width
-            lines << remaining[0...break_point]
-            remaining = remaining[break_point..].lstrip
-          end
+          text = wrap_iteration(text, lines) while should_continue_wrapping?(text)
+          finalize_lines(lines, text)
+        end
 
-          lines << remaining unless remaining.empty?
+        private
+
+        def should_continue_wrapping?(text)
+          text.length > @width
+        end
+
+        def wrap_iteration(text, lines)
+          break_point = find_break_point(text)
+          lines << text[0...break_point]
+          text[break_point..].lstrip
+        end
+
+        def finalize_lines(lines, text)
+          lines << text unless text.empty?
           lines
+        end
+
+        def find_break_point(text)
+          text[0...@width].rindex(' ') || @width
         end
       end
 
@@ -736,24 +993,24 @@ module EbookReader
         end
 
         def render
-          @item.height.times do |line_num|
-            render_line(line_num)
-          end
+          @item.height.times { |line_num| render_line(line_num) }
         end
 
         private
 
         def render_line(line_num)
           y_pos = @item.screen_y + line_num
-
           write_gutter(y_pos)
           write_content(y_pos, line_num)
         end
 
         def write_gutter(y_pos)
-          gutter = @item.selected? ? "#{COLOR_TEXT_ACCENT}▎" : "#{COLOR_TEXT_DIM}│"
-          gutter += Terminal::ANSI::RESET
+          gutter = gutter_symbol + Terminal::ANSI::RESET
           @context.write(y_pos, @context.metrics.x, gutter)
+        end
+
+        def gutter_symbol
+          @item.selected? ? "#{COLOR_TEXT_ACCENT}▎" : "#{COLOR_TEXT_DIM}│"
         end
 
         def write_content(y_pos, line_num)
@@ -769,88 +1026,123 @@ module EbookReader
 
         def initialize(item)
           @item = item
-          @components = EntryComponents.new(item.entries, item.entry, item.index)
-          @lines = calculate_wrapped_lines
+          @components = item.components
+          @lines = TextWrapper.new(@components.title, available_width).wrap_lines
         end
 
         def format_line(line_num)
           return '' if line_num >= @lines.length
 
           line_text = @lines[line_num]
-
-          if @item.selected?
-            format_selected_line(line_text, line_num)
-          else
-            format_normal_line(line_text, line_num)
-          end
+          formatter = line_formatter(line_num)
+          formatter.format(line_text)
         end
 
         private
 
-        def calculate_wrapped_lines
-          available = @item.max_width - @components.width_without_title - 1
-          available = [available, 10].max
-          wrap_text(@components.title, available)
+        def available_width
+          width = @item.max_width - @components.width_without_title - 1
+          [width, 10].max
         end
 
-        def wrap_text(text, width)
-          return [text] if text.length <= width
-
-          lines = []
-          remaining = text
-
-          while remaining.length > width
-            break_point = remaining[0...width].rindex(' ') || width
-            lines << remaining[0...break_point]
-            remaining = remaining[break_point..].lstrip
-          end
-
-          lines << remaining unless remaining.empty?
-          lines
-        end
-
-        def format_selected_line(text, line_num)
-          prefix = line_num.zero? ? @components.prefix : indent_for_continuation
-          icon = line_num.zero? ? @components.icon : ''
-          spacer = line_num.zero? && !icon.empty? ? ' ' : ''
-
-          "#{Terminal::ANSI::BG_GREY}#{Terminal::ANSI::WHITE}#{prefix}#{icon}#{spacer}#{text}#{Terminal::ANSI::RESET}"
-        end
-
-        def format_normal_line(text, line_num)
-          if line_num.zero?
-            format_first_line(text)
+        def line_formatter(line_num)
+          if @item.selected?
+            SelectedLineFormatter.new(@components, line_num)
+          elsif line_num.zero?
+            FirstLineFormatter.new(@components)
           else
-            format_continuation_line(text)
+            ContinuationLineFormatter.new(@components)
           end
         end
+      end
 
-        def format_first_line(text)
-          parts = []
+      # Formats selected entry lines
+      class SelectedLineFormatter
+        include Constants::UIConstants
 
-          prefix = @components.prefix
-          parts << colorize(prefix, COLOR_TEXT_DIM) unless prefix.empty?
-          parts << colorize(@components.icon, icon_color)
-          parts << ' ' unless @components.icon.empty?
-          parts << colorize(text, title_color)
+        def initialize(components, line_num)
+          @components = components
+          @is_first_line = line_num.zero?
+        end
 
+        def format(text)
+          prefix = determine_prefix
+          icon = determine_icon
+          spacer = determine_spacer
+
+          styled_text = "#{prefix}#{icon}#{spacer}#{text}"
+          "#{Terminal::ANSI::BG_GREY}#{Terminal::ANSI::WHITE}#{styled_text}#{Terminal::ANSI::RESET}"
+        end
+
+        private
+
+        def determine_prefix
+          @is_first_line ? @components.prefix : calculate_indent
+        end
+
+        def determine_icon
+          @is_first_line ? @components.icon : ''
+        end
+
+        def determine_spacer
+          @is_first_line && !@components.icon.empty? ? ' ' : ''
+        end
+
+        def calculate_indent
+          IndentCalculator.new(@components).calculate
+        end
+      end
+
+      # Formats first line of normal entries
+      class FirstLineFormatter
+        include Constants::UIConstants
+
+        def initialize(components)
+          @components = components
+          @entry = components.entry
+        end
+
+        def format(text)
+          assembler = FirstLinePartAssembler.new(@components, @entry)
+          parts = assembler.assemble(text)
           parts.join
         end
+      end
 
-        def format_continuation_line(text)
-          indent = indent_for_continuation
-          indent_colored = colorize(indent, COLOR_TEXT_DIM)
-          text_colored = colorize(text, title_color)
+      # Assembles parts for first line formatting
+      class FirstLinePartAssembler
+        include Constants::UIConstants
 
-          "#{indent_colored}#{text_colored}"
+        def initialize(components, entry)
+          @components = components
+          @entry = entry
         end
 
-        def indent_for_continuation
-          prefix_width = EbookReader::Helpers::TextMetrics.visible_length(@components.prefix)
-          icon_width = EbookReader::Helpers::TextMetrics.visible_length(@components.icon)
-          spacer_width = @components.icon.empty? ? 0 : 1
+        def assemble(text)
+          parts = []
+          add_prefix_part(parts)
+          add_icon_part(parts)
+          add_text_part(parts, text)
+          parts
+        end
 
-          ' ' * (prefix_width + icon_width + spacer_width)
+        private
+
+        def add_prefix_part(parts)
+          prefix = @components.prefix
+          parts << colorize(prefix, COLOR_TEXT_DIM) unless prefix.empty?
+        end
+
+        def add_icon_part(parts)
+          icon = @components.icon
+          return if icon.empty?
+
+          parts << colorize(icon, EntryStyler.icon_color(@entry))
+          parts << ' '
+        end
+
+        def add_text_part(parts, text)
+          parts << colorize(text, EntryStyler.title_color(@entry))
         end
 
         def colorize(text, color)
@@ -858,23 +1150,68 @@ module EbookReader
 
           "#{color}#{text}#{Terminal::ANSI::RESET}"
         end
+      end
 
-        def icon_color
-          EntryStyler.icon_color(@item.entry)
+      # Formats continuation lines
+      class ContinuationLineFormatter
+        include Constants::UIConstants
+
+        def initialize(components)
+          @components = components
+          @entry = components.entry
         end
 
-        def title_color
-          EntryStyler.title_color(@item.entry)
+        def format(text)
+          indent = IndentCalculator.new(@components).calculate
+          indent_colored = colorize(indent, COLOR_TEXT_DIM)
+          text_colored = colorize(text, EntryStyler.title_color(@entry))
+
+          "#{indent_colored}#{text_colored}"
+        end
+
+        private
+
+        def colorize(text, color)
+          return text unless color
+
+          "#{color}#{text}#{Terminal::ANSI::RESET}"
+        end
+      end
+
+      # Calculates indentation for continuation lines
+      class IndentCalculator
+        def initialize(components)
+          @components = components
+        end
+
+        def calculate
+          total_width = prefix_width + icon_width + spacer_width
+          ' ' * total_width
+        end
+
+        private
+
+        def prefix_width
+          EbookReader::Helpers::TextMetrics.visible_length(@components.prefix)
+        end
+
+        def icon_width
+          EbookReader::Helpers::TextMetrics.visible_length(@components.icon)
+        end
+
+        def spacer_width
+          @components.icon.empty? ? 0 : 1
         end
       end
 
       # Calculates components of an entry (prefix, icon, title)
       class EntryComponents
-        attr_reader :prefix, :icon, :title
+        attr_reader :prefix, :icon, :title, :entry
 
-        def initialize(entries, entry, index)
-          @prefix = TreeFormatter.prefix(entries, index)
-          @icon = IconSelector.select(entries, entry, index)
+        def initialize(item_entries, entry, index)
+          @entry = entry
+          @prefix = TreeFormatter.prefix(item_entries, index, entry.level)
+          @icon = IconSelector.select(item_entries, entry, index)
           @title = EntryTitleFormatter.format(entry)
         end
 
@@ -903,21 +1240,36 @@ module EbookReader
 
       # Formats tree structure prefix for entries
       class TreeFormatter
-        def self.prefix(entries, index)
-          entry = entries[index]
-          level = entry.level
+        def self.prefix(item_entries, index, level)
           return '' if level <= 0
 
-          (1..level).map do |depth|
-            TreeSegment.new(entries, index, depth, level).format
-          end.join
+          PrefixBuilder.new(item_entries, index, level).build
+        end
+      end
+
+      # Builds tree prefix from segments
+      class PrefixBuilder
+        def initialize(item_entries, index, level)
+          @item_entries = item_entries
+          @index = index
+          @level = level
+        end
+
+        def build
+          (1..@level).map { |depth| segment_for_depth(depth) }.join
+        end
+
+        private
+
+        def segment_for_depth(depth)
+          TreeSegment.new(@item_entries, @index, depth, @level).format
         end
       end
 
       # Represents a single tree segment
       class TreeSegment
-        def initialize(entries, index, depth, current_level)
-          @entries = entries
+        def initialize(item_entries, index, depth, current_level)
+          @item_entries = item_entries
           @index = index
           @depth = depth
           @current_level = current_level
@@ -934,49 +1286,59 @@ module EbookReader
         end
 
         def branch_segment
-          last_sibling? ? '└─' : '├─'
+          TreeAnalyzer.last_child?(@item_entries, @index) ? '└─' : '├─'
         end
 
         def continuation_segment
-          ancestor_continues? ? '│ ' : '  '
-        end
-
-        def last_sibling?
-          TreeAnalyzer.last_child?(@entries, @index)
-        end
-
-        def ancestor_continues?
-          TreeAnalyzer.ancestor_continues?(@entries, @index, @depth)
+          TreeAnalyzer.ancestor_continues?(@item_entries, @index, @depth) ? '│ ' : '  '
         end
       end
 
       # Analyzes tree structure relationships
       class TreeAnalyzer
-        def self.last_child?(entries, index)
-          current = entries[index]
-          current_level = current.level
+        def self.last_child?(item_entries, index)
+          analyzer = SiblingAnalyzer.new(item_entries, index)
+          analyzer.last_child?
+        end
 
-          next_index = index + 1
-          while next_index < entries.length
-            next_entry = entries[next_index]
-            return false if next_entry.level == current_level
-            return true if next_entry.level < current_level
+        def self.ancestor_continues?(item_entries, index, depth)
+          analyzer = AncestorContinuationAnalyzer.new(item_entries, index, depth)
+          analyzer.continues?
+        end
+      end
 
-            next_index += 1
+      # Analyzes sibling relationships
+      class SiblingAnalyzer
+        def initialize(item_entries, index)
+          @item_entries = item_entries
+          @index = index
+          @current_level = item_entries[index].level
+        end
+
+        def last_child?
+          (@index + 1).upto(@item_entries.length - 1) do |next_index|
+            next_level = @item_entries[next_index].level
+            return false if next_level == @current_level
+            return true if next_level < @current_level
           end
 
           true
         end
+      end
 
-        def self.ancestor_continues?(entries, index, depth)
-          next_index = index + 1
+      # Analyzes ancestor continuation
+      class AncestorContinuationAnalyzer
+        def initialize(item_entries, index, depth)
+          @item_entries = item_entries
+          @index = index
+          @depth = depth
+        end
 
-          while next_index < entries.length
-            next_entry = entries[next_index]
-            return true if next_entry.level == depth
-            return false if next_entry.level < depth
-
-            next_index += 1
+        def continues?
+          (@index + 1).upto(@item_entries.length - 1) do |next_index|
+            next_level = @item_entries[next_index].level
+            return true if next_level == @depth
+            return false if next_level < @depth
           end
 
           false
@@ -985,17 +1347,17 @@ module EbookReader
 
       # Selects appropriate icon for entry
       class IconSelector
-        def self.select(entries, entry, index)
+        def self.select(item_entries, entry, index)
           return '📘' if entry.level.zero?
 
-          has_children?(entries, index) ? '📂' : '📄'
+          children?(item_entries, index) ? '📂' : '📄'
         end
 
-        def self.has_children?(entries, index)
-          next_entry = entries[index + 1]
+        def self.children?(item_entries, index)
+          next_entry = item_entries[index + 1]
           return false unless next_entry
 
-          next_entry.level > entries[index].level
+          next_entry.level > item_entries[index].level
         end
       end
 
@@ -1004,20 +1366,22 @@ module EbookReader
         include Constants::UIConstants
 
         def self.icon_color(entry)
-          case entry.level
-          when 0 then COLOR_TEXT_ACCENT
-          when 1 then COLOR_TEXT_SECONDARY
-          else COLOR_TEXT_DIM
-          end
+          ICON_COLORS[entry.level] || COLOR_TEXT_DIM
         end
 
         def self.title_color(entry)
-          case entry.level
-          when 0 then "#{Terminal::ANSI::BOLD}#{COLOR_TEXT_PRIMARY}"
-          when 1 then COLOR_TEXT_PRIMARY
-          else COLOR_TEXT_SECONDARY
-          end
+          TITLE_COLORS[entry.level] || COLOR_TEXT_SECONDARY
         end
+
+        ICON_COLORS = {
+          0 => COLOR_TEXT_ACCENT,
+          1 => COLOR_TEXT_SECONDARY,
+        }.freeze
+
+        TITLE_COLORS = {
+          0 => "#{Terminal::ANSI::BOLD}#{COLOR_TEXT_PRIMARY}",
+          1 => COLOR_TEXT_PRIMARY,
+        }.freeze
       end
 
       # Renders footer with keyboard hints
@@ -1049,12 +1413,15 @@ module EbookReader
         end
 
         def write_hints
+          hints_line = format_hints
+          @context.write(footer_y + 1, x_pos, hints_line)
+        end
+
+        def format_hints
           reset = Terminal::ANSI::RESET
-          hints_line = HINTS.map do |icon, label|
+          HINTS.map do |icon, label|
             "#{COLOR_TEXT_DIM}#{icon}#{reset} #{COLOR_TEXT_PRIMARY}#{label}#{reset}"
           end.join('  ')
-
-          @context.write(footer_y + 1, x_pos, hints_line)
         end
 
         def footer_y
