@@ -2,6 +2,214 @@
 
 module EbookReader
   class TerminalInput
+    # Utility helpers for timeouts and CSI formatting.
+    module DecoderUtils
+      module_function
+
+      def normalize_timeout(value, default)
+        seconds = value.to_f
+        seconds.positive? ? seconds : default
+      rescue StandardError
+        default
+      end
+
+      def monotonic_now
+        Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      rescue StandardError
+        Time.now.to_f
+      end
+
+      def format_csi_output(raw, prefix_bytes, output_prefix)
+        return raw.force_encoding(Encoding::UTF_8) unless output_prefix
+
+        remainder = raw.byteslice(prefix_bytes..) || ''.b
+        (output_prefix + remainder.force_encoding(Encoding::UTF_8)).freeze
+      end
+    end
+
+    # UTF-8 decoder for buffered terminal input.
+    class Utf8Decoder
+      def initialize(buffer)
+        @buffer = buffer
+      end
+
+      def decode_at(offset)
+        lead_byte = @buffer.getbyte(offset)
+        return nil unless lead_byte
+        return [@buffer.byteslice(offset, 1).force_encoding(Encoding::UTF_8), 1] if lead_byte < 0x80
+
+        decode_multibyte_at(offset, lead_byte)
+      rescue StandardError
+        invalid_utf8_token
+      end
+
+      private
+
+      def decode_multibyte_at(offset, lead_byte)
+        byte_length =
+          (2 if lead_byte.between?(0xC2, 0xDF)) ||
+          (3 if lead_byte.between?(0xE0, 0xEF)) ||
+          (4 if lead_byte.between?(0xF0, 0xF4))
+        return invalid_utf8_token unless byte_length
+        return nil if @buffer.bytesize < offset + byte_length
+
+        decode_multibyte(offset, byte_length)
+      end
+
+      def decode_multibyte(offset, byte_length)
+        bytes = @buffer.byteslice(offset, byte_length)
+        Utf8Validator.new(bytes).valid? ? utf8_token(bytes, byte_length) : invalid_utf8_token
+      end
+
+      def utf8_token(bytes, byte_length)
+        char = bytes.dup.force_encoding(Encoding::UTF_8)
+        char.valid_encoding? ? [char, byte_length] : invalid_utf8_token
+      end
+
+      def invalid_utf8_token
+        ["\uFFFD", 1]
+      end
+    end
+
+    # Validates UTF-8 byte sequences.
+    class Utf8Validator
+      def initialize(bytes)
+        @bytes = bytes
+      end
+
+      def valid?
+        case @bytes.bytesize
+        when 2
+          valid_2_bytes?
+        when 3
+          valid_3_bytes?
+        when 4
+          valid_4_bytes?
+        else
+          false
+        end
+      end
+
+      private
+
+      def valid_2_bytes?
+        byte_at(1).between?(0x80, 0xBF)
+      end
+
+      def valid_3_bytes?
+        lead_byte = byte_at(0)
+        first_continuation = byte_at(1)
+        second_continuation = byte_at(2)
+        first_continuation.between?(0x80, 0xBF) &&
+          second_continuation.between?(0x80, 0xBF) &&
+          !(lead_byte == 0xE0 && first_continuation < 0xA0) &&
+          !(lead_byte == 0xED && first_continuation > 0x9F)
+      end
+
+      def valid_4_bytes?
+        lead_byte = byte_at(0)
+        first_continuation = byte_at(1)
+        second_continuation = byte_at(2)
+        third_continuation = byte_at(3)
+        first_continuation.between?(0x80, 0xBF) &&
+          second_continuation.between?(0x80, 0xBF) &&
+          third_continuation.between?(0x80, 0xBF) &&
+          !(lead_byte == 0xF0 && first_continuation < 0x90) &&
+          !(lead_byte == 0xF4 && first_continuation > 0x8F)
+      end
+
+      def byte_at(index)
+        @bytes.getbyte(index)
+      end
+    end
+
+    # Scanning helpers for CSI and string terminators.
+    class DecoderScanner
+      def initialize(buffer)
+        @buffer = buffer
+      end
+
+      def csi_final_index(start_offset)
+        index = start_offset
+        while index < @buffer.bytesize
+          return index if @buffer.getbyte(index).between?(0x40, 0x7E)
+
+          index += 1
+        end
+      end
+
+      def string_terminator_index(start_offset)
+        start_offset.upto(@buffer.bytesize - 1) do |index|
+          length = string_terminator_length(index)
+          return index + length if length
+        end
+      end
+
+      def osc_terminator_index(start_offset)
+        start_offset.upto(@buffer.bytesize - 1) do |index|
+          length = osc_terminator_length(index)
+          return index + length if length
+        end
+      end
+
+      private
+
+      def string_terminator_length(index)
+        case @buffer.getbyte(index)
+        when 0x9C
+          1
+        when 0x1B
+          2 if @buffer.getbyte(index + 1) == 0x5C
+        end
+      end
+
+      def osc_terminator_length(index)
+        case @buffer.getbyte(index)
+        when 0x07, 0x9C
+          1
+        when 0x1B
+          2 if @buffer.getbyte(index + 1) == 0x5C
+        end
+      end
+    end
+
+    # Dispatches ESC-prefixed sequences to decoder actions.
+    class EscSequenceParser
+      HANDLERS = {
+        0x1B => :escape,
+        0x5B => :csi,
+        0x4F => :ss3,
+        0x5D => :osc,
+        0x50 => :string,
+        0x58 => :string,
+        0x5E => :string,
+        0x5F => :string,
+      }.freeze
+
+      ACTIONS = {
+        escape: lambda do |_scanner|
+          consume_and_clear(1)
+          "\e"
+        end,
+        csi: ->(_scanner) { parse_csi_sequence(prefix_bytes: 2, output_prefix: nil) },
+        ss3: ->(_scanner) { parse_ss3_sequence },
+        osc: ->(scanner) { parse_string_sequence(scanner.osc_terminator_index(2)) },
+        string: ->(scanner) { parse_string_sequence(scanner.string_terminator_index(2)) },
+        alt: ->(_scanner) { parse_decoded_character(1, prefix: "\e") },
+      }.freeze
+
+      def initialize(buffer, decoder)
+        @buffer = buffer
+        @decoder = decoder
+        @scanner = DecoderScanner.new(buffer)
+      end
+
+      def parse
+        action = HANDLERS.fetch(@buffer.getbyte(1), :alt)
+        @decoder.instance_exec(@scanner, &ACTIONS.fetch(action))
+      end
+    end
+
     # Stateful tokenizer for raw terminal input.
     #
     # Converts a stream of bytes into:
@@ -15,42 +223,37 @@ module EbookReader
 
       ESC = 0x1B
       CSI_8BIT = 0x9B
-      ST_8BIT = 0x9C
-      BEL = 0x07
 
       def initialize(esc_timeout: DEFAULT_ESC_TIMEOUT, sequence_timeout: DEFAULT_SEQUENCE_TIMEOUT)
-        @esc_timeout = normalize_timeout(esc_timeout, DEFAULT_ESC_TIMEOUT)
-        @sequence_timeout = normalize_timeout(sequence_timeout, DEFAULT_SEQUENCE_TIMEOUT)
+        @esc_timeout = DecoderUtils.normalize_timeout(esc_timeout, DEFAULT_ESC_TIMEOUT)
+        @sequence_timeout = DecoderUtils.normalize_timeout(sequence_timeout, DEFAULT_SEQUENCE_TIMEOUT)
         @buffer = +''.b
         @pending_started_at = nil
       end
 
       def feed(bytes)
-        return if bytes.nil? || bytes.empty?
+        chunk = bytes.to_s
+        return if chunk.empty?
 
-        chunk = String(bytes).dup
-        chunk.force_encoding(Encoding::BINARY)
+        chunk = String(chunk).dup.force_encoding(Encoding::BINARY)
         @buffer << chunk
       rescue StandardError
         nil
       end
 
       # Returns the next decoded token, or nil if not enough bytes are available.
-      def next_token(now: monotonic_now)
+      def next_token(now: DecoderUtils.monotonic_now)
         return nil if @buffer.empty?
 
         token = parse_token
         return token if token
 
-        register_pending(now)
-        return nil if now < pending_deadline(now)
-
-        degrade_pending_token
+        now < pending_deadline(now) ? nil : degrade_pending_token
       end
 
       # When a partial token is buffered, returns seconds to wait before a token
       # should be emitted even if no further bytes arrive.
-      def pending_timeout(now: monotonic_now)
+      def pending_timeout(now: DecoderUtils.monotonic_now)
         return nil if @buffer.empty?
         return nil unless @pending_started_at
 
@@ -60,29 +263,14 @@ module EbookReader
 
       private
 
-      def normalize_timeout(value, default)
-        t = value.to_f
-        t.positive? ? t : default
-      rescue StandardError
-        default
-      end
-
-      def monotonic_now
-        Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      rescue StandardError
-        Time.now.to_f
-      end
-
-      def register_pending(now)
-        @pending_started_at = now if @pending_started_at.nil?
-      end
-
-      def clear_pending
+      def consume_and_clear(byte_count)
+        consume_bytes(byte_count)
         @pending_started_at = nil
       end
 
       def pending_deadline(now)
         started = @pending_started_at || now
+        @pending_started_at = started
         if @buffer.bytesize == 1 && @buffer.getbyte(0) == ESC
           started + @esc_timeout
         else
@@ -94,209 +282,61 @@ module EbookReader
         first = @buffer.getbyte(0)
         case first
         when ESC
-          parse_esc_sequence
+          return nil if @buffer.bytesize < 2
+
+          EscSequenceParser.new(@buffer, self).parse
         when CSI_8BIT
-          parse_csi_8bit_sequence
+          parse_csi_sequence(prefix_bytes: 1, output_prefix: "\e[")
         else
-          parse_utf8_character
+          parse_decoded_character(0)
         end
       end
 
-      def parse_esc_sequence
-        return nil if @buffer.bytesize < 2
+      def parse_ss3_sequence
+        return nil if @buffer.bytesize < 3
 
-        second = @buffer.getbyte(1)
-
-        # Two ESC presses should not collapse into an "Alt" sequence.
-        if second == ESC
-          consume_bytes(1)
-          clear_pending
-          return "\e"
-        end
-
-        case second
-        when 0x5B # '[' CSI
-          parse_csi_sequence(prefix_bytes: 2, output_prefix: nil)
-        when 0x4F # 'O' SS3
-          return nil if @buffer.bytesize < 3
-
-          token = @buffer.byteslice(0, 3)
-          consume_bytes(3)
-          clear_pending
-          token.force_encoding(Encoding::UTF_8)
-        when 0x5D # ']' OSC
-          parse_string_sequence(start_offset: 2, allow_bel: true, output_prefix: nil)
-        when 0x50, 0x58, 0x5E, 0x5F # 'P' DCS, 'X' SOS, '^' PM, '_' APC
-          parse_string_sequence(start_offset: 2, allow_bel: false, output_prefix: nil)
-        else
-          parse_alt_modified_character
-        end
-      end
-
-      def parse_csi_8bit_sequence
-        parse_csi_sequence(prefix_bytes: 1, output_prefix: "\e[")
+        token = @buffer.byteslice(0, 3)
+        consume_and_clear(3)
+        token.force_encoding(Encoding::UTF_8)
       end
 
       def parse_csi_sequence(prefix_bytes:, output_prefix:)
-        final_index = find_csi_final(start_offset: prefix_bytes)
-        return nil unless final_index
+        return nil unless (final_index = DecoderScanner.new(@buffer).csi_final_index(prefix_bytes))
 
-        raw = @buffer.byteslice(0, final_index + 1)
-        consume_bytes(final_index + 1)
-        clear_pending
-
-        if output_prefix
-          remainder = raw.byteslice(prefix_bytes, raw.bytesize - prefix_bytes) || ''.b
-          (output_prefix + remainder.force_encoding(Encoding::UTF_8)).freeze
-        else
-          raw.force_encoding(Encoding::UTF_8)
-        end
+        end_index = final_index + 1
+        raw = @buffer.byteslice(0, end_index)
+        consume_and_clear(end_index)
+        DecoderUtils.format_csi_output(raw, prefix_bytes, output_prefix)
       end
 
-      def find_csi_final(start_offset:)
-        i = start_offset
-        while i < @buffer.bytesize
-          b = @buffer.getbyte(i)
-          return i if b && b >= 0x40 && b <= 0x7E
-
-          i += 1
-        end
-        nil
-      end
-
-      def parse_string_sequence(start_offset:, allow_bel:, output_prefix:)
-        end_index = find_string_terminator(start_offset: start_offset, allow_bel: allow_bel)
+      def parse_string_sequence(end_index)
         return nil unless end_index
 
         raw = @buffer.byteslice(0, end_index)
-        consume_bytes(end_index)
-        clear_pending
-
-        if output_prefix
-          remainder = raw.byteslice(start_offset, raw.bytesize - start_offset) || ''.b
-          (output_prefix + remainder.force_encoding(Encoding::UTF_8)).freeze
-        else
-          raw.force_encoding(Encoding::UTF_8)
-        end
+        consume_and_clear(end_index)
+        raw.force_encoding(Encoding::UTF_8)
       end
 
-      def find_string_terminator(start_offset:, allow_bel:)
-        i = start_offset
-        while i < @buffer.bytesize
-          b = @buffer.getbyte(i)
-
-          return i + 1 if allow_bel && b == BEL
-
-          return i + 1 if b == ST_8BIT
-
-          return i + 2 if b == ESC && @buffer.getbyte(i + 1) == 0x5C # ESC \
-
-          i += 1
-        end
-        nil
-      end
-
-      def parse_alt_modified_character
-        decoded = decode_utf8_at(1)
-        return nil unless decoded
+      def parse_decoded_character(offset, prefix: nil)
+        return nil unless (decoded = Utf8Decoder.new(@buffer).decode_at(offset))
 
         char, consumed = decoded
-        consume_bytes(1 + consumed)
-        clear_pending
-
-        "\e#{char}"
-      end
-
-      def parse_utf8_character
-        decoded = decode_utf8_at(0)
-        return nil unless decoded
-
-        char, consumed = decoded
-        consume_bytes(consumed)
-        clear_pending
-        char
-      end
-
-      def decode_utf8_at(offset)
-        b0 = @buffer.getbyte(offset)
-        return nil unless b0
-
-        return [@buffer.byteslice(offset, 1).force_encoding(Encoding::UTF_8), 1] if b0 < 0x80
-
-        len = utf8_sequence_length(b0)
-        return ["\uFFFD", 1] unless len
-        return nil if @buffer.bytesize < offset + len
-
-        bytes = @buffer.byteslice(offset, len)
-        return ["\uFFFD", 1] unless valid_utf8_bytes?(bytes)
-
-        char = bytes.dup.force_encoding(Encoding::UTF_8)
-        char.valid_encoding? ? [char, len] : ["\uFFFD", 1]
-      rescue StandardError
-        ["\uFFFD", 1]
-      end
-
-      def utf8_sequence_length(lead)
-        return 2 if lead.between?(0xC2, 0xDF)
-        return 3 if lead.between?(0xE0, 0xEF)
-        return 4 if lead.between?(0xF0, 0xF4)
-
-        nil
-      end
-
-      def valid_utf8_bytes?(bytes)
-        b0 = bytes.getbyte(0)
-        case bytes.bytesize
-        when 2
-          b1 = bytes.getbyte(1)
-          b1.between?(0x80, 0xBF)
-        when 3
-          b1 = bytes.getbyte(1)
-          b2 = bytes.getbyte(2)
-          return false unless b1.between?(0x80, 0xBF)
-          return false unless b2.between?(0x80, 0xBF)
-
-          return false if b0 == 0xE0 && b1 < 0xA0
-          return false if b0 == 0xED && b1 > 0x9F
-
-          true
-        when 4
-          b1 = bytes.getbyte(1)
-          b2 = bytes.getbyte(2)
-          b3 = bytes.getbyte(3)
-          return false unless b1.between?(0x80, 0xBF)
-          return false unless b2.between?(0x80, 0xBF)
-          return false unless b3.between?(0x80, 0xBF)
-
-          return false if b0 == 0xF0 && b1 < 0x90
-          return false if b0 == 0xF4 && b1 > 0x8F
-
-          true
-        else
-          false
-        end
+        consume_and_clear(offset + consumed)
+        prefix ? "#{prefix}#{char}" : char
       end
 
       def degrade_pending_token
-        b0 = @buffer.getbyte(0)
-        consume_bytes(1)
-        clear_pending
+        lead_byte = @buffer.getbyte(0)
+        consume_and_clear(1)
 
-        case b0
-        when ESC
-          "\e"
-        when CSI_8BIT
-          "\e["
-        else
-          "\uFFFD"
-        end
+        { ESC => "\e", CSI_8BIT => "\e[" }.fetch(lead_byte, "\uFFFD")
       end
 
       def consume_bytes(byte_count)
-        return if byte_count.to_i <= 0
+        count = byte_count.to_i
+        return if count <= 0
 
-        @buffer.slice!(0, byte_count)
-        @buffer = +''.b if @buffer.nil?
+        @buffer.slice!(0, count)
       rescue StandardError
         @buffer = +''.b
       end

@@ -149,4 +149,3 @@ RSpec.describe 'Kitty image offset snapping' do
     expect(fake_kitty.calls.length).to eq(2)
   end
 end
-

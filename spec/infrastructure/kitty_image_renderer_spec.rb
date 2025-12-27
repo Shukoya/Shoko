@@ -58,6 +58,6 @@ RSpec.describe EbookReader::Infrastructure::KittyImageRenderer do
     expect(texts.grep('TX').length).to eq(1)
     expect(texts.grep('VP').length).to eq(2)
   ensure
-    epub.unlink if epub
+    epub&.unlink
   end
 end

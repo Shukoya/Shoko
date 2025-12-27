@@ -29,18 +29,18 @@ unless defined?(JSON::Fragment)
   end
 end
 
-ORIGINAL_HOME = ENV['HOME']
+ORIGINAL_HOME = Dir.home
 TEST_HOME = Dir.mktmpdir('reader-home')
 ENV['HOME'] = TEST_HOME
 
-config_home_existing = ENV['XDG_CONFIG_HOME']
+config_home_existing = ENV.fetch('XDG_CONFIG_HOME', nil)
 CONFIG_HOME = config_home_existing && !config_home_existing.empty? ? config_home_existing : Dir.mktmpdir('reader-config')
-config_home_created = CONFIG_HOME != config_home_existing
+config_home_created = config_home_existing != CONFIG_HOME
 ENV['XDG_CONFIG_HOME'] = CONFIG_HOME
 
-cache_home_existing = ENV['XDG_CACHE_HOME']
+cache_home_existing = ENV.fetch('XDG_CACHE_HOME', nil)
 CACHE_HOME = cache_home_existing && !cache_home_existing.empty? ? cache_home_existing : Dir.mktmpdir('reader-cache')
-cache_home_created = CACHE_HOME != cache_home_existing
+cache_home_created = cache_home_existing != CACHE_HOME
 ENV['XDG_CACHE_HOME'] = CACHE_HOME
 
 at_exit do
@@ -111,9 +111,7 @@ RSpec.configure do |config|
       EbookReader::Infrastructure::Logger.output = null_io if null_io
       EbookReader::Infrastructure::Logger.level = :fatal
     end
-    if defined?(EbookReader::Infrastructure::RenderRegistry)
-      EbookReader::Infrastructure::RenderRegistry.current.clear
-    end
+    EbookReader::Infrastructure::RenderRegistry.current.clear if defined?(EbookReader::Infrastructure::RenderRegistry)
   end
 
   # Prevent a stray `exit` from silently terminating the suite mid-run.

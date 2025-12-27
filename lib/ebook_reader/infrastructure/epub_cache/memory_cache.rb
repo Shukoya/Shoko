@@ -56,8 +56,8 @@ module EbookReader
       def refresh_payload_layouts!
         return unless @payload_cache
 
-        @payload_cache.layouts = @layout_cache.each_with_object({}) do |(key, value), acc|
-          acc[key] = deep_dup(value)
+        @payload_cache.layouts = @layout_cache.transform_values do |value|
+          deep_dup(value)
         end
       end
 

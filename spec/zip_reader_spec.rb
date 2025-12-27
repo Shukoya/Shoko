@@ -41,7 +41,7 @@ RSpec.describe Zip::File do
   end
 
   it 'enforces per-entry size limits', :fakefs do
-    previous = ENV['READER_ZIP_MAX_ENTRY_BYTES']
+    previous = ENV.fetch('READER_ZIP_MAX_ENTRY_BYTES', nil)
     ENV['READER_ZIP_MAX_ENTRY_BYTES'] = '5'
 
     data = ZipTestBuilder.build_zip([
@@ -59,7 +59,7 @@ RSpec.describe Zip::File do
   end
 
   it 'enforces total uncompressed size limits across reads', :fakefs do
-    previous = ENV['READER_ZIP_MAX_TOTAL_BYTES']
+    previous = ENV.fetch('READER_ZIP_MAX_TOTAL_BYTES', nil)
     ENV['READER_ZIP_MAX_TOTAL_BYTES'] = '5'
 
     data = ZipTestBuilder.build_zip([

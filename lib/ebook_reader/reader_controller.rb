@@ -494,13 +494,16 @@ module EbookReader
     end
 
     def calculate_page_info_for_view_model
-      calculator = Application::PageInfoCalculator.new(
+      dependencies = Application::PageInfoCalculator::Dependencies.new(
         state: @state,
         doc: @doc,
         page_calculator: @page_calculator,
         layout_service: @layout_service,
         terminal_service: @terminal_service,
-        pagination_orchestrator: @pagination_orchestrator,
+        pagination_orchestrator: @pagination_orchestrator
+      )
+      calculator = Application::PageInfoCalculator.new(
+        dependencies: dependencies,
         defer_page_map: @defer_page_map
       )
       calculator.calculate

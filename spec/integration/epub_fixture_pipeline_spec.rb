@@ -6,7 +6,7 @@ RSpec.describe 'EPUB fixture pipeline' do
   FIXTURES_DIR = File.expand_path('../../testing epubs', __dir__)
 
   def fixture_paths
-    Dir.glob(File.join(FIXTURES_DIR, '*.epub')).sort
+    Dir.glob(File.join(FIXTURES_DIR, '*.epub'))
   end
 
   def import_fixture(path)
@@ -92,10 +92,10 @@ RSpec.describe 'EPUB fixture pipeline' do
     data = import_fixture(path)
 
     duplicates = data.toc_entries
-      .select(&:navigable)
-      .group_by(&:chapter_index)
-      .values
-      .any? { |entries| entries.length > 1 }
+                     .select(&:navigable)
+                     .group_by(&:chapter_index)
+                     .values
+                     .any? { |entries| entries.length > 1 }
 
     expect(duplicates).to be(true)
   end

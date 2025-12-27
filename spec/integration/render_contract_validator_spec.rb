@@ -165,7 +165,7 @@ RSpec.describe 'Render contract validator' do
     )
 
     rendered_lines = EbookReader::Domain::Selectors::ReaderSelectors.rendered_lines(state)
-    geometries = rendered_lines.values.map { |entry| entry[:geometry] }.compact
+    geometries = rendered_lines.values.filter_map { |entry| entry[:geometry] }
     left_geo = geometries.select { |g| g.column_id == 0 }.max_by(&:line_offset)
     right_geo = geometries.select { |g| g.column_id == 1 }.min_by(&:line_offset)
 

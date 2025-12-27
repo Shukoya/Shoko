@@ -2,8 +2,8 @@
 
 require_relative 'base_component'
 require_relative 'ui/box_drawer'
-require_relative 'ui/text_utils'
-require_relative 'ui/list_helpers'
+require_relative 'ui/overlay_layout'
+require_relative 'annotations_overlay/list_renderer'
 
 module EbookReader
   module Components
@@ -17,6 +17,14 @@ module EbookReader
         @state = state
         @visible = true
         @selected_index = (@state.get(%i[reader sidebar_annotations_selected]) || 0).to_i
+        @overlay_sizing = UI::OverlaySizing.new(
+          width_ratio: 0.6,
+          width_padding: 8,
+          min_width: 48,
+          height_ratio: 0.5,
+          height_padding: 6,
+          min_height: 12
+        )
       end
 
       def visible?
@@ -33,24 +41,9 @@ module EbookReader
 
       def handle_key(key)
         entries = annotations
-        return { type: :close } if entries.empty? && cancel_key?(key)
+        return { type: :close } if close_when_empty?(entries, key)
 
-        if up_key?(key)
-          move_selection(-1)
-        elsif down_key?(key)
-          move_selection(1)
-        elsif confirm_key?(key)
-          annotation = current_annotation
-          annotation ? { type: :open, annotation: annotation } : nil
-        elsif edit_key?(key)
-          annotation = current_annotation
-          annotation ? { type: :edit, annotation: annotation } : nil
-        elsif delete_key?(key)
-          annotation = current_annotation
-          annotation ? { type: :delete, annotation: annotation } : nil
-        elsif cancel_key?(key)
-          { type: :close }
-        end
+        navigation_action(key) || selection_action(key) || close_action(key)
       end
 
       def current_annotation
@@ -66,16 +59,19 @@ module EbookReader
         return unless @visible
 
         entries = annotations
-        overlay_width = calculate_width(bounds.width)
-        overlay_height = calculate_height(bounds.height)
-        origin_x = [(bounds.width - overlay_width) / 2, 1].max + 1
-        origin_y = [(bounds.height - overlay_height) / 2, 1].max + 1
+        layout = overlay_layout(bounds)
 
-        fill_background(surface, bounds, origin_x, origin_y, overlay_width, overlay_height)
-        draw_box(surface, bounds, origin_y, origin_x, overlay_height, overlay_width, label: 'Annotations')
-        draw_header(surface, bounds, origin_x, origin_y, overlay_width, entries.length)
-        draw_list(surface, bounds, origin_x, origin_y, overlay_width, overlay_height, entries)
-        draw_footer(surface, bounds, origin_x, origin_y, overlay_width, overlay_height)
+        layout.fill_background(surface, bounds, background: POPUP_BG_DEFAULT)
+        draw_box(surface, bounds, layout.origin_y, layout.origin_x, layout.height, layout.width, label: 'Annotations')
+        render_context = AnnotationsOverlay::ListRenderer::RenderContext.new(
+          surface: surface,
+          bounds: bounds,
+          layout: layout,
+          entries: entries,
+          selected_index: @selected_index
+        )
+        list_renderer.render(render_context)
+        draw_footer(surface, bounds, layout)
       end
 
       private
@@ -106,96 +102,17 @@ module EbookReader
         { type: :selection_change, index: @selected_index }
       end
 
-      def draw_header(surface, bounds, origin_x, origin_y, width, count)
-        reset = Terminal::ANSI::RESET
-        title = "#{COLOR_TEXT_ACCENT}📝 Annotations (#{count})#{reset}"
-        surface.write(bounds, origin_y + 1, origin_x + 2, title)
-
-        info_plain = '[Enter] Open • [e] Edit • [d] Delete • [Esc] Close'
-        info_col = origin_x + [width - EbookReader::Helpers::TextMetrics.visible_length(info_plain) - 2, 2].max
-        surface.write(bounds, origin_y + 1, info_col, "#{COLOR_TEXT_DIM}#{info_plain}#{reset}")
-      end
-
-      def draw_list(surface, bounds, origin_x, origin_y, width, height, entries)
-        inner_width = width - 4
-        list_top = origin_y + 3
-        list_height = height - 5
-        list_height = 1 if list_height.negative?
-
-        if entries.empty?
-          message = "#{COLOR_TEXT_DIM}No annotations yet#{Terminal::ANSI::RESET}"
-          row = origin_y + (height / 2)
-          col = origin_x + [(width - EbookReader::Helpers::TextMetrics.visible_length(message)) / 2, 2].max
-          surface.write(bounds, row, col, message)
-          return
-        end
-
-        idx_width = 4
-        date_width = [12, inner_width / 5].max
-        remaining = inner_width - idx_width - date_width - 2
-        remaining = 12 if remaining < 12
-        snippet_width = [(remaining * 0.6).floor, 8].max
-        note_width = [remaining - snippet_width, 6].max
-
-        header = [
-          '  ',
-          UI::TextUtils.pad_right('#', idx_width),
-          ' ',
-          UI::TextUtils.pad_right('Snippet', snippet_width),
-          ' ',
-          UI::TextUtils.pad_right('Note', note_width),
-          ' ',
-          UI::TextUtils.pad_right('Saved', date_width),
-        ].join
-        surface.write(bounds, list_top - 1, origin_x + 2,
-                      "#{COLOR_TEXT_DIM}#{header}#{Terminal::ANSI::RESET}")
-
-        start_index, visible = UI::ListHelpers.slice_visible(entries, list_height, @selected_index)
-        visible.each_with_index do |annotation, offset|
-          line_row = list_top + offset
-          pointer = (start_index + offset) == @selected_index ? '▸' : ' '
-          line_color = (start_index + offset) == @selected_index ? SELECTION_HIGHLIGHT : COLOR_TEXT_PRIMARY
-          snippet = UI::TextUtils.pad_right(
-            UI::TextUtils.truncate_text(annotation[:text].to_s.tr("\n", ' '), snippet_width), snippet_width
-          )
-          note = UI::TextUtils.pad_right(UI::TextUtils.truncate_text(annotation[:note].to_s.tr("\n", ' '), note_width),
-                                         note_width)
-          saved_at = annotation[:updated_at] || annotation[:created_at]
-          saved_text = saved_at ? saved_at.to_s.split('T').first : '-'
-          saved = UI::TextUtils.pad_right(UI::TextUtils.truncate_text(saved_text, date_width), date_width)
-
-          idx_text = UI::TextUtils.pad_right((start_index + offset + 1).to_s, idx_width)
-          line = [pointer, ' ', idx_text, ' ', snippet, ' ', note, ' ', saved].join
-          surface.write(bounds, line_row, origin_x + 2,
-                        "#{line_color}#{line}#{Terminal::ANSI::RESET}")
-        end
-      end
-
-      def draw_footer(surface, bounds, origin_x, origin_y, _width, height)
+      def draw_footer(surface, bounds, layout)
         hint = "#{COLOR_TEXT_DIM}Use ↑/↓ to navigate • Enter to open#{Terminal::ANSI::RESET}"
-        surface.write(bounds, origin_y + height - 2, origin_x + 2, hint)
-      end
-
-      def fill_background(surface, bounds, origin_x, origin_y, width, height)
-        bg = POPUP_BG_DEFAULT
-        reset = Terminal::ANSI::RESET
-        height.times do |offset|
-          surface.write(bounds, origin_y + offset, origin_x, "#{bg}#{' ' * width}#{reset}")
-        end
+        surface.write(bounds, layout.origin_y + layout.height - 2, layout.origin_x + 2, hint)
       end
 
       def calculate_width(total_width)
-        base = [(total_width * 0.6).floor, total_width - 8].min
-        upper = total_width - 8
-        lower = [48, upper].min
-        base.clamp(lower, upper)
+        @overlay_sizing.width_for(total_width)
       end
 
       def calculate_height(total_height)
-        base = [(total_height * 0.5).floor, total_height - 6].min
-        upper = total_height - 6
-        lower = [12, upper].min
-        base.clamp(lower, upper)
+        @overlay_sizing.height_for(total_height)
       end
 
       def up_key?(key)
@@ -220,6 +137,40 @@ module EbookReader
 
       def delete_key?(key)
         key == 'd'
+      end
+
+      def close_when_empty?(entries, key)
+        entries.empty? && cancel_key?(key)
+      end
+
+      def navigation_action(key)
+        return move_selection(-1) if up_key?(key)
+
+        move_selection(1) if down_key?(key)
+      end
+
+      def selection_action(key)
+        annotation = current_annotation
+        return nil unless annotation
+
+        return { type: :open, annotation: annotation } if confirm_key?(key)
+        return { type: :edit, annotation: annotation } if edit_key?(key)
+
+        { type: :delete, annotation: annotation } if delete_key?(key)
+      end
+
+      def close_action(key)
+        { type: :close } if cancel_key?(key)
+      end
+
+      def overlay_layout(bounds)
+        width = calculate_width(bounds.width)
+        height = calculate_height(bounds.height)
+        UI::OverlayLayout.centered(bounds, width: width, height: height)
+      end
+
+      def list_renderer
+        @list_renderer ||= AnnotationsOverlay::ListRenderer.new
       end
 
       def symbolize_keys(annotation)

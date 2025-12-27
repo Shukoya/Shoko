@@ -18,8 +18,6 @@ RSpec.describe EbookReader::Domain::Repositories::AnnotationRepository do
       when :logger then @logger
       when :file_writer then @file_writer
       when :path_service then @path_service
-      else
-        nil
       end
     end
   end

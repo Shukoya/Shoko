@@ -67,4 +67,3 @@ RSpec.describe EbookReader::Domain::Services::NavigationService do
     expect(state_store.get(%i[reader current_page])).to eq(2)
   end
 end
-

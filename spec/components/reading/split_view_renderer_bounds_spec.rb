@@ -65,4 +65,3 @@ RSpec.describe EbookReader::Components::Reading::SplitViewRenderer do
     expect(wrote_at_expected_margin).to be(true)
   end
 end
-

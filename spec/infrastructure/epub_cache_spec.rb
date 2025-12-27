@@ -113,7 +113,7 @@ RSpec.describe EbookReader::Infrastructure::EpubCache do
           'sha256' => '../evil',
           'source_path' => epub_path,
           'generated_at' => Time.now.utc.iso8601,
-          'engine' => EbookReader::Infrastructure::JsonCacheStore::ENGINE
+          'engine' => EbookReader::Infrastructure::JsonCacheStore::ENGINE,
         }
       )
     )

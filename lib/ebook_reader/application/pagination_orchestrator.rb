@@ -7,6 +7,80 @@ module EbookReader
     # Handles pagination builds (dynamic/absolute) and progress overlay.
     # Keeps heavy orchestration out of ReaderController while preserving behavior.
     class PaginationOrchestrator
+      # Aggregates pagination inputs and provides small helpers for map building.
+      class Context
+        attr_reader :doc, :state, :page_calculator, :dimensions
+
+        def initialize(doc:, state:, page_calculator:, dimensions:)
+          @doc = doc
+          @state = state
+          @page_calculator = page_calculator
+          @dimensions = dimensions
+        end
+
+        def width
+          dimensions[0]
+        end
+
+        def height
+          dimensions[1]
+        end
+
+        def dynamic_mode?
+          EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(state) == :dynamic
+        end
+
+        def view_mode
+          EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
+        end
+
+        def line_spacing
+          EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
+        end
+
+        def kitty_images?
+          EbookReader::Infrastructure::KittyGraphics.enabled_for?(state)
+        end
+
+        def pending_progress_payload
+          current_chapter = state.get(%i[reader current_chapter]) || 0
+          current_index = state.get(%i[reader current_page_index]).to_i
+          page = page_calculator.get_page(current_index)
+          {
+            chapter_index: current_chapter,
+            line_offset: page ? page[:start_line] : 0,
+          }
+        end
+
+        def build_dynamic!(progress: nil)
+          Infrastructure::PerfTracer.measure('pagination.build') do
+            page_calculator.build_dynamic_map!(width, height, doc, state) do |done, total|
+              progress&.call(done, total)
+            end
+          end
+          page_calculator.apply_pending_precise_restore!(state)
+        end
+
+        def build_absolute!(progress: nil)
+          Infrastructure::PerfTracer.measure('pagination.build') do
+            page_calculator.build_absolute_map!(width, height, doc, state) do |done, total|
+              progress&.call(done, total)
+            end
+          end
+        end
+
+        def clamp_dynamic_index!
+          total = page_calculator.total_pages.to_i
+          return if total <= 0
+
+          current = state.get(%i[reader current_page_index]).to_i
+          clamped = current.clamp(0, total - 1)
+          state.dispatch(
+            EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: clamped)
+          )
+        end
+      end
+
       def initialize(dependencies)
         @dependencies = dependencies
         @terminal_service = @dependencies.resolve(:terminal_service)
@@ -21,51 +95,60 @@ module EbookReader
       # Performs the initial pagination calculation with a loading overlay.
       # Returns a hash with optional :page_map_cache for absolute mode.
       def initial_build(doc, state, page_calculator)
-        return { page_map_cache: nil } unless doc && page_calculator
+        context = build_context(doc, state, page_calculator, dimensions: terminal_dimensions)
+        return { page_map_cache: nil } unless context
 
-        width, height = terminal_dimensions
         cache = nil
         with_loading(state, 'Opening book…') do
-          cache = build_initial_map(doc, state, page_calculator, [width, height])
+          cache = build_initial_map(context)
         end
         { page_map_cache: cache }
       end
 
       # Build pagination immediately (no overlays) and return page-map data for absolute mode.
-      def build_full_map!(doc, state, page_calculator, dimensions, &)
-        return nil unless doc && page_calculator
+      def build_full_map!(doc, state, page_calculator, dimensions, &block)
+        context = build_context(doc, state, page_calculator, dimensions: dimensions)
+        return nil unless context
 
-        return perform_absolute_build(doc, state, page_calculator, dimensions, &) unless dynamic_mode?(state)
+        if context.dynamic_mode?
+          context.build_dynamic!(progress: block)
+          nil
+        else
+          context.build_absolute!(progress: block)
+        end
+      end
 
-        perform_dynamic_build(doc, state, page_calculator, dimensions, &)
-        nil
+      # Non-bang variant to satisfy safe-method expectations.
+      def build_full_map(doc, state, page_calculator, dimensions, &)
+        build_full_map!(doc, state, page_calculator, dimensions, &)
       end
 
       # Refresh pagination after a terminal resize.
       def refresh_after_resize(doc, state, page_calculator, dimensions)
-        return unless doc && page_calculator
+        context = build_context(doc, state, page_calculator, dimensions: dimensions)
+        return unless context
 
-        if dynamic_mode?(state)
-          perform_dynamic_build(doc, state, page_calculator, dimensions)
-          clamp_dynamic_index(state, page_calculator)
+        if context.dynamic_mode?
+          context.build_dynamic!
+          context.clamp_dynamic_index!
         else
-          perform_absolute_build(doc, state, page_calculator, dimensions)
+          context.build_absolute!
         end
       end
 
       # Rebuild pagination when layout-affecting config (view mode, line spacing, page numbering)
       # changes. Preserves the current reading position as precisely as possible.
       def rebuild_after_config_change(doc, state, page_calculator, dimensions)
-        return unless doc && page_calculator
+        context = build_context(doc, state, page_calculator, dimensions: dimensions)
+        return unless context
 
-        width, height = dimensions
-        if dynamic_mode?(state)
-          payload = pending_progress_payload(state, page_calculator)
+        if context.dynamic_mode?
+          payload = context.pending_progress_payload
           state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_progress: payload))
-          perform_dynamic_build(doc, state, page_calculator, [width, height])
-          clamp_dynamic_index(state, page_calculator)
+          context.build_dynamic!
+          context.clamp_dynamic_index!
         else
-          perform_absolute_build(doc, state, page_calculator, [width, height])
+          context.build_absolute!
         end
       rescue StandardError
         nil
@@ -73,16 +156,14 @@ module EbookReader
 
       # Rebuilds dynamic pagination with a loading overlay and precise restore.
       def rebuild_dynamic(doc, state, page_calculator)
-        return :pass unless dynamic_mode?(state) && page_calculator
+        context = build_context(doc, state, page_calculator, dimensions: terminal_dimensions)
+        return :pass unless context&.dynamic_mode?
 
-        width, height = terminal_dimensions
-        payload = pending_progress_payload(state, page_calculator)
+        payload = context.pending_progress_payload
 
         with_loading(state, 'Rebuilding pagination…') do
           state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_progress: payload))
-          perform_dynamic_build(doc, state, page_calculator, [width, height]) do |done, total|
-            update_progress(state, done, total)
-          end
+          context.build_dynamic!(progress: progress_callback_for(state))
         end
         :handled
       end
@@ -109,44 +190,17 @@ module EbookReader
 
       private
 
-      def build_initial_map(doc, state, page_calculator, dimensions)
-        if dynamic_mode?(state)
-          perform_dynamic_build(doc, state, page_calculator, dimensions) do |done, total|
-            update_progress(state, done, total)
-          end
+      def build_initial_map(context)
+        progress = progress_callback_for(context.state)
+        if context.dynamic_mode?
+          context.build_dynamic!(progress: progress)
           nil
         else
-          map = perform_absolute_build(doc, state, page_calculator, dimensions) do |done, total|
-            update_progress(state, done, total)
-          end
-          width, height = dimensions
-          build_absolute_cache_entry(map, state, width, height)
+          map = context.build_absolute!(progress: progress)
+          build_absolute_cache_entry(context, map)
         end
       rescue StandardError
         nil
-      end
-
-      def perform_dynamic_build(doc, state, page_calculator, dimensions, &block)
-        width, height = dimensions
-        Infrastructure::PerfTracer.measure('pagination.build') do
-          page_calculator.build_dynamic_map!(width, height, doc, state) do |done, total|
-            block&.call(done, total)
-          end
-        end
-        page_calculator.apply_pending_precise_restore!(state)
-      end
-
-      def perform_absolute_build(doc, state, page_calculator, dimensions, &block)
-        width, height = dimensions
-        Infrastructure::PerfTracer.measure('pagination.build') do
-          page_calculator.build_absolute_map!(width, height, doc, state) do |done, total|
-            block&.call(done, total)
-          end
-        end
-      end
-
-      def dynamic_mode?(state)
-        EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(state) == :dynamic
       end
 
       def begin_loading(state, message)
@@ -180,25 +234,18 @@ module EbookReader
         end_loading(state)
       end
 
-      def build_absolute_cache_entry(page_map, state, width, height)
-        view_mode = EbookReader::Domain::Selectors::ConfigSelectors.view_mode(state)
-        line_spacing = EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(state)
-        kitty_images = EbookReader::Infrastructure::KittyGraphics.enabled_for?(state)
-        key = @pagination_cache&.layout_key(width, height, view_mode, line_spacing, kitty_images: kitty_images)
+      def build_absolute_cache_entry(context, page_map)
+        key = @pagination_cache&.layout_key(
+          context.width,
+          context.height,
+          context.view_mode,
+          context.line_spacing,
+          kitty_images: context.kitty_images?
+        )
         {
           key: key,
           map: page_map,
           total: Array(page_map).sum,
-        }
-      end
-
-      def pending_progress_payload(state, page_calculator)
-        current_chapter = state.get(%i[reader current_chapter]) || 0
-        current_index = state.get(%i[reader current_page_index]).to_i
-        page = page_calculator.get_page(current_index)
-        {
-          chapter_index: current_chapter,
-          line_offset: page ? page[:start_line] : 0,
         }
       end
 
@@ -207,15 +254,14 @@ module EbookReader
         [width, height]
       end
 
-      def clamp_dynamic_index(state, page_calculator)
-        total = page_calculator.total_pages.to_i
-        return if total <= 0
+      def build_context(doc, state, page_calculator, dimensions:)
+        return nil unless doc && page_calculator
 
-        current = state.get(%i[reader current_page_index]).to_i
-        clamped = current.clamp(0, total - 1)
-        state.dispatch(
-          EbookReader::Domain::Actions::UpdatePageAction.new(current_page_index: clamped)
-        )
+        Context.new(doc: doc, state: state, page_calculator: page_calculator, dimensions: dimensions)
+      end
+
+      def progress_callback_for(state)
+        ->(done, total) { update_progress(state, done, total) }
       end
     end
   end

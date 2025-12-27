@@ -2,7 +2,10 @@
 
 require_relative 'base_component'
 require_relative 'ui/box_drawer'
-require_relative 'ui/text_utils'
+require_relative 'ui/overlay_layout'
+require_relative 'annotation_editor_overlay/footer_renderer'
+require_relative 'annotation_editor_overlay/geometry'
+require_relative 'annotation_editor_overlay/note_renderer'
 require_relative '../input/key_definitions'
 require_relative '../helpers/terminal_sanitizer'
 
@@ -19,21 +22,27 @@ module EbookReader
       CANCEL_BUTTON_BG = "\e[48;2;191;97;106m"
       BUTTON_FG = Terminal::ANSI::BRIGHT_WHITE
 
-      attr_reader :visible, :selected_text, :note, :chapter_index
+      attr_reader :visible, :selected_text, :note, :chapter_index, :annotation_id
 
       def initialize(selected_text:, range:, chapter_index:, annotation: nil)
         super()
         @selected_text = (selected_text || '').dup
         @range = range
         @chapter_index = chapter_index
-        @annotation = annotation
-        @note = if annotation
-                  (annotation[:note] || annotation['note'] || '').dup
-                else
-                  ''.dup
-                end
+        @annotation_id = annotation.is_a?(Hash) ? (annotation[:id] || annotation['id']) : nil
+        note_source = annotation.is_a?(Hash) ? (annotation[:note] || annotation['note']) : nil
+        @note = (note_source || '').dup
         @cursor_pos = @note.length
         @visible = true
+        @button_regions = {}
+        @overlay_sizing = UI::OverlaySizing.new(
+          width_ratio: 0.7,
+          width_padding: 6,
+          min_width: 50,
+          height_ratio: 0.6,
+          height_padding: 6,
+          min_height: 14
+        )
       end
 
       def visible?
@@ -42,12 +51,6 @@ module EbookReader
 
       def hide
         @visible = false
-      end
-
-      def annotation_id
-        return nil unless @annotation.is_a?(Hash)
-
-        @annotation[:id] || @annotation['id']
       end
 
       def selection_range
@@ -61,19 +64,27 @@ module EbookReader
       def do_render(surface, bounds)
         return unless @visible
 
-        width = calculate_width(bounds.width)
-        height = calculate_height(bounds.height)
-        origin_x = [(bounds.width - width) / 2, 1].max + 1
-        origin_y = [(bounds.height - height) / 2, 1].max + 1
+        layout = overlay_layout(bounds)
 
-        @button_regions = {}
+        layout.fill_background(surface, bounds, background: POPUP_BG_DEFAULT)
+        draw_box(surface, bounds, layout.origin_y, layout.origin_x, layout.height, layout.width, label: 'Annotation')
 
-        fill_background(surface, bounds, origin_x, origin_y, width, height)
-        geometry = build_geometry(origin_x, origin_y, width, height)
-        draw_box(surface, bounds, origin_y, origin_x, height, width, label: 'Annotation')
+        geometry = AnnotationEditorOverlay::Geometry.new(layout)
+        note_renderer = AnnotationEditorOverlay::NoteRenderer.new(
+          background: POPUP_BG_DEFAULT,
+          text_color: COLOR_TEXT_PRIMARY,
+          cursor_color: SELECTION_HIGHLIGHT,
+          geometry: geometry
+        )
+        note_renderer.render(surface, bounds, note: @note, cursor_pos: @cursor_pos)
 
-        draw_note_editor(surface, bounds, geometry)
-        draw_footer(surface, bounds, geometry)
+        footer_renderer = AnnotationEditorOverlay::FooterRenderer.new(
+          background: POPUP_BG_DEFAULT,
+          button_fg: BUTTON_FG,
+          save_bg: SAVE_BUTTON_BG,
+          cancel_bg: CANCEL_BUTTON_BG
+        )
+        @button_regions = footer_renderer.render(surface, bounds, geometry)
       end
 
       # Handles key input, returning an event hash when an action should be taken.
@@ -93,87 +104,11 @@ module EbookReader
       end
 
       def calculate_width(total_width)
-        base = [(total_width * 0.7).floor, total_width - 6].min
-        upper = total_width - 6
-        lower = [50, upper].min
-        base.clamp(lower, upper)
+        @overlay_sizing.width_for(total_width)
       end
 
       def calculate_height(total_height)
-        base = [(total_height * 0.6).floor, total_height - 6].min
-        upper = total_height - 6
-        lower = [14, upper].min
-        base.clamp(lower, upper)
-      end
-
-      def fill_background(surface, bounds, origin_x, origin_y, width, height)
-        reset = Terminal::ANSI::RESET
-        bg = POPUP_BG_DEFAULT
-        height.times do |offset|
-          surface.write(bounds, origin_y + offset, origin_x, "#{bg}#{' ' * width}#{reset}")
-        end
-      end
-
-      def draw_note_editor(surface, bounds, geometry)
-        text_x = geometry[:text_x]
-        text_width = geometry[:text_width]
-        note_rows = geometry[:note_rows]
-        note_top = geometry[:box_y] + 1
-
-        note_rows.times do |offset|
-          surface.write(bounds, note_top + offset, text_x,
-                        "#{POPUP_BG_DEFAULT}#{' ' * text_width}#{Terminal::ANSI::RESET}")
-        end
-
-        wrapped_note = UI::TextUtils.wrap_text(@note, text_width)
-        wrapped_note = [''] if wrapped_note.empty?
-
-        cursor_lines = UI::TextUtils.wrap_text(@note[0...@cursor_pos], text_width)
-        cursor_line_index = [cursor_lines.length - 1, 0].max
-
-        max_visible_start = [wrapped_note.length - note_rows, 0].max
-        visible_start = [cursor_line_index - note_rows + 1, 0].max
-        visible_start = [visible_start, max_visible_start].min
-
-        visible_lines = wrapped_note[visible_start, note_rows] || []
-        visible_lines += Array.new(note_rows - visible_lines.length, '')
-
-        visible_lines.each_with_index do |line, idx|
-          target_row = note_top + idx
-          surface.write(bounds, target_row, text_x,
-                        "#{POPUP_BG_DEFAULT}#{COLOR_TEXT_PRIMARY}#{UI::TextUtils.pad_right(line, text_width)}#{Terminal::ANSI::RESET}")
-        end
-
-        cursor_display_row = cursor_line_index - visible_start
-        cursor_display_row = cursor_display_row.clamp(0, note_rows - 1)
-        cursor_row = note_top + cursor_display_row
-        cursor_line = cursor_lines.last || ''
-        cursor_col = text_x + [EbookReader::Helpers::TextMetrics.visible_length(cursor_line), text_width - 1].min
-        surface.write(bounds, cursor_row, cursor_col,
-                      "#{SELECTION_HIGHLIGHT}_#{Terminal::ANSI::RESET}")
-      end
-
-      def draw_footer(surface, bounds, geometry)
-        cancel_label = 'Cancel'
-        save_label = 'Save'
-        cancel_width = cancel_label.length + 4
-        save_width = save_label.length + 4
-
-        button_row = geometry[:buttons_row]
-        footer_bg = "#{POPUP_BG_DEFAULT}#{' ' * geometry[:text_width]}#{Terminal::ANSI::RESET}"
-        surface.write(bounds, button_row, geometry[:text_x], footer_bg)
-
-        cancel_col = geometry[:text_x] + geometry[:text_width] - cancel_width
-        cancel_col = [cancel_col, geometry[:text_x]].max
-        save_col = cancel_col - 2 - save_width
-        save_col = [save_col, geometry[:text_x]].max
-
-        draw_button(surface, bounds, button_row, save_col, save_label, SAVE_BUTTON_BG, save_width)
-        draw_button(surface, bounds, button_row, cancel_col, cancel_label, CANCEL_BUTTON_BG, cancel_width)
-
-        abs_row = bounds.y + button_row - 1
-        @button_regions[:save] = { row: abs_row, col: bounds.x + save_col - 1, width: save_width }
-        @button_regions[:cancel] = { row: abs_row, col: bounds.x + cancel_col - 1, width: cancel_width }
+        @overlay_sizing.height_for(total_height)
       end
 
       def handle_backspace
@@ -238,31 +173,10 @@ module EbookReader
 
       private
 
-      def draw_button(surface, bounds, row, col, label, background, width)
-        reset = Terminal::ANSI::RESET
-        text = " #{label} "
-        padded = UI::TextUtils.pad_right(text, width)
-        surface.write(bounds, row, col, "#{background}#{BUTTON_FG}#{padded}#{reset}")
-      end
-
-      def build_geometry(origin_x, origin_y, width, height)
-        inner_x = origin_x + 1
-        inner_y = origin_y + 1
-        inner_width = width - 2
-        inner_height = height - 2
-        text_x = inner_x + 1
-        text_width = [inner_width - 2, 1].max
-        note_rows = [inner_height - 3, 1].max
-        {
-          box_y: inner_y,
-          box_x: inner_x,
-          box_height: inner_height,
-          box_width: inner_width,
-          text_x: text_x,
-          text_width: text_width,
-          note_rows: note_rows,
-          buttons_row: inner_y + inner_height - 2,
-        }
+      def overlay_layout(bounds)
+        width = calculate_width(bounds.width)
+        height = calculate_height(bounds.height)
+        UI::OverlayLayout.centered(bounds, width: width, height: height)
       end
     end
   end

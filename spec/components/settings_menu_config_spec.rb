@@ -6,7 +6,7 @@ require 'fileutils'
 RSpec.describe 'Settings menu configuration toggles' do
   around do |example|
     Dir.mktmpdir do |dir|
-      old_home = ENV['HOME']
+      old_home = Dir.home
       old_cache = ENV.fetch('XDG_CACHE_HOME', nil)
       old_config = ENV.fetch('XDG_CONFIG_HOME', nil)
       ENV['HOME'] = dir

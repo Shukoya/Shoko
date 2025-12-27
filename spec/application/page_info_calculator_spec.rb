@@ -10,16 +10,19 @@ RSpec.describe EbookReader::Application::PageInfoCalculator do
   let(:terminal_service) { instance_double('TerminalService', size: [24, 80]) }
   let(:orchestrator) { instance_double('PaginationOrchestrator') }
 
-  def build_calculator(defer_page_map: false)
-    described_class.new(
+  let(:dependencies) do
+    described_class::Dependencies.new(
       state: state,
       doc: doc,
       page_calculator: page_calculator,
       layout_service: layout_service,
       terminal_service: terminal_service,
-      pagination_orchestrator: orchestrator,
-      defer_page_map: defer_page_map
+      pagination_orchestrator: orchestrator
     )
+  end
+
+  def build_calculator(defer_page_map: false)
+    described_class.new(dependencies: dependencies, defer_page_map: defer_page_map)
   end
 
   before do
@@ -35,10 +38,10 @@ RSpec.describe EbookReader::Application::PageInfoCalculator do
     context 'when dynamic mode and single view' do
       it 'returns current/total pages using the calculator' do
         state.update({
-                      %i[config page_numbering_mode] => :dynamic,
-                      %i[config view_mode] => :single,
-                      %i[reader current_page_index] => 4,
-                    })
+                       %i[config page_numbering_mode] => :dynamic,
+                       %i[config view_mode] => :single,
+                       %i[reader current_page_index] => 4,
+                     })
         allow(page_calculator).to receive(:total_pages).and_return(9)
 
         expect(build_calculator.calculate).to eq(type: :single, current: 5, total: 9)
@@ -48,10 +51,10 @@ RSpec.describe EbookReader::Application::PageInfoCalculator do
     context 'when dynamic mode and split view' do
       it 'returns left/right page metadata' do
         state.update({
-                      %i[config page_numbering_mode] => :dynamic,
-                      %i[config view_mode] => :split,
-                      %i[reader current_page_index] => 2,
-                    })
+                       %i[config page_numbering_mode] => :dynamic,
+                       %i[config view_mode] => :split,
+                       %i[reader current_page_index] => 2,
+                     })
         allow(page_calculator).to receive(:total_pages).and_return(6)
 
         result = build_calculator.calculate
@@ -67,13 +70,13 @@ RSpec.describe EbookReader::Application::PageInfoCalculator do
     context 'when absolute mode and single view' do
       it 'derives page numbers from page map and offsets' do
         state.update({
-                      %i[config page_numbering_mode] => :absolute,
-                      %i[config view_mode] => :single,
-                      %i[reader current_chapter] => 1,
-                      %i[reader single_page] => 20,
-                      %i[reader page_map] => [5, 5, 5],
-                      %i[reader total_pages] => 12,
-                    })
+                       %i[config page_numbering_mode] => :absolute,
+                       %i[config view_mode] => :single,
+                       %i[reader current_chapter] => 1,
+                       %i[reader single_page] => 20,
+                       %i[reader page_map] => [5, 5, 5],
+                       %i[reader total_pages] => 12,
+                     })
 
         expect(build_calculator(defer_page_map: true).calculate).to eq(
           type: :single,
@@ -86,14 +89,14 @@ RSpec.describe EbookReader::Application::PageInfoCalculator do
     context 'when absolute mode and split view' do
       it 'returns split page info for both columns' do
         state.update({
-                      %i[config page_numbering_mode] => :absolute,
-                      %i[config view_mode] => :split,
-                      %i[reader current_chapter] => 0,
-                      %i[reader left_page] => 0,
-                      %i[reader right_page] => 20,
-                      %i[reader page_map] => [10],
-                      %i[reader total_pages] => 10,
-                    })
+                       %i[config page_numbering_mode] => :absolute,
+                       %i[config view_mode] => :split,
+                       %i[reader current_chapter] => 0,
+                       %i[reader left_page] => 0,
+                       %i[reader right_page] => 20,
+                       %i[reader page_map] => [10],
+                       %i[reader total_pages] => 10,
+                     })
 
         expect(build_calculator(defer_page_map: true).calculate).to eq(
           type: :split,
@@ -111,12 +114,12 @@ RSpec.describe EbookReader::Application::PageInfoCalculator do
 
     it 'builds absolute map via orchestrator when needed' do
       state.update({
-                    %i[config page_numbering_mode] => :absolute,
-                    %i[config view_mode] => :single,
-                    %i[reader single_page] => 0,
-                    %i[reader current_chapter] => 0,
-                    %i[reader total_pages] => 0,
-                  })
+                     %i[config page_numbering_mode] => :absolute,
+                     %i[config view_mode] => :single,
+                     %i[reader single_page] => 0,
+                     %i[reader current_chapter] => 0,
+                     %i[reader total_pages] => 0,
+                   })
 
       allow(orchestrator).to receive(:build_full_map!) do
         state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(

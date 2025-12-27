@@ -152,3 +152,13 @@ Notes (recent changes):
 - Refactored `EbookReader::CLI` logger setup to reduce method metrics and remove duplicated `/dev/null` handling (now uses `IO::NULL`); `bundle exec rspec` passes.
 - Split `EpubCache` into focused helpers under `lib/ebook_reader/infrastructure/epub_cache/` (source resolution, persistence, memory cache, serializer) and normalized layout cache updates; validated with `bundle exec rubocop`, `bundle exec reek lib bin`, and `bundle exec rspec`.
 - Split `JsonCacheStore` into focused helpers under `lib/ebook_reader/infrastructure/json_cache_store/` and refactored `write_payload`/chapter/resource helpers to satisfy RuboCop metrics; kept Reek total steady and verified with `bundle exec rspec`.
+- Extracted overlay layout sizing/helpers and split annotation overlay rendering into focused helpers (note/footer/list renderers) to cut parameter lists and method metrics while preserving overlay behavior.
+- Refactored `PaginationCachePreloader` to use layout/size value objects and smaller helpers (reduced method length, parameter lists, and fallback complexity) while preserving cache hydration behavior.
+- Reworked `PaginationOrchestrator` with a context object and slimmed orchestration methods (reduced data clumps, repeated conditionals, and utility-method smells) while keeping pagination build flows unchanged.
+- Refactored `PageInfoCalculator` to use a dependencies bundle and smaller calculation helpers, reducing method metrics and repeated state lookups without changing page-number behavior.
+- Split `AnnotationDetailScreenComponent` and `AnnotationEditScreenComponent` renders into context-driven helpers to eliminate `do_render` god methods and reduce parameter clumps while preserving layout/output.
+- Refined annotation detail/edit screens to use `AnnotationTextBox` helpers (`next_box`, `render_lines`) and removed redundant padding helpers, reducing data clumps and duplicate wrapping.
+- Added `AnnotationEditState` to centralize menu edit state reads/writes and reduce render-component class length.
+- Reworked `AnnotationTextBox` to use row-based naming, internal render helpers, and a render-context interface to remove parameter clumps and duplicate box rendering.
+- Refactored `AnnotationEditorScreenComponent` into context-driven header/body/footer rendering with shared `AnnotationTextBox` helpers and extracted save flow steps to reduce method complexity.
+- Refactored `TerminalInput::Decoder` with `EscSequenceParser` and `Utf8Validator`, inlined UTF-8 sequence length checks, and reduced action dispatch complexity; `lib/ebook_reader/terminal_input/decoder.rb` now clears RuboCop/Reek for the file.

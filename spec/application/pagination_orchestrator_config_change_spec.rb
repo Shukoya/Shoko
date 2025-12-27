@@ -16,6 +16,7 @@ RSpec.describe EbookReader::Application::PaginationOrchestrator do
     end
 
     def chapter_count = 1
+
     def get_chapter(_idx)
       EbookReader::Domain::Models::Chapter.new(number: '1', title: 'Demo', lines: lines, metadata: nil,
                                                blocks: nil, raw_content: '<p></p>')

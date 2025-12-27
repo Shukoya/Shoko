@@ -10,7 +10,7 @@ RSpec.describe 'Layer boundaries' do
 
         matches = []
         File.readlines(path).each_with_index do |line, index|
-          matches << index + 1 if regex.match?(line)
+          matches << (index + 1) if regex.match?(line)
         end
         acc[path] = matches unless matches.empty?
       end
@@ -23,12 +23,12 @@ RSpec.describe 'Layer boundaries' do
   end
 
   it 'prevents presentation controllers/components from touching infrastructure directly' do
-    regex = /(EbookReader::Infrastructure|Infrastructure::|require_relative ['\"].*infrastructure)/
+    regex = /(EbookReader::Infrastructure|Infrastructure::|require_relative ['"].*infrastructure)/
     offenders = offenses_for(
       %w[lib/ebook_reader/controllers/**/*.rb lib/ebook_reader/components/**/*.rb],
       regex
     )
     expect(offenders).to be_empty,
-                        format_offenses(offenders, 'Presentation layers must not depend on infrastructure')
+                         format_offenses(offenders, 'Presentation layers must not depend on infrastructure')
   end
 end

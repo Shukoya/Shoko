@@ -54,9 +54,8 @@ RSpec.describe EbookReader::TerminalInput::Decoder do
       decoder.feed("\e".b)
       expect(decoder.next_token(now: 0.0)).to be_nil
 
-      decoder.feed("[A".b)
+      decoder.feed('[A'.b)
       expect(decoder.next_token(now: 0.0)).to eq("\e[A")
     end
   end
 end
-

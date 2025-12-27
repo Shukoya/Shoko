@@ -5,14 +5,19 @@ module EbookReader
     # Computes reader page information (current/total pages) for single and split view modes.
     # Encapsulates sizing logic so ReaderController can delegate without duplicating calculations.
     class PageInfoCalculator
-      def initialize(state:, doc:, page_calculator:, layout_service:, terminal_service:, pagination_orchestrator:,
-                     defer_page_map:)
-        @state = state
-        @doc = doc
-        @page_calculator = page_calculator
-        @layout_service = layout_service
-        @terminal_service = terminal_service
-        @pagination_orchestrator = pagination_orchestrator
+      # Bundles dependencies to keep initialization concise.
+      Dependencies = Struct.new(
+        :state,
+        :doc,
+        :page_calculator,
+        :layout_service,
+        :terminal_service,
+        :pagination_orchestrator,
+        keyword_init: true
+      )
+
+      def initialize(dependencies:, defer_page_map:)
+        @dependencies = dependencies
         @defer_page_map = defer_page_map
       end
 
@@ -29,8 +34,31 @@ module EbookReader
 
       private
 
-      attr_reader :state, :doc, :page_calculator, :layout_service,
-                  :terminal_service, :pagination_orchestrator, :defer_page_map
+      attr_reader :dependencies, :defer_page_map
+
+      def state
+        dependencies.state
+      end
+
+      def doc
+        dependencies.doc
+      end
+
+      def page_calculator
+        dependencies.page_calculator
+      end
+
+      def layout_service
+        dependencies.layout_service
+      end
+
+      def terminal_service
+        dependencies.terminal_service
+      end
+
+      def pagination_orchestrator
+        dependencies.pagination_orchestrator
+      end
 
       def calculate_single_info
         if dynamic_mode?
@@ -51,10 +79,8 @@ module EbookReader
       def calculate_dynamic_single
         return default_single unless page_calculator
 
-        current_index = (state.get(%i[reader current_page_index]) || 0).to_i
-        total_pages = page_calculator.total_pages.to_i
-        current_page = current_index + 1
-        total_pages = 0 if total_pages <= 0
+        current_page = current_page_index + 1
+        total_pages = total_pages_from_calculator
 
         {
           type: :single,
@@ -66,8 +92,8 @@ module EbookReader
       def calculate_dynamic_split
         return default_split unless page_calculator
 
-        left_page = (state.get(%i[reader current_page_index]) || 0).to_i + 1
-        total_pages = page_calculator.total_pages.to_i
+        left_page = current_page_index + 1
+        total_pages = total_pages_from_calculator
         right_page = [left_page + 1, total_pages].min
 
         {
@@ -78,25 +104,18 @@ module EbookReader
       end
 
       def calculate_absolute_single
-        height, width = terminal_size
-        _, content_height = layout_service.calculate_metrics(width, height, current_view_mode)
-        lines_per_page = layout_service.adjust_for_line_spacing(content_height, current_line_spacing)
+        layout = absolute_layout(current_view_mode)
+        lines_per_page = layout[:lines_per_page]
         return default_single if lines_per_page <= 0
 
-        ensure_absolute_page_map(width, height) unless defer_page_map
+        ensure_absolute_page_map(layout[:width], layout[:height])
 
-        current_chapter = (state.get(%i[reader current_chapter]) || 0).to_i
-        page_map = Array(state.get(%i[reader page_map]) || [])
-        pages_before = page_map[0...current_chapter].sum
-
-        line_offset = if current_view_mode == :split
-                        state.get(%i[reader left_page]) || 0
-                      else
-                        state.get(%i[reader single_page]) || 0
-                      end
-        page_in_chapter = (line_offset.to_f / lines_per_page).floor + 1
+        page_map = page_map_from_state
+        pages_before = pages_before_current_chapter(page_map)
+        line_offset = line_offset_for_view(current_view_mode)
+        page_in_chapter = page_in_chapter_for_offset(line_offset, lines_per_page)
         current_global_page = pages_before + page_in_chapter
-        total_pages = state.get(%i[reader total_pages]).to_i
+        total_pages = total_pages_from_state
 
         {
           type: :single,
@@ -106,26 +125,24 @@ module EbookReader
       end
 
       def calculate_absolute_split
-        height, width = terminal_size
-        _, content_height = layout_service.calculate_metrics(width, height, :split)
-        lines_per_page = layout_service.adjust_for_line_spacing(content_height, current_line_spacing)
+        layout = absolute_layout(:split)
+        lines_per_page = layout[:lines_per_page]
         return default_split if lines_per_page <= 0
 
-        ensure_absolute_page_map(width, height) unless defer_page_map
+        ensure_absolute_page_map(layout[:width], layout[:height])
 
-        page_map = Array(state.get(%i[reader page_map]) || [])
-        total_pages = state.get(%i[reader total_pages]).to_i
+        page_map = page_map_from_state
+        total_pages = total_pages_from_state
         return default_split unless total_pages.positive?
 
-        current_chapter = (state.get(%i[reader current_chapter]) || 0).to_i
-        pages_before = page_map[0...current_chapter].sum
+        pages_before = pages_before_current_chapter(page_map)
 
         left_line_offset = state.get(%i[reader left_page]) || 0
-        left_page_in_chapter = (left_line_offset.to_f / lines_per_page).floor + 1
+        left_page_in_chapter = page_in_chapter_for_offset(left_line_offset, lines_per_page)
         left_current = pages_before + left_page_in_chapter
 
         right_line_offset = state.get(%i[reader right_page]) || lines_per_page
-        right_page_in_chapter = (right_line_offset.to_f / lines_per_page).floor + 1
+        right_page_in_chapter = page_in_chapter_for_offset(right_line_offset, lines_per_page)
         right_current = [pages_before + right_page_in_chapter, total_pages].min
 
         {
@@ -136,11 +153,10 @@ module EbookReader
       end
 
       def ensure_absolute_page_map(width, height)
-        page_map = Array(state.get(%i[reader page_map]) || [])
         return if defer_page_map
         return unless page_calculator
 
-        return unless page_map.empty? || size_changed?(width, height)
+        return unless page_map_empty? || size_changed?(width, height)
 
         pagination_orchestrator.build_full_map!(doc, state, page_calculator, [width, height])
       end
@@ -178,9 +194,52 @@ module EbookReader
       end
 
       def size_changed?(width, height)
-        return false unless state.respond_to?(:terminal_size_changed?)
-
         state.terminal_size_changed?(width, height)
+      end
+
+      def current_page_index
+        (state.get(%i[reader current_page_index]) || 0).to_i
+      end
+
+      def total_pages_from_calculator
+        total = page_calculator.total_pages.to_i
+        total.positive? ? total : 0
+      end
+
+      def total_pages_from_state
+        state.get(%i[reader total_pages]).to_i
+      end
+
+      def page_map_from_state
+        Array(state.get(%i[reader page_map]) || [])
+      end
+
+      def pages_before_current_chapter(page_map)
+        current_chapter = (state.get(%i[reader current_chapter]) || 0).to_i
+        page_map[0...current_chapter].sum
+      end
+
+      def page_in_chapter_for_offset(line_offset, lines_per_page)
+        (line_offset.to_f / lines_per_page).floor + 1
+      end
+
+      def line_offset_for_view(view_mode)
+        if view_mode == :split
+          state.get(%i[reader left_page]) || 0
+        else
+          state.get(%i[reader single_page]) || 0
+        end
+      end
+
+      def absolute_layout(view_mode)
+        height, width = terminal_size
+        _, content_height = layout_service.calculate_metrics(width, height, view_mode)
+        lines_per_page = layout_service.adjust_for_line_spacing(content_height, current_line_spacing)
+        { width: width, height: height, lines_per_page: lines_per_page }
+      end
+
+      def page_map_empty?
+        page_map_from_state.empty?
       end
     end
   end

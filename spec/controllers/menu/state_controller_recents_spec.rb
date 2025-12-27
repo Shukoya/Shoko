@@ -57,8 +57,8 @@ RSpec.describe EbookReader::Controllers::Menu::StateController do
   end
 
   before do
-    @home_was = ENV['HOME']
-    @xdg_cache_was = ENV['XDG_CACHE_HOME']
+    @home_was = Dir.home
+    @xdg_cache_was = ENV.fetch('XDG_CACHE_HOME', nil)
     ENV['HOME'] = tmp_home
     ENV['XDG_CACHE_HOME'] = cache_root
 

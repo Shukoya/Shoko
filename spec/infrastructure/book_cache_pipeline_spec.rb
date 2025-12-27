@@ -134,9 +134,7 @@ RSpec.describe EbookReader::Infrastructure::BookCachePipeline do
 
     mutated_entries = zip_entries.map do |entry|
       cloned = entry.dup
-      if cloned[:name] == 'OPS/xhtml/chapter1.xhtml'
-        cloned[:data] = cloned[:data].gsub('Hello', 'Jello')
-      end
+      cloned[:data] = cloned[:data].gsub('Hello', 'Jello') if cloned[:name] == 'OPS/xhtml/chapter1.xhtml'
       cloned
     end
 

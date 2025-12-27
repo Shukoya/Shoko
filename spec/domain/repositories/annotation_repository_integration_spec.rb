@@ -36,8 +36,6 @@ RSpec.describe 'AnnotationRepository + FileStore integration' do
         when :logger then EbookReader::Infrastructure::Logger
         when :file_writer then @file_writer
         when :path_service then @path_service
-        else
-          nil
         end
       end
     end.new(file_writer, path_service)

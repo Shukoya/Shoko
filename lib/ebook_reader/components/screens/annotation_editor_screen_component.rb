@@ -3,7 +3,7 @@
 require_relative '../base_component'
 require_relative '../../constants/ui_constants'
 require_relative '../ui/box_drawer'
-require_relative '../ui/text_utils'
+require_relative 'annotation_rendering_helpers'
 
 module EbookReader
   module Components
@@ -13,6 +13,18 @@ module EbookReader
       class AnnotationEditorScreenComponent < BaseComponent
         include Constants::UIConstants
         include UI::BoxDrawer
+
+        # Rendering context for this screen to avoid parameter clumps.
+        RenderContext = Struct.new(
+          :surface,
+          :bounds,
+          :width,
+          :height,
+          :reset,
+          :selected_text,
+          :note_text,
+          keyword_init: true
+        )
 
         def initialize(ui_controller, text: nil, range: nil, annotation: nil, chapter_index: nil,
                        dependencies: nil)
@@ -26,79 +38,26 @@ module EbookReader
           @chapter_index = chapter_index || annotation&.fetch('chapter_index')
           @cursor_pos = @note.length
           @is_editing = !annotation.nil?
+          @render_context = nil
         end
 
         def do_render(surface, bounds)
-          width = bounds.width
-          height = bounds.height
-          reset = Terminal::ANSI::RESET
-
-          # Header
-          title = @is_editing ? 'Editing Annotation' : 'Creating Annotation'
-          surface.write(bounds, 1, 2, "#{COLOR_TEXT_ACCENT}#{title}#{reset}")
-          hint_plain = '[Ctrl+S] Save • [ESC] Cancel'
-          hint_width = EbookReader::Helpers::TextMetrics.visible_length(hint_plain)
-          title_width = EbookReader::Helpers::TextMetrics.visible_length(title)
-          min_hint_col = 2 + title_width + 2
-          right_hint_col = width - hint_width
-          hint_col = [right_hint_col, min_hint_col].max
-          surface.write(bounds, 1, hint_col, "#{COLOR_TEXT_DIM}#{hint_plain}#{reset}")
-          surface.write(bounds, 2, 1, COLOR_TEXT_DIM + ('─' * width) + reset)
-
-          # Selected text (read-only)
-          box_y = 4
-          box_h = [height * 0.25, 6].max.to_i
-          box_w = width - 4
-          draw_box(surface, bounds, box_y, 2, box_h, box_w, label: 'Selected Text')
-          bw = box_w - 4
-          UI::TextUtils.wrap_text(@selected_text.to_s.tr("\n", ' '), bw).each_with_index do |line, i|
-            break if i >= box_h - 2
-
-            write_padded_primary(surface, bounds, box_y + 1 + i, 4, line, bw)
-          end
-
-          # Note editor
-          note_y = box_y + box_h + 2
-          note_h = [height - note_y - 3, 6].max
-          draw_box(surface, bounds, note_y, 2, note_h, box_w, label: 'Note (editable)')
-
-          wrapped = UI::TextUtils.wrap_text(@note, bw)
-          base_row = note_y + 1
-          wrapped.each_with_index do |line, i|
-            break if i >= note_h - 2
-
-            write_padded_primary(surface, bounds, base_row + i, 4, line, bw)
-          end
-
-          # Cursor
-          cursor_lines = UI::TextUtils.wrap_text(@note[0...@cursor_pos], bw)
-          c_row = base_row + [cursor_lines.length - 1, 0].max
-          c_col = 4 + EbookReader::Helpers::TextMetrics.visible_length(cursor_lines.last || '')
-          surface.write(bounds, c_row, c_col, "#{SELECTION_HIGHLIGHT}_#{reset}")
-
-          # Footer
-          surface.write(bounds, height - 1, 2,
-                        "#{COLOR_TEXT_DIM}[Type] to edit • [Backspace] delete • [Enter] newline#{reset}")
+          @render_context = build_context(surface, bounds)
+          render_header
+          render_body
+          render_footer
+        ensure
+          @render_context = nil
         end
 
         # Public API used by InputController bindings
         def save_annotation
           path = @ui.current_book_path
-          return unless path
+          service = @dependencies&.resolve(:annotation_service)
+          return unless path && service
 
-          svc = @dependencies&.resolve(:annotation_service)
-          return unless svc
-
-          if @is_editing && @annotation
-            svc.update(path, @annotation['id'], @note)
-          else
-            svc.add(path, @selected_text, @note, @range, @chapter_index, nil)
-          end
-
-          @ui.refresh_annotations
-          @ui.cleanup_popup_state
-          @ui.set_message('Annotation saved!')
-          @ui.switch_mode(:read)
+          persist_annotation(service, path)
+          finalize_save
         end
 
         def handle_backspace
@@ -123,10 +82,122 @@ module EbookReader
 
         private
 
-        def write_padded_primary(surface, bounds, row, col, text, width)
-          reset = Terminal::ANSI::RESET
-          padded = UI::TextUtils.pad_right(text, width)
-          surface.write(bounds, row, col, COLOR_TEXT_PRIMARY + padded + reset)
+        def build_context(surface, bounds)
+          RenderContext.new(
+            surface: surface,
+            bounds: bounds,
+            width: bounds.width,
+            height: bounds.height,
+            reset: Terminal::ANSI::RESET,
+            selected_text: @selected_text.to_s.tr("\n", ' '),
+            note_text: @note.to_s
+          )
+        end
+
+        def render_header
+          title_width = render_title
+          render_hint(title_width)
+          render_divider
+        end
+
+        def render_title
+          title_plain = @is_editing ? 'Editing Annotation' : 'Creating Annotation'
+          title = "#{COLOR_TEXT_ACCENT}#{title_plain}#{context.reset}"
+          context.surface.write(context.bounds, 1, 2, title)
+          EbookReader::Helpers::TextMetrics.visible_length(title_plain)
+        end
+
+        def render_hint(title_width)
+          hint_plain = '[Ctrl+S] Save • [ESC] Cancel'
+          hint_col = hint_column(title_width, hint_plain)
+          context.surface.write(
+            context.bounds,
+            1,
+            hint_col,
+            "#{COLOR_TEXT_DIM}#{hint_plain}#{context.reset}"
+          )
+        end
+
+        def render_divider
+          context.surface.write(
+            context.bounds,
+            2,
+            1,
+            COLOR_TEXT_DIM + ('─' * context.width) + context.reset
+          )
+        end
+
+        def hint_column(title_width, hint_plain)
+          hint_width = EbookReader::Helpers::TextMetrics.visible_length(hint_plain)
+          min_hint_col = 2 + title_width + 2
+          right_hint_col = context.width - hint_width
+          [right_hint_col, min_hint_col].max
+        end
+
+        def render_body
+          text_box = selected_text_box
+          render_text_box(text_box)
+          render_note_box(note_box(text_box))
+        end
+
+        def selected_text_box
+          AnnotationTextBox.new(
+            row: 4,
+            height: [context.height * 0.25, 6].max.to_i,
+            width: context.width - 4,
+            label: 'Selected Text',
+            text: context.selected_text
+          )
+        end
+
+        def note_box(text_box)
+          text_box.next_box(
+            total_height: context.height,
+            label: 'Note (editable)',
+            text: context.note_text
+          )
+        end
+
+        def render_text_box(box)
+          box.render(context, drawer: self, color_prefix: COLOR_TEXT_PRIMARY)
+        end
+
+        def render_note_box(box)
+          render_text_box(box)
+          render_cursor(box)
+        end
+
+        def render_cursor(box)
+          row, col = box.cursor_position(@cursor_pos)
+          context.surface.write(context.bounds, row, col, "#{SELECTION_HIGHLIGHT}_#{context.reset}")
+        end
+
+        def render_footer
+          context.surface.write(
+            context.bounds,
+            context.height - 1,
+            2,
+            "#{COLOR_TEXT_DIM}[Type] to edit • [Backspace] delete • [Enter] newline#{context.reset}"
+          )
+        end
+
+        def persist_annotation(service, path)
+          if @is_editing && @annotation
+            service.update(path, @annotation['id'], @note)
+          else
+            service.add(path, @selected_text, @note, @range, @chapter_index, nil)
+          end
+        end
+
+        def finalize_save
+          @ui.refresh_annotations
+          @ui.cleanup_popup_state
+          @ui.set_message('Annotation saved!')
+          @ui.switch_mode(:read)
+        end
+
+        def context
+          @render_context
         end
       end
     end

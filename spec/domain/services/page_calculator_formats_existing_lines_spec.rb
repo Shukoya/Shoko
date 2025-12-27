@@ -46,9 +46,9 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
 
     # Force a page with pre-populated plain strings (simulating an older cache/build)
     calculator.instance_variable_set(:@pages_data, [
-      { chapter_index: 0, page_in_chapter: 0, total_pages_in_chapter: 1,
-        start_line: 0, end_line: 2, lines: ['raw one', 'raw two', 'raw three'] }
-    ])
+                                       { chapter_index: 0, page_in_chapter: 0, total_pages_in_chapter: 1,
+                                         start_line: 0, end_line: 2, lines: ['raw one', 'raw two', 'raw three'] },
+                                     ])
 
     page = calculator.get_page(0)
     expect(page[:lines].first).to respond_to(:segments)

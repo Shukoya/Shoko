@@ -4,7 +4,7 @@ require_relative '../base_component'
 require_relative '../../constants/ui_constants'
 require_relative '../../helpers/terminal_sanitizer'
 require_relative '../ui/box_drawer'
-require_relative '../ui/text_utils'
+require_relative 'annotation_rendering_helpers'
 
 module EbookReader
   module Components
@@ -14,75 +14,35 @@ module EbookReader
         include Constants::UIConstants
         include UI::BoxDrawer
 
+        attr_reader :edit_state
+
+        # Rendering context for this screen to avoid parameter clumps.
+        RenderContext = Struct.new(
+          :surface,
+          :bounds,
+          :width,
+          :height,
+          :reset,
+          :annotation,
+          :book_label,
+          keyword_init: true
+        )
+
         def initialize(state, dependencies = nil)
           super(dependencies)
           @state = state
           @dependencies = dependencies
+          @render_context = nil
+          @edit_state = AnnotationEditState.new(@state)
         end
 
         def do_render(surface, bounds)
-          width = bounds.width
-          height = bounds.height
-          reset = Terminal::ANSI::RESET
-
-          ann = @state.get(%i[menu selected_annotation]) || {}
-          book_path = @state.get(%i[menu selected_annotation_book])
-          book_label = if book_path
-                         raw = File.basename(book_path)
-                         EbookReader::Helpers::TerminalSanitizer.sanitize(raw, preserve_newlines: false,
-                                                                               preserve_tabs: false)
-                       else
-                         'Unknown Book'
-                       end
-
-          title_plain = "📝 Edit Annotation • #{book_label}"
-          title_width = EbookReader::Helpers::TextMetrics.visible_length(title_plain)
-          title = "#{COLOR_TEXT_ACCENT}#{title_plain}#{reset}"
-          surface.write(bounds, 1, 2, title)
-          hint_plain = '[Ctrl+S] Save • [ESC] Cancel'
-          hint_width = EbookReader::Helpers::TextMetrics.visible_length(hint_plain)
-          min_hint_col = 2 + title_width + 2
-          right_hint_col = width - hint_width
-          hint_col = [right_hint_col, min_hint_col].max
-          surface.write(bounds, 1, hint_col, "#{COLOR_TEXT_DIM}#{hint_plain}#{reset}")
-          surface.write(bounds, 2, 1, COLOR_TEXT_DIM + ('─' * width) + reset)
-
-          # Snippet (read-only)
-          box_y = 4
-          box_h = [height * 0.25, 6].max.to_i
-          box_w = width - 4
-          draw_box(surface, bounds, box_y, 2, box_h, box_w, label: 'Selected Text')
-          bw = box_w - 4
-          UI::TextUtils.wrap_text((ann[:text] || ann['text'] || '').to_s, bw).each_with_index do |line, i|
-            break if i >= box_h - 2
-
-            write_padded_primary(surface, bounds, box_y + 1 + i, 4, line, bw)
-          end
-
-          # Note editor
-          note_y = box_y + box_h + 2
-          note_h = [height - note_y - 3, 6].max
-          draw_box(surface, bounds, note_y, 2, note_h, box_w, label: 'Note (editable)')
-
-          text = (@state.get(%i[menu annotation_edit_text]) || '').to_s
-          cursor = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
-          lines = UI::TextUtils.wrap_text(text, bw)
-          base_row = note_y + 1
-          lines.each_with_index do |line, i|
-            break if i >= note_h - 2
-
-            write_padded_primary(surface, bounds, base_row + i, 4, line, bw)
-          end
-
-          # Cursor position
-          cursor_lines = UI::TextUtils.wrap_text(text[0, cursor], bw)
-          c_row = base_row + [cursor_lines.length - 1, 0].max
-          c_col = 4 + EbookReader::Helpers::TextMetrics.visible_length(cursor_lines.last || '')
-          surface.write(bounds, c_row, c_col, "#{SELECTION_HIGHLIGHT}_#{reset}")
-
-          # Footer
-          surface.write(bounds, height - 1, 2,
-                        "#{COLOR_TEXT_DIM}[Type] to edit • [Backspace] delete • [Enter] newline#{reset}")
+          @render_context = build_context(surface, bounds)
+          render_header
+          render_body
+          render_footer
+        ensure
+          @render_context = nil
         end
 
         def preferred_height(_available_height)
@@ -91,69 +51,169 @@ module EbookReader
 
         # --- Unified editor API (used by Domain::Commands) ---
         def save_annotation
-          ann = @state.get(%i[menu selected_annotation]) || {}
-          path = @state.get(%i[menu selected_annotation_book])
-          text = (@state.get(%i[menu annotation_edit_text]) || '').to_s
-          ann_id = ann[:id] || ann['id']
-          return unless path && ann_id
+          payload = edit_state.annotation_update_payload
+          return unless payload
 
-          begin
-            svc = @dependencies&.resolve(:annotation_service)
-            svc&.update(path, ann_id, text)
-            # Refresh annotations mapping for list view if possible
-            @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(annotations_all: svc.list_all)) if svc
-          rescue StandardError
-            # ignore; best-effort
-          end
-
-          # Return to annotations list
-          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(mode: :annotations))
+          persist_annotation(payload)
+          edit_state.return_to_annotations_list
         end
 
         def handle_backspace
-          text = (@state.get(%i[menu annotation_edit_text]) || '').to_s
-          cur = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
-          return unless cur.positive?
+          edit_state.update_from do |text, cursor|
+            next nil if cursor <= 0
 
-          new_text = text.dup
-          prev = cur - 1
-          new_text.slice!(prev)
-          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                            annotation_edit_text: new_text,
-                            annotation_edit_cursor: prev
-                          ))
+            prev_cursor = cursor - 1
+            [text[0...prev_cursor] + text[(prev_cursor + 1)..].to_s, prev_cursor]
+          end
         end
 
         def handle_enter
-          text = (@state.get(%i[menu annotation_edit_text]) || '').to_s
-          cur = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
-          new_text = text.dup
-          new_text.insert(cur, "\n")
-          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                            annotation_edit_text: new_text,
-                            annotation_edit_cursor: cur + 1
-                          ))
+          edit_state.update_from do |text, cursor|
+            new_text = text.dup
+            new_text.insert(cursor, "\n")
+            [new_text, cursor + 1]
+          end
         end
 
         def handle_character(char)
           return unless EbookReader::Helpers::TerminalSanitizer.printable_char?(char.to_s)
 
-          text = (@state.get(%i[menu annotation_edit_text]) || '').to_s
-          cur = (@state.get(%i[menu annotation_edit_cursor]) || text.length).to_i
-          new_text = text.dup
-          new_text.insert(cur, char)
-          @state.dispatch(EbookReader::Domain::Actions::UpdateMenuAction.new(
-                            annotation_edit_text: new_text,
-                            annotation_edit_cursor: cur + 1
-                          ))
+          edit_state.update_from do |text, cursor|
+            new_text = text.dup
+            new_text.insert(cursor, char)
+            [new_text, cursor + 1]
+          end
         end
 
         private
 
-        def write_padded_primary(surface, bounds, row, col, text, width)
-          reset = Terminal::ANSI::RESET
-          padded = UI::TextUtils.pad_right(text, width)
-          surface.write(bounds, row, col, COLOR_TEXT_PRIMARY + padded + reset)
+        def build_context(surface, bounds)
+          annotation = edit_state.selected_annotation
+          RenderContext.new(
+            surface: surface,
+            bounds: bounds,
+            width: bounds.width,
+            height: bounds.height,
+            reset: Terminal::ANSI::RESET,
+            annotation: AnnotationView.new(annotation || {}),
+            book_label: resolve_book_label
+          )
+        end
+
+        def resolve_book_label
+          book_path = @state.get(%i[menu selected_annotation_book])
+          return 'Unknown Book' unless book_path
+
+          raw = File.basename(book_path)
+          EbookReader::Helpers::TerminalSanitizer.sanitize(
+            raw,
+            preserve_newlines: false,
+            preserve_tabs: false
+          )
+        end
+
+        def render_header
+          title_width = render_title
+          render_hint(title_width)
+          render_divider
+        end
+
+        def render_title
+          title_plain = "📝 Edit Annotation • #{context.book_label}"
+          title_width = EbookReader::Helpers::TextMetrics.visible_length(title_plain)
+          title = "#{COLOR_TEXT_ACCENT}#{title_plain}#{context.reset}"
+          context.surface.write(context.bounds, 1, 2, title)
+          title_width
+        end
+
+        def render_hint(title_width)
+          hint_plain = '[Ctrl+S] Save • [ESC] Cancel'
+          hint_col = hint_column(title_width, hint_plain)
+          context.surface.write(
+            context.bounds,
+            1,
+            hint_col,
+            "#{COLOR_TEXT_DIM}#{hint_plain}#{context.reset}"
+          )
+        end
+
+        def render_divider
+          context.surface.write(
+            context.bounds,
+            2,
+            1,
+            COLOR_TEXT_DIM + ('─' * context.width) + context.reset
+          )
+        end
+
+        def hint_column(title_width, hint_plain)
+          hint_width = EbookReader::Helpers::TextMetrics.visible_length(hint_plain)
+          min_hint_col = 2 + title_width + 2
+          right_hint_col = context.width - hint_width
+          [right_hint_col, min_hint_col].max
+        end
+
+        def render_body
+          text_box = snippet_box
+          render_text_box(text_box)
+          render_note_box(note_box(text_box))
+        end
+
+        def render_footer
+          context.surface.write(
+            context.bounds,
+            context.height - 1,
+            2,
+            "#{COLOR_TEXT_DIM}[Type] to edit • [Backspace] delete • [Enter] newline#{context.reset}"
+          )
+        end
+
+        def snippet_box
+          AnnotationTextBox.new(
+            row: 4,
+            height: [context.height * 0.25, 6].max.to_i,
+            width: context.width - 4,
+            label: 'Selected Text',
+            text: context.annotation.text
+          )
+        end
+
+        def note_box(text_box)
+          text_box.next_box(
+            total_height: context.height,
+            label: 'Note (editable)',
+            text: edit_state.text
+          )
+        end
+
+        def render_text_box(box)
+          box.render(context, drawer: self, color_prefix: COLOR_TEXT_PRIMARY)
+        end
+
+        def render_note_box(box)
+          render_text_box(box)
+          render_cursor(box)
+        end
+
+        def render_cursor(box)
+          cursor = edit_state.cursor(box.text)
+          row, col = box.cursor_position(cursor)
+          context.surface.write(context.bounds, row, col, "#{SELECTION_HIGHLIGHT}_#{context.reset}")
+        end
+
+        def persist_annotation(payload)
+          service = @dependencies&.resolve(:annotation_service)
+          return unless service
+
+          path, ann_id, text = payload.values_at(:path, :ann_id, :text)
+          service.update(path, ann_id, text)
+          edit_state.refresh_annotations(service)
+        rescue StandardError
+          nil
+        end
+
+        def context
+          @render_context
         end
       end
     end

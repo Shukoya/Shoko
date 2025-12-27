@@ -6,7 +6,7 @@ require 'fileutils'
 RSpec.describe 'Settings key bindings' do
   around do |example|
     Dir.mktmpdir do |dir|
-      old_home = ENV['HOME']
+      old_home = Dir.home
       old_cache = ENV.fetch('XDG_CACHE_HOME', nil)
       ENV['HOME'] = dir
       ENV['XDG_CACHE_HOME'] = File.join(dir, '.cache')

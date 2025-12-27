@@ -48,7 +48,7 @@ RSpec.describe 'Render geometry tab alignment' do
     EbookReader::TestSupport::TerminalDouble.reset!
     renderer.render(surface, bounds)
 
-    geometries = render_registry.lines.values.map { |entry| entry[:geometry] }.compact
+    geometries = render_registry.lines.values.filter_map { |entry| entry[:geometry] }
     geometry = geometries.find { |g| g.plain_text.include?('a') && g.plain_text.include?('b') }
 
     expect(geometry).not_to be_nil
@@ -60,4 +60,3 @@ RSpec.describe 'Render geometry tab alignment' do
     expect(geometry.visible_width).to eq(EbookReader::Helpers::TextMetrics.visible_length(expected))
   end
 end
-

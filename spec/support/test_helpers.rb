@@ -39,8 +39,8 @@ module TestHelpers
       container.register(:logger, RSpec::Mocks::Double.new('Logger', info: nil, error: nil, debug: nil))
       container.register(:atomic_file_writer, EbookReader::Infrastructure::AtomicFileWriter)
       container.register(:cache_paths, instance_double('CachePaths', reader_root: cache_root))
-      container.register(:epub_cache_factory, lambda { |path| EbookReader::Infrastructure::EpubCache.new(path) })
-      container.register(:epub_cache_predicate, lambda { |path| EbookReader::Infrastructure::EpubCache.cache_file?(path) })
+      container.register(:epub_cache_factory, ->(path) { EbookReader::Infrastructure::EpubCache.new(path) })
+      container.register(:epub_cache_predicate, ->(path) { EbookReader::Infrastructure::EpubCache.cache_file?(path) })
 
       path_service = instance_double('PathService')
       allow(path_service).to receive(:reader_config_root).and_return(config_root)
@@ -71,7 +71,7 @@ module TestHelpers
       define_method(:chapter_count) { @chapters.length }
       define_method(:get_chapter) { |index| @chapters[index] }
 
-      define_method(:method_missing) do |name, *args, &block|
+      define_method(:method_missing) do |name, *args|
         return super unless args.empty? && @attrs.key?(name)
 
         value = @attrs[name]

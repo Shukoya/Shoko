@@ -56,7 +56,7 @@ RSpec.describe 'Library instant open' do
     # Stub MouseableReader to capture open path without launching terminal
     captured_container = nil
     reader = class_double('EbookReader::MouseableReader').as_stubbed_const
-    expect(reader).to receive(:new) do |path, _unused, container|
+    expect(reader).to receive(:new) do |_path, _unused, container|
       captured_container = container
       instance_double('MouseableReader', run: true)
     end
