@@ -12,7 +12,11 @@ module EbookReader
       class StateController
         def initialize(menu)
           @menu = menu
-          @pagination_orchestrator = Application::PaginationOrchestrator.new(menu.dependencies)
+          @pagination_orchestrator = Application::PaginationOrchestrator.new(
+            terminal_service: menu.terminal_service,
+            pagination_cache: resolve_optional(:pagination_cache),
+            frame_coordinator: menu.frame_coordinator
+          )
         end
 
         def open_selected_book
@@ -280,7 +284,15 @@ module EbookReader
           return unless calculator
           return unless width && height
 
-          @pagination_orchestrator.build_full_map!(document, state, calculator, [width, height]) do |done, total|
+          session = @pagination_orchestrator.session(
+            doc: document,
+            state: state,
+            page_calculator: calculator,
+            dimensions: [width, height]
+          )
+          return unless session
+
+          session.build_full_map! do |done, total|
             presenter.update(done: done, total: total)
             menu.draw_screen
           end

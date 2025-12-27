@@ -15,75 +15,85 @@ module EbookReader
     module Parsers
       # Parses XHTML content into semantic content blocks + text segments.
       class XHTMLContentParser
-        INLINE_NEWLINE = "\n"
+        TAG_SETS = begin
+          block_types = %w[p div section article aside header footer figure figcaption main].freeze
+          heading_types = %w[h1 h2 h3 h4 h5 h6].freeze
+          list_types = %w[ul ol].freeze
+          list_item = 'li'
+          blockquote = 'blockquote'
+          pre = 'pre'
+          hr = 'hr'
+          br = 'br'
+          img = 'img'
+          table = 'table'
+          block_level_elements = (
+            block_types +
+            heading_types +
+            list_types +
+            [
+              list_item,
+              blockquote,
+              pre,
+              hr,
+              table,
+            ]
+          ).freeze
 
-        BLOCK_TYPES = %w[p div section article aside header footer figure figcaption main].freeze
-        HEADING_TYPES = %w[h1 h2 h3 h4 h5 h6].freeze
-        LIST_TYPES = %w[ul ol].freeze
-        LIST_ITEM = 'li'
-        BLOCKQUOTE = 'blockquote'
-        PRE = 'pre'
-        HR = 'hr'
-        BR = 'br'
-        IMG = 'img'
-        TABLE = 'table'
+          {
+            inline_newline: "\n",
+            block_types: block_types,
+            heading_types: heading_types,
+            list_types: list_types,
+            list_item: list_item,
+            blockquote: blockquote,
+            pre: pre,
+            hr: hr,
+            br: br,
+            img: img,
+            table: table,
+            block_level_elements: block_level_elements
+          }.freeze
+        end
 
         WHITESPACE_PATTERN = /\s+/
         XML_ENTITY_NAMES = %w[amp lt gt apos quot].freeze
-        BLOCK_LEVEL_ELEMENTS = (
-          BLOCK_TYPES +
-          HEADING_TYPES +
-          LIST_TYPES +
-          [
-            LIST_ITEM,
-            BLOCKQUOTE,
-            PRE,
-            HR,
-            TABLE,
-          ]
-        ).freeze
 
         def initialize(html)
           @html = html.to_s
+          @segment_builder = XHTMLSegmentBuilder.new(tag_sets: TAG_SETS, whitespace_pattern: WHITESPACE_PATTERN)
+          @block_builder = XHTMLBlockBuilder.new(segment_builder: @segment_builder, tag_sets: TAG_SETS)
         end
 
         def parse
-          return [] if @html.strip.empty?
+          return [] if html_blank?
 
-          document = parse_document(@html)
-          return [] unless document
-
-          body = find_body(document) || document.root
+          body = parse_body
           return [] unless body
 
-          blocks = []
-          context = Context.new(list_stack: [], in_blockquote: false)
-          traverse_children(body, blocks, context)
-          compacted = compact_blocks(blocks)
-
-          text_content = body.texts.join.strip
-          if !text_content.empty? && compacted.empty?
-            Infrastructure::Logger.error(
-              'Formatting produced no blocks',
-              source: 'XHTMLContentParser',
-              sample: text_content.slice(0, 120)
-            )
-            raise EbookReader::FormattingError.new('chapter', 'normalized block list was empty')
-          end
-
-          compacted
-        rescue REXML::ParseException => e
-          Infrastructure::Logger.error('Failed to parse chapter HTML', error: e.message)
+          build_blocks(body)
+        rescue REXML::ParseException => error
+          Infrastructure::Logger.error('Failed to parse chapter HTML', error: error.message)
           fallback_blocks
         end
 
         private
 
-        Context = Struct.new(:list_stack, :in_blockquote, keyword_init: true)
-        private_constant :Context
+        def html_blank?
+          @html.strip.empty?
+        end
 
-        ListContext = Struct.new(:ordered, :index, keyword_init: true)
-        private_constant :ListContext
+        def build_blocks(body)
+          blocks = XHTMLContentTraversal.new(block_builder: @block_builder, tag_sets: TAG_SETS).build(body)
+          ensure_blocks_present(body, blocks)
+          blocks
+        end
+
+        def parse_body
+          document = parse_document(@html)
+          return nil unless document
+
+          find_body(document) || document.root
+        end
 
         def parse_document(text)
           safe = EbookReader::Helpers::TerminalSanitizer.sanitize_xml_source(text.to_s, preserve_newlines: true,
@@ -97,296 +107,230 @@ module EbookReader
 
         def sanitize_for_xml(text)
           text.gsub(/&([A-Za-z][A-Za-z0-9]+);/) do |match|
-            name = Regexp.last_match(1)
-            next match if XML_ENTITY_NAMES.include?(name)
-
-            decoded = EbookReader::Helpers::HTMLProcessor.decode_entities(match)
-            decoded == match ? "&amp;#{name};" : decoded
+            sanitize_entity(match)
           end
+        end
+
+        def sanitize_entity(match)
+          name = Regexp.last_match(1)
+          return match if XML_ENTITY_NAMES.include?(name)
+
+          decoded = EbookReader::Helpers::HTMLProcessor.decode_entities(match)
+          decoded == match ? "&amp;#{name};" : decoded
         end
 
         def find_body(document)
-          return nil unless document&.root
+          root = document&.root
+          return nil unless root
 
-          document.root.elements['*[local-name()="body"]'] ||
-            document.root.elements['body'] ||
-            document.root.elements['BODY']
+          elements = root.elements
+          elements['*[local-name()="body"]'] ||
+            elements['body'] ||
+            elements['BODY']
         end
 
-        def traverse_children(node, blocks, context)
-          node.children.each do |child|
-            case child
-            when REXML::Element
-              handle_element(child, blocks, context)
-            when REXML::Text
-              append_text_block(child, blocks, context)
-            end
+        def ensure_blocks_present(body, blocks)
+          text_content = body.texts.join.strip
+          return if text_content.empty? || blocks.any?
+
+          Infrastructure::Logger.error(
+            'Formatting produced no blocks',
+            source: 'XHTMLContentParser',
+            sample: text_content.slice(0, 120)
+          )
+          raise EbookReader::FormattingError.new('chapter', 'normalized block list was empty')
+        end
+
+        def fallback_blocks
+          text = EbookReader::Helpers::HTMLProcessor.html_to_text(@html)
+          return [] if text.to_s.strip.empty?
+
+          paragraphs = text.split(/\n{2,}/).map(&:strip).reject(&:empty?)
+          paragraphs.map do |paragraph|
+            EbookReader::Domain::Models::ContentBlock.new(
+              type: :paragraph,
+              segments: [@segment_builder.text_segment(paragraph)],
+              metadata: {}
+            )
+          end
+        rescue StandardError
+          []
+        end
+      end
+
+      # Traverses elements and emits block structures.
+      class XHTMLContentTraversal
+        # Traversal state for list nesting and blockquote context.
+        Context = Struct.new(:list_stack, :in_blockquote, keyword_init: true)
+        private_constant :Context
+
+        # Tracks ordered list numbering as the traversal enters list items.
+        ListContext = Struct.new(:ordered, :index, keyword_init: true) do
+          def marker
+            ordered ? "#{index}." : '•'
+          end
+
+          def advance
+            self.index += 1 if ordered
+          end
+        end
+        private_constant :ListContext
+
+        def initialize(block_builder:, tag_sets:)
+          @block_builder = block_builder
+          @tag_sets = tag_sets
+          @blocks = []
+        end
+
+        def build(root)
+          context = Context.new(list_stack: [], in_blockquote: false)
+          traverse_children(root, context)
+          @block_builder.compact_blocks(@blocks)
+        end
+
+        private
+
+        attr_reader :block_builder, :tag_sets
+
+        def traverse_children(node, context)
+          node.children.each { |child| handle_node(child, context) }
+        end
+
+        def handle_node(child, context)
+          if child.is_a?(REXML::Element)
+            handle_element(child, context)
+          elsif child.is_a?(REXML::Text)
+            append_text_block(child, context)
           end
         end
 
-        def handle_element(element, blocks, context)
+        def handle_element(element, context)
           name = element.name.downcase
           return if skip_element?(name)
 
-          if HEADING_TYPES.include?(name)
-            block = build_heading(element, name, context)
-            blocks << block if block
-          elsif name == BLOCKQUOTE
-            block = build_quote_block(element, context)
-            blocks << block if block
-          elsif name == IMG
-            block = build_image_block(element, context)
-            blocks << block if block
-          elsif LIST_TYPES.include?(name)
-            traverse_list(element, blocks, context, ordered: name == 'ol')
-          elsif name == LIST_ITEM
-            blocks << build_list_item(element, context)
-          elsif name == PRE
-            block = build_preformatted(element, context)
-            blocks << block if block
-          elsif name == HR
-            blocks << build_separator_block(context)
-          elsif name == TABLE
-            blocks.concat(build_table_blocks(element, context))
-          elsif BLOCK_TYPES.include?(name) || block_via_style?(element)
-            if contains_block_children?(element)
-              traverse_children(element, blocks, context)
-            else
-              paragraph = build_paragraph(element, context)
-              blocks << paragraph if paragraph
-            end
-          elsif name == BR
-            blocks << build_break_block
+          return if append_block_result(block_builder.block_for(name, element, context))
+          return if handle_list_element(name, element, context)
+          return if handle_container_element(name, element, context)
+
+          traverse_children(element, context)
+        end
+
+        def append_block_result(result)
+          return false unless result
+
+          if result.is_a?(Array)
+            result.each { |block| append_block(block) }
           else
-            traverse_children(element, blocks, context)
+            append_block(result)
           end
+          true
+        end
+
+        def handle_list_element(name, element, context)
+          list_types = tag_sets[:list_types]
+          if list_types.include?(name)
+            traverse_list(element, context, ordered: name == 'ol')
+            return true
+          end
+
+          return false unless name == tag_sets[:list_item]
+
+          append_block(block_builder.list_item(element, context))
+          true
+        end
+
+        def handle_container_element(name, element, context)
+          block_types = tag_sets[:block_types]
+          block_level = tag_sets[:block_level_elements]
+          return false unless block_types.include?(name) || block_builder.block_via_style?(element)
+
+          if block_builder.contains_block_children?(element, block_level)
+            traverse_children(element, context)
+          else
+            append_block(block_builder.paragraph(element, context))
+          end
+          true
+        end
+
+        def append_text_block(text_node, context)
+          segments = block_builder.segments_from_text(text_node.value)
+          append_block(block_builder.paragraph_from_segments(segments, context)) if segments
+        end
+
+        def traverse_list(element, context, ordered:)
+          list_context = ListContext.new(ordered: ordered, index: ordered ? 1 : nil)
+          new_context = Context.new(list_stack: context.list_stack + [list_context],
+                                    in_blockquote: context.in_blockquote)
+          element.each_element { |child| handle_element(child, new_context) }
+        end
+
+        def append_block(block)
+          @blocks << block if block
         end
 
         def skip_element?(name)
           %w[script style].include?(name)
         end
+      end
 
-        def append_text_block(text_node, blocks, context)
-          content = text_node.value
-          return if content.to_s.strip.empty?
+      # Builds content blocks and metadata from parsed elements.
+      class XHTMLBlockBuilder
+        ContentBlock = EbookReader::Domain::Models::ContentBlock
 
-          segment = text_segment(content)
-          paragraph = build_paragraph_from_segments(finalize_segments([segment]), context)
-          blocks << paragraph if paragraph
+        def initialize(segment_builder:, tag_sets:)
+          @segments = segment_builder
+          @tag_sets = tag_sets
         end
 
-        def build_heading(element, name, context)
-          level = name.delete('h').to_i
-          segments = finalize_segments(collect_segments(element, {}, context))
-          metadata = { level: level }
-          metadata[:quoted] = true if context.in_blockquote
-          EbookReader::Domain::Models::ContentBlock.new(
-            type: :heading,
-            segments: segments,
-            level: level,
-            metadata: metadata
-          )
+        def block_for(name, element, context)
+          heading = heading_block(name, element, context)
+          return heading if heading
+
+          case name
+          when @tag_sets[:blockquote]
+            quote_block(element, context)
+          when @tag_sets[:img]
+            image_block(element, context)
+          when @tag_sets[:pre]
+            preformatted_block(element, context)
+          when @tag_sets[:hr]
+            separator_block(context)
+          when @tag_sets[:table]
+            table_blocks(element, context)
+          when @tag_sets[:br]
+            break_block
+          end
         end
 
-        def build_quote_block(element, context)
-          inner_context = Context.new(list_stack: context.list_stack.dup, in_blockquote: true)
-          segments = finalize_segments(collect_segments(element, {}, inner_context))
+        def list_item(element, context)
+          list_stack = context.list_stack
+          list_context = list_stack.last
+          segments = segments_for(element)
+          marker = list_context ? list_context.marker : '•'
+          list_context&.advance
+
+          level = list_stack.length
+          metadata = metadata_with_quote(context, marker: marker, level: level)
+          ContentBlock.new(type: :list_item, segments: segments, level: level, metadata: metadata)
+        end
+
+        def paragraph(element, context)
+          segments = segments_for(element)
           return nil if segments.empty?
 
-          EbookReader::Domain::Models::ContentBlock.new(
-            type: :quote,
-            segments: segments,
-            metadata: { quoted: true }
-          )
+          ContentBlock.new(type: :paragraph, segments: segments, metadata: metadata_with_quote(context))
         end
 
-        def traverse_list(element, blocks, context, ordered:)
-          list_context = ListContext.new(ordered: ordered, index: ordered ? 1 : nil)
-          new_context = Context.new(list_stack: context.list_stack + [list_context],
-                                    in_blockquote: context.in_blockquote)
-          element.each_element do |child|
-            handle_element(child, blocks, new_context)
-          end
-        end
-
-        def build_list_item(element, context)
-          list_context = context.list_stack.last
-          segments = finalize_segments(collect_segments(element, {}, context))
-          marker = list_context&.ordered ? "#{list_context.index}." : '•'
-          list_context.index += 1 if list_context&.ordered
-
-          level = context.list_stack.length
-          metadata = { marker: marker, level: level }
-          metadata[:quoted] = true if context.in_blockquote
-          EbookReader::Domain::Models::ContentBlock.new(
-            type: :list_item,
-            segments: segments,
-            level: level,
-            metadata: metadata
-          )
-        end
-
-        def build_preformatted(element, context)
-          code_child = element.elements.find { |child| child.is_a?(REXML::Element) && child.name.casecmp('code').zero? }
-          target = code_child || element
-          text = extract_raw_text(target)
-          return nil if text.nil?
-
-          metadata = { preserve_whitespace: true }
-          metadata[:quoted] = true if context.in_blockquote
-          EbookReader::Domain::Models::ContentBlock.new(
-            type: :code,
-            segments: [text_segment(text, code: true, preserve_whitespace: true)],
-            metadata: metadata
-          )
-        end
-
-        def build_separator_block(context)
-          metadata = {}
-          metadata[:quoted] = true if context.in_blockquote
-          EbookReader::Domain::Models::ContentBlock.new(
-            type: :separator,
-            segments: [text_segment('─' * 40)],
-            metadata: metadata
-          )
-        end
-
-        def build_table_blocks(element, context)
-          rows = collect_descendants(element, 'tr')
-          return [] if rows.empty?
-
-          lines = rows.map do |row|
-            cells = row.elements.collect do |cell|
-              next unless %w[td th].include?(cell.name.downcase)
-
-              collect_segments(cell, {}, context).map(&:text).join.strip
-            end
-            cells.compact.reject(&:empty?).join(' | ')
-          end
-
-          metadata = { preserve_whitespace: true }
-          metadata[:quoted] = true if context.in_blockquote
-          block = EbookReader::Domain::Models::ContentBlock.new(
-            type: :table,
-            segments: [text_segment(lines.join(INLINE_NEWLINE), preserve_whitespace: true)],
-            metadata: metadata
-          )
-          [block]
-        end
-
-        def collect_descendants(element, name)
-          results = []
-          element.each_element do |child|
-            results << child if child.name.casecmp(name).zero?
-            results.concat(collect_descendants(child, name))
-          end
-          results
-        end
-
-        def build_paragraph(element, context)
-          segments = finalize_segments(collect_segments(element, {}, context))
-          return nil if segments.empty?
-
-          metadata = {}
-          metadata[:quoted] = true if context.in_blockquote
-          EbookReader::Domain::Models::ContentBlock.new(
-            type: :paragraph,
-            segments: segments,
-            metadata: metadata
-          )
-        end
-
-        def build_paragraph_from_segments(segments, context)
+        def paragraph_from_segments(segments, context)
           return nil if segments.nil? || segments.empty?
 
-          metadata = {}
-          metadata[:quoted] = true if context&.in_blockquote
-          EbookReader::Domain::Models::ContentBlock.new(
-            type: :paragraph,
-            segments: segments,
-            metadata: metadata
-          )
+          ContentBlock.new(type: :paragraph, segments: segments, metadata: metadata_with_quote(context))
         end
 
-        def collect_segments(element, inherited_styles = {},
-                             context = Context.new(list_stack: [], in_blockquote: false))
-          segments = []
-          element.children.each do |child|
-            case child
-            when REXML::Text
-              text = child.value
-              segment = text_segment(text, inherited_styles)
-              segments << segment if segment.text && !segment.text.empty?
-            when REXML::Element
-              name = child.name.downcase
-              if name == BR
-                segments << text_segment(INLINE_NEWLINE, inherited_styles.merge(break: true))
-                next
-              end
-              if name == IMG
-                segments << inline_image_placeholder_segment(child, inherited_styles)
-                next
-              end
-
-              new_styles = inherited_styles.merge(styles_for(name, child))
-              segments.concat(collect_segments(child, new_styles, context))
-            end
-          end
-          segments
-        end
-
-        def text_segment(text, styles = {})
-          EbookReader::Domain::Models::TextSegment.new(
-            text: normalize_text(text.to_s, styles),
-            styles: styles
-          )
-        end
-
-        def styles_for(name, element)
-          case name
-          when 'strong', 'b'
-            { bold: true }
-          when 'em', 'i'
-            { italic: true }
-          when 'u'
-            { underline: true }
-          when 'code', 'kbd', 'samp'
-            { code: true, preserve_whitespace: true }
-          when 'span'
-            span_styles(element)
-          when 'a'
-            { link: element.attributes['href'] }.merge(span_styles(element))
-          else
-            {}
-          end
-        end
-
-        def span_styles(element)
-          style_attr = element.attributes['style']
-          return {} unless style_attr
-
-          styles = {}
-          styles[:bold] = true if /font-weight\s*:\s*bold/i.match?(style_attr)
-          styles[:italic] = true if /font-style\s*:\s*italic/i.match?(style_attr)
-          styles[:underline] = true if /text-decoration\s*:\s*underline/i.match?(style_attr)
-          styles
-        end
-
-        def normalize_text(text, styles)
-          decoded = EbookReader::Helpers::HTMLProcessor.decode_entities(text.to_s)
-          decoded = EbookReader::Helpers::TerminalSanitizer.sanitize(decoded, preserve_newlines: true,
-                                                                              preserve_tabs: true)
-          return decoded if styles[:code] || styles[:preserve_whitespace]
-
-          if styles[:break]
-            return decoded == INLINE_NEWLINE ? INLINE_NEWLINE : decoded
-          end
-
-          decoded.delete("\r").tr("\n", ' ').gsub(WHITESPACE_PATTERN, ' ')
-        end
-
-        def extract_raw_text(element)
-          element.texts.join
+        def segments_from_text(text)
+          segment = @segments.text_segment(text)
+          segments = @segments.finalize_segments([segment])
+          segments.empty? ? nil : segments
         end
 
         def compact_blocks(blocks)
@@ -399,112 +343,319 @@ module EbookReader
 
         def block_via_style?(element)
           style = element.attributes['style'].to_s
-          return true if /display\s*:\s*(block|list-item)/i.match?(style)
-
-          false
+          /display\s*:\s*(block|list-item)/i.match?(style)
         end
 
-        def contains_block_children?(element)
+        def contains_block_children?(element, block_level_elements)
           element.children.any? do |child|
             next false unless child.is_a?(REXML::Element)
 
             name = child.name.to_s.downcase
-            BLOCK_LEVEL_ELEMENTS.include?(name) || block_via_style?(child)
+            block_level_elements.include?(name) || block_via_style?(child)
           end
         end
 
-        def build_image_block(element, context)
-          segment = image_placeholder_segment(element, {})
-          segments = finalize_segments([segment])
+        private
+
+        def heading_block(name, element, context)
+          heading_types = @tag_sets[:heading_types]
+          return nil unless heading_types.include?(name)
+
+          level = name.delete('h').to_i
+          segments = segments_for(element)
+          metadata = metadata_with_quote(context, level: level)
+          ContentBlock.new(type: :heading, segments: segments, level: level, metadata: metadata)
+        end
+
+        def quote_block(element, context)
+          segments = segments_for(element)
           return nil if segments.empty?
 
-          src = element.attributes['src']
-          alt = element.attributes['alt']
-          metadata = { image: { src: src, alt: alt } }
-          metadata[:quoted] = true if context.in_blockquote
+          metadata = metadata_with_quote(context, quoted: true)
+          ContentBlock.new(type: :quote, segments: segments, metadata: metadata)
+        end
 
-          EbookReader::Domain::Models::ContentBlock.new(
-            type: :image,
-            segments: segments,
+        def preformatted_block(element, context)
+          target = code_child_for(element) || element
+          text = target.texts.join
+          return nil if text.to_s.empty?
+
+          metadata = metadata_with_quote(context, preserve_whitespace: true)
+          segment = @segments.text_segment(text, code: true, preserve_whitespace: true)
+          ContentBlock.new(type: :code, segments: [segment], metadata: metadata)
+        end
+
+        def image_block(element, context)
+          segments = @segments.finalize_segments([@segments.image_placeholder_segment({})])
+          return nil if segments.empty?
+
+          attrs = element.attributes
+          metadata = metadata_with_quote(context, image: { src: attrs['src'], alt: attrs['alt'] })
+          ContentBlock.new(type: :image, segments: segments, metadata: metadata)
+        end
+
+        def separator_block(context)
+          metadata = metadata_with_quote(context)
+          ContentBlock.new(
+            type: :separator,
+            segments: [@segments.text_segment('─' * 40)],
             metadata: metadata
           )
         end
 
-        def build_break_block
-          EbookReader::Domain::Models::ContentBlock.new(
+        def table_blocks(element, context)
+          rows = collect_descendants(element, 'tr')
+          return [] if rows.empty?
+
+          lines = rows.map { |row| table_row_text(row) }.compact
+          return [] if lines.empty?
+
+          inline_newline = @tag_sets[:inline_newline]
+          metadata = metadata_with_quote(context, preserve_whitespace: true)
+          block = ContentBlock.new(
+            type: :table,
+            segments: [@segments.text_segment(lines.join(inline_newline), preserve_whitespace: true)],
+            metadata: metadata
+          )
+          [block]
+        end
+
+        def break_block
+          ContentBlock.new(
             type: :break,
             segments: [],
             metadata: { spacer: true }
           )
         end
 
-        def image_placeholder_segment(_element, inherited_styles)
-          text = '[Image]'
-          text_segment(" #{text} ", inherited_styles.merge(dim: true))
+        def segments_for(element)
+          @segments.finalize_segments(@segments.collect_segments(element))
+        end
+
+        def metadata_with_quote(context, base = {})
+          metadata = base.dup
+          metadata[:quoted] = true if context.in_blockquote
+          metadata
+        end
+
+        def code_child_for(element)
+          element.elements.find do |child|
+            child.is_a?(REXML::Element) && child.name.casecmp('code').zero?
+          end
+        end
+
+        def table_row_text(row)
+          cells = row.elements.each_with_object([]) do |cell, acc|
+            next unless table_cell?(cell)
+
+            text = @segments.collect_segments(cell).map(&:text).join.strip
+            acc << text unless text.empty?
+          end
+          cells.empty? ? nil : cells.join(' | ')
+        end
+
+        def table_cell?(element)
+          %w[td th].include?(element.name.downcase)
+        end
+
+        def collect_descendants(element, name)
+          results = []
+          element.each_element do |child|
+            results << child if child.name.casecmp(name).zero?
+            results.concat(collect_descendants(child, name))
+          end
+          results
+        end
+      end
+
+      # Collects and normalizes inline text segments.
+      class XHTMLSegmentBuilder
+        TextSegment = EbookReader::Domain::Models::TextSegment
+
+        STYLE_MAP = {
+          'strong' => { bold: true },
+          'b' => { bold: true },
+          'em' => { italic: true },
+          'i' => { italic: true },
+          'u' => { underline: true },
+          'code' => { code: true, preserve_whitespace: true },
+          'kbd' => { code: true, preserve_whitespace: true },
+          'samp' => { code: true, preserve_whitespace: true }
+        }.freeze
+
+        SPAN_STYLE_MATCHERS = {
+          bold: /font-weight\s*:\s*bold/i,
+          italic: /font-style\s*:\s*italic/i,
+          underline: /text-decoration\s*:\s*underline/i
+        }.freeze
+
+        PLACEHOLDER_TEXT = '[Image]'
+
+        def initialize(tag_sets:, whitespace_pattern:)
+          @br_tag = tag_sets[:br]
+          @img_tag = tag_sets[:img]
+          @inline_newline = tag_sets[:inline_newline]
+          @whitespace_pattern = whitespace_pattern
+        end
+
+        def collect_segments(element, inherited_styles = {})
+          element.children.flat_map { |child| segments_for(child, inherited_styles) }
+        end
+
+        def text_segment(text, styles = {})
+          TextSegment.new(
+            text: normalize_text(text.to_s, styles),
+            styles: styles
+          )
+        end
+
+        def image_placeholder_segment(inherited_styles)
+          placeholder_segment(inherited_styles.merge(dim: true))
         end
 
         def inline_image_placeholder_segment(element, inherited_styles)
-          src = element.attributes['src'].to_s
-          alt = element.attributes['alt'].to_s.strip
-          text = '[Image]'
-          styles = inherited_styles.merge(dim: true, inline_image: { src: src, alt: alt })
-          text_segment(" #{text} ", styles)
+          attrs = element.attributes
+          styles = inherited_styles.merge(
+            dim: true,
+            inline_image: { src: attrs['src'].to_s, alt: attrs['alt'].to_s.strip }
+          )
+          placeholder_segment(styles)
         end
 
         def finalize_segments(segments)
-          segs = Array(segments).compact
-          segs = segs.reject { |seg| seg.text.to_s.empty? }
+          segs = compact_segments(segments)
           return [] if segs.empty?
 
           segs = collapse_boundary_spaces(segs)
-          segs = trim_edge_whitespace(segs)
-          segs.reject { |seg| seg.text.to_s.empty? }
+          trim_edge_whitespace(segs)
+        end
+
+        private
+
+        def segments_for(child, inherited_styles)
+          return [] unless child
+
+          if child.is_a?(REXML::Text)
+            segment = text_segment(child.value, inherited_styles)
+            segment.text.to_s.empty? ? [] : [segment]
+          elsif child.is_a?(REXML::Element)
+            segments_for_element(child, inherited_styles)
+          else
+            []
+          end
+        end
+
+        def segments_for_element(element, inherited_styles)
+          name = element.name.downcase
+          return [line_break_segment(inherited_styles)] if name == @br_tag
+          return [inline_image_placeholder_segment(element, inherited_styles)] if name == @img_tag
+
+          new_styles = inherited_styles.merge(styles_for(name, element))
+          collect_segments(element, new_styles)
+        end
+
+        def line_break_segment(inherited_styles)
+          text_segment(@inline_newline, inherited_styles.merge(break: true))
+        end
+
+        def styles_for(name, element)
+          return STYLE_MAP[name] if STYLE_MAP.key?(name)
+          return span_styles(element) if name == 'span'
+          return link_styles(element) if name == 'a'
+
+          {}
+        end
+
+        def link_styles(element)
+          { link: element.attributes['href'] }.merge(span_styles(element))
+        end
+
+        def span_styles(element)
+          style_attr = element.attributes['style']
+          return {} if style_attr.to_s.empty?
+
+          SPAN_STYLE_MATCHERS.each_with_object({}) do |(key, matcher), styles|
+            styles[key] = true if matcher.match?(style_attr)
+          end
+        end
+
+        def normalize_text(text, styles)
+          decoded = decode_text(text)
+          return decoded if preserve_whitespace?(styles)
+          return normalize_break(decoded) if styles[:break]
+
+          normalize_whitespace(decoded)
+        end
+
+        def decode_text(text)
+          decoded = EbookReader::Helpers::HTMLProcessor.decode_entities(text)
+          EbookReader::Helpers::TerminalSanitizer.sanitize(decoded, preserve_newlines: true, preserve_tabs: true)
+        end
+
+        def preserve_whitespace?(styles)
+          styles[:code] || styles[:preserve_whitespace]
+        end
+
+        def normalize_break(text)
+          text == @inline_newline ? @inline_newline : text
+        end
+
+        def normalize_whitespace(text)
+          text.delete("\r").tr("\n", ' ').gsub(@whitespace_pattern, ' ')
+        end
+
+        def placeholder_segment(styles)
+          text_segment(" #{PLACEHOLDER_TEXT} ", styles)
+        end
+
+        def compact_segments(segments)
+          Array(segments).compact.reject { |segment| segment_text(segment).empty? }
         end
 
         def collapse_boundary_spaces(segments)
           out = [segments.first]
-          segments.drop(1).each do |seg|
-            prev = out.last
-            prev_text = prev.text.to_s
-            cur_text = seg.text.to_s
-            if prev_text.end_with?(' ') && cur_text.start_with?(' ')
-              cur_text = cur_text.sub(/\A +/, '')
-              seg = EbookReader::Domain::Models::TextSegment.new(text: cur_text, styles: seg.styles)
-            end
-            out << seg unless seg.text.to_s.empty?
+          segments.drop(1).each do |segment|
+            previous = out.last
+            adjusted = adjust_leading_space(previous, segment)
+            next unless adjusted
+
+            out << adjusted unless segment_text(adjusted).empty?
           end
           out
+        end
+
+        def adjust_leading_space(previous, segment)
+          prev_text = segment_text(previous)
+          cur_text = segment_text(segment)
+          return segment unless prev_text.end_with?(' ') && cur_text.start_with?(' ')
+
+          trimmed = cur_text.sub(/\A +/, '')
+          return nil if trimmed.empty?
+
+          TextSegment.new(text: trimmed, styles: segment.styles)
         end
 
         def trim_edge_whitespace(segments)
           segs = segments.dup
           return [] if segs.empty?
 
-          first = segs.first
-          first_text = first.text.to_s.sub(/\A\s+/, '')
-          segs[0] = EbookReader::Domain::Models::TextSegment.new(text: first_text, styles: first.styles)
-
-          last = segs.last
-          last_text = last.text.to_s.sub(/\s+\z/, '')
-          segs[-1] = EbookReader::Domain::Models::TextSegment.new(text: last_text, styles: last.styles)
-
-          segs.reject { |seg| seg.text.to_s.empty? }
+          segs[0] = trim_segment_start(segs[0])
+          segs[-1] = trim_segment_end(segs[-1])
+          segs.reject { |segment| segment_text(segment).empty? }
         end
 
-        def fallback_blocks
-          text = EbookReader::Helpers::HTMLProcessor.html_to_text(@html)
-          return [] if text.to_s.strip.empty?
+        def trim_segment_start(segment)
+          text = segment_text(segment).sub(/\A\s+/, '')
+          TextSegment.new(text: text, styles: segment.styles)
+        end
 
-          paragraphs = text.split(/\n{2,}/).map(&:strip).reject(&:empty?)
-          paragraphs.map do |para|
-            EbookReader::Domain::Models::ContentBlock.new(
-              type: :paragraph,
-              segments: [text_segment(para, {})],
-              metadata: {}
-            )
-          end
-        rescue StandardError
-          []
+        def trim_segment_end(segment)
+          text = segment_text(segment).sub(/\s+\z/, '')
+          TextSegment.new(text: text, styles: segment.styles)
+        end
+
+        def segment_text(segment)
+          segment.text.to_s
         end
       end
     end

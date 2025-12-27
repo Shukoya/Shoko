@@ -158,7 +158,9 @@ module EbookReader
 
         return unless page_map_empty? || size_changed?(width, height)
 
-        pagination_orchestrator.build_full_map!(doc, state, page_calculator, [width, height])
+        pagination_orchestrator
+          .session(doc: doc, state: state, page_calculator: page_calculator, dimensions: [width, height])
+          &.build_full_map
       end
 
       def default_single
