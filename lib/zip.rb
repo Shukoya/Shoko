@@ -191,7 +191,10 @@ module Zip
       @io.seek(cd_offset, ::IO::SEEK_SET)
       stop_position = cd_offset + cd_size
 
-      @entries[entry.name] = entry while @io.pos < stop_position && read_central_directory_entry
+      while @io.pos < stop_position
+        entry = read_central_directory_entry
+        @entries[entry.name] = entry
+      end
     end
 
     def read_central_directory_entry
