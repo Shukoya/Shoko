@@ -48,6 +48,7 @@ module EbookReader
 
         def render_settings(surface, bounds, selected, text_values)
           metrics = layout_metrics(bounds, text_values)
+          indent = metrics[:indent]
           max_index = SETTINGS_ITEMS.length - 1
           cursor = selected.clamp(0, max_index)
           row = metrics[:start_row]
@@ -56,27 +57,29 @@ module EbookReader
           SETTINGS_ITEMS.each_with_index do |item, index|
             break if row >= metrics[:max_row]
 
-            case item.action
+            action = item.action
+            is_selected = cursor == index
+            case action
             when :toggle_view_mode
-              row = render_button_group(surface, bounds, item, row, metrics[:indent], cursor == index,
+              row = render_button_group(surface, bounds, item, row, indent, is_selected,
                                         current_view_mode, view_mode_buttons)
               insert_toggle_gap = false
             when :cycle_line_spacing
-              row = render_button_group(surface, bounds, item, row, metrics[:indent], cursor == index,
+              row = render_button_group(surface, bounds, item, row, indent, is_selected,
                                         current_line_spacing, line_spacing_buttons)
               insert_toggle_gap = false
             when :toggle_page_numbering_mode
-              row = render_button_group(surface, bounds, item, row, metrics[:indent], cursor == index,
+              row = render_button_group(surface, bounds, item, row, indent, is_selected,
                                         current_page_numbering_mode, page_numbering_buttons)
               insert_toggle_gap = true
             else
-              if toggled_action?(item.action) && insert_toggle_gap
+              if toggled_action?(action) && insert_toggle_gap
                 row += 1
                 insert_toggle_gap = false
               end
-              value_text, value_color = text_values[item.action]
+              value_text, value_color = text_values[action]
               ctx = ItemCtx.new(row: row, item: item, value_text: value_text, value_color: value_color,
-                                index: index, selected: cursor == index, indent: metrics[:indent])
+                                index: index, selected: is_selected, indent: indent)
               row = render_text_item(surface, bounds, ctx)
             end
           end
@@ -84,8 +87,9 @@ module EbookReader
 
         def render_text_item(surface, bounds, ctx)
           text = formatted_row(ctx.item, ctx.value_text, ctx.value_color, ctx.selected)
-          surface.write(bounds, ctx.row, ctx.indent, text)
-          ctx.row + 2
+          row = ctx.row
+          surface.write(bounds, row, ctx.indent, text)
+          row + 2
         end
 
         def formatted_row(item, value_text, value_color, selected)
@@ -109,6 +113,7 @@ module EbookReader
         end
 
         def layout_metrics(bounds, text_values)
+          height = bounds.height
           width = bounds.width
           label_width = SETTINGS_ITEMS.map { |item| display_width(label_text(item)) }.max || 0
           text_value_width = text_values.values.map { |value| display_width(Array(value).first) }.max || 0
@@ -118,12 +123,13 @@ module EbookReader
             button_group_width(page_numbering_buttons),
           ].max || 0
           content_width = label_width + 2 + [text_value_width, button_width].max
-          indent = ((width - content_width) / 2).floor
-          indent = indent.clamp(2, [width - content_width, 0].max)
+          available = width - content_width
+          indent = (available / 2).floor
+          indent = indent.clamp(2, [available, 0].max)
           {
             indent: indent,
-            start_row: [(bounds.height - 16) / 2, 4].max,
-            max_row: bounds.height - 3,
+            start_row: [(height - 16) / 2, 4].max,
+            max_row: height - 3,
           }
         end
 
@@ -146,7 +152,8 @@ module EbookReader
           label = "#{colors[:prefix]}#{colors[:fg]}#{label_text(item)}#{Terminal::ANSI::RESET}"
           surface.write(bounds, row, indent, label)
           buttons_line = button_row(buttons, current_value)
-          surface.write(bounds, row + 1, indent, buttons_line) if row + 1 < bounds.height
+          next_row = row + 1
+          surface.write(bounds, next_row, indent, buttons_line) if next_row < bounds.height
           row + 3
         end
 

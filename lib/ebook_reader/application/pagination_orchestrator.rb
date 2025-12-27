@@ -26,8 +26,8 @@ module EbookReader
           dimensions[1]
         end
 
-        def dynamic_mode?
-          EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(state) == :dynamic
+        def dynamic?
+          false
         end
 
         def view_mode
@@ -81,6 +81,54 @@ module EbookReader
         end
       end
 
+      # Context for dynamic pagination builds.
+      class DynamicContext < Context
+        def dynamic?
+          true
+        end
+
+        def build_full_map(progress: nil)
+          build_dynamic!(progress: progress)
+          nil
+        end
+
+        def refresh_after_resize
+          build_dynamic!
+          clamp_dynamic_index!
+        end
+
+        def rebuild_after_config_change
+          payload = pending_progress_payload
+          state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_progress: payload))
+          build_dynamic!
+          clamp_dynamic_index!
+        end
+
+        def build_initial_map(progress:)
+          build_dynamic!(progress: progress)
+          nil
+        end
+      end
+
+      # Context for absolute pagination builds.
+      class AbsoluteContext < Context
+        def build_full_map(progress: nil)
+          build_absolute!(progress: progress)
+        end
+
+        def refresh_after_resize
+          build_absolute!
+        end
+
+        def rebuild_after_config_change
+          build_absolute!
+        end
+
+        def build_initial_map(progress:)
+          build_absolute!(progress: progress)
+        end
+      end
+
       def initialize(dependencies)
         @dependencies = dependencies
         @terminal_service = @dependencies.resolve(:terminal_service)
@@ -110,12 +158,7 @@ module EbookReader
         context = build_context(doc, state, page_calculator, dimensions: dimensions)
         return nil unless context
 
-        if context.dynamic_mode?
-          context.build_dynamic!(progress: block)
-          nil
-        else
-          context.build_absolute!(progress: block)
-        end
+        context.build_full_map(progress: block)
       end
 
       # Non-bang variant to satisfy safe-method expectations.
@@ -128,12 +171,7 @@ module EbookReader
         context = build_context(doc, state, page_calculator, dimensions: dimensions)
         return unless context
 
-        if context.dynamic_mode?
-          context.build_dynamic!
-          context.clamp_dynamic_index!
-        else
-          context.build_absolute!
-        end
+        context.refresh_after_resize
       end
 
       # Rebuild pagination when layout-affecting config (view mode, line spacing, page numbering)
@@ -142,14 +180,7 @@ module EbookReader
         context = build_context(doc, state, page_calculator, dimensions: dimensions)
         return unless context
 
-        if context.dynamic_mode?
-          payload = context.pending_progress_payload
-          state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(pending_progress: payload))
-          context.build_dynamic!
-          context.clamp_dynamic_index!
-        else
-          context.build_absolute!
-        end
+        context.rebuild_after_config_change
       rescue StandardError
         nil
       end
@@ -157,7 +188,7 @@ module EbookReader
       # Rebuilds dynamic pagination with a loading overlay and precise restore.
       def rebuild_dynamic(doc, state, page_calculator)
         context = build_context(doc, state, page_calculator, dimensions: terminal_dimensions)
-        return :pass unless context&.dynamic_mode?
+        return :pass unless context&.dynamic?
 
         payload = context.pending_progress_payload
 
@@ -192,13 +223,8 @@ module EbookReader
 
       def build_initial_map(context)
         progress = progress_callback_for(context.state)
-        if context.dynamic_mode?
-          context.build_dynamic!(progress: progress)
-          nil
-        else
-          map = context.build_absolute!(progress: progress)
-          build_absolute_cache_entry(context, map)
-        end
+        map = context.build_initial_map(progress: progress)
+        map ? build_absolute_cache_entry(context, map) : nil
       rescue StandardError
         nil
       end
@@ -257,7 +283,13 @@ module EbookReader
       def build_context(doc, state, page_calculator, dimensions:)
         return nil unless doc && page_calculator
 
-        Context.new(doc: doc, state: state, page_calculator: page_calculator, dimensions: dimensions)
+        context_class =
+          if EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(state) == :dynamic
+            DynamicContext
+          else
+            AbsoluteContext
+          end
+        context_class.new(doc: doc, state: state, page_calculator: page_calculator, dimensions: dimensions)
       end
 
       def progress_callback_for(state)

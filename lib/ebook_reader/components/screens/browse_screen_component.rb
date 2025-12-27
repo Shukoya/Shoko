@@ -111,9 +111,11 @@ module EbookReader
           message = EbookReader::Helpers::TerminalSanitizer.sanitize(@catalog.scan_message.to_s,
                                                                      preserve_newlines: false,
                                                                      preserve_tabs: false)
+          status_row = layout[:status_row]
+          indent = layout[:indent]
 
           count_text = "#{COLOR_TEXT_DIM}Found #{total} #{total == 1 ? 'book' : 'books'}#{Terminal::ANSI::RESET}"
-          surface.write(bounds, layout[:status_row], layout[:indent], count_text)
+          surface.write(bounds, status_row, indent, count_text)
 
           return unless status
 
@@ -126,7 +128,7 @@ module EbookReader
           return if status_text.empty?
 
           offset = EbookReader::Helpers::TextMetrics.visible_length(count_text)
-          surface.write(bounds, layout[:status_row], layout[:indent] + offset + 2, status_text)
+          surface.write(bounds, status_row, indent + offset + 2, status_text)
         end
 
         def render_empty_state(surface, bounds, layout)
@@ -179,15 +181,18 @@ module EbookReader
           size_mb = format_size(book['size'] || @catalog.size_for(path))
 
           # Compute column widths
-          cols = ctx.layout[:columns]
-          gap = ' ' * ctx.layout[:gap]
+          layout = ctx.layout
+          cols = layout[:columns]
+          gap = ' ' * layout[:gap]
+          title_width = cols[:title]
+          size_width = cols[:size]
 
-          title_col = pad_right(truncate_text(title, cols[:title]), cols[:title])
-          size_col = pad_left(size_mb, cols[:size])
+          title_col = pad_right(truncate_text(title, title_width), title_width)
+          size_col = pad_left(size_mb, size_width)
 
           line = [title_col, size_col].join(gap)
           row = ctx.row
-          indent = ctx.layout[:indent]
+          indent = layout[:indent]
 
           content = if ctx.selected
                       Terminal::ANSI::BOLD + COLOR_TEXT_ACCENT + line + Terminal::ANSI::RESET
@@ -200,6 +205,8 @@ module EbookReader
         def draw_list_header(surface, bounds, layout, row)
           return if row < 5
 
+          indent = layout[:indent]
+          content_width = layout[:content_width]
           cols = layout[:columns]
           gap = ' ' * layout[:gap]
           headers = [
@@ -208,11 +215,11 @@ module EbookReader
           ].join(gap)
 
           header_style = Terminal::ANSI::BOLD + Terminal::ANSI::LIGHT_GREY
-          padded_headers = pad_right(headers, layout[:content_width])
-          surface.write(bounds, row, layout[:indent], header_style + padded_headers + Terminal::ANSI::RESET)
+          padded_headers = pad_right(headers, content_width)
+          surface.write(bounds, row, indent, header_style + padded_headers + Terminal::ANSI::RESET)
           # Divider line
-          divider = ('─' * [layout[:content_width], 1].max)
-          surface.write(bounds, row + 1, layout[:indent], COLOR_TEXT_DIM + divider + Terminal::ANSI::RESET)
+          divider = ('─' * [content_width, 1].max)
+          surface.write(bounds, row + 1, indent, COLOR_TEXT_DIM + divider + Terminal::ANSI::RESET)
         end
 
         def format_size(bytes)
@@ -252,21 +259,23 @@ module EbookReader
         def layout_metrics(bounds)
           height = bounds.height
           width  = bounds.width
+          row_base = height / 6
 
           base_width = [width - 8, 72].min
-          columns = column_layout(base_width)
-          indent = ((width - columns[:content_width]) / 2).floor
+          column_spec = column_layout(base_width)
+          content_width = column_spec[:content_width]
+          indent = ((width - content_width) / 2).floor
           indent = indent.clamp(2, width / 3)
 
           {
             indent: indent,
-            content_width: columns[:content_width],
-            columns: columns[:columns],
-            gap: columns[:gap],
-            search_row: [(height / 6), 2].max,
-            status_row: [((height / 6) + 2), 4].max,
-            header_row: [((height / 6) + 4), 6].max,
-            list_start_row: [((height / 6) + 6), 8].max,
+            content_width: content_width,
+            columns: column_spec[:columns],
+            gap: column_spec[:gap],
+            search_row: [row_base, 2].max,
+            status_row: [row_base + 2, 4].max,
+            header_row: [row_base + 4, 6].max,
+            list_start_row: [row_base + 6, 8].max,
           }
         end
 

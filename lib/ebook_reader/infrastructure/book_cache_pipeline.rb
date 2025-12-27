@@ -220,8 +220,8 @@ module EbookReader
           return nil unless pointer_source_valid?
 
           rebuild
-        rescue StandardError => error
-          log_failure(error)
+        rescue StandardError => e
+          log_failure(e)
           nil
         end
 
@@ -504,10 +504,10 @@ module EbookReader
 
       def load(path, formatting_service: nil)
         perform_load(path, formatting_service)
-      rescue StandardError => error
-        raise if error.is_a?(EbookReader::Error)
+      rescue StandardError => e
+        raise if e.is_a?(EbookReader::Error)
 
-        LoadErrorHandler.new(path).call(error)
+        LoadErrorHandler.new(path).call(e)
       end
 
       private
@@ -550,8 +550,8 @@ module EbookReader
 
       def fast_load_for_source(source_path, formatting_service)
         perform_fast_load(source_path, formatting_service)
-      rescue StandardError => error
-        Logger.debug('Fast cache load failed', path: source_path, error: error.message)
+      rescue StandardError => e
+        Logger.debug('Fast cache load failed', path: source_path, error: e.message)
         nil
       end
 

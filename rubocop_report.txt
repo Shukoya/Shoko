@@ -1,5 +1,5 @@
-Inspecting 270 files
-....CC...CC.......CW....CC..C..C..............C.....C.CCC.CCCC..CCCC........CCC.CCC.......................CCCC...CCC.C..........C.CC..CC.....C.C..CC..........C..C...C....C...C..CCC..C..CCCC.C...C........CC.........C....CCC..CCC.......C...C.C............CCCC.C...C..C....
+Inspecting 284 files
+....CC...CC.......CW....CC..C..C..............C.....C.CCC.CCCC..CCCC........CCC.CCC.......................CCCC...CCC.C..........C.CC..CC.....C.C..CC..........C..C...C....C...C..CCC..C................CCCC.....C........CC.........C....CCC..CCC.......C...C.C............CCCC.C...C..C....
 
 Offenses:
 
@@ -132,7 +132,7 @@ lib/ebook_reader/components/screens/annotations_screen_component.rb:199:9: C: Me
 lib/ebook_reader/components/screens/annotations_screen_component.rb:199:35: C: Metrics/ParameterLists: Avoid parameter lists longer than 4 parameters. [8/4]
         def render_annotation_item(surface, bounds, row, width, annotation, is_selected, ...
                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/browse_screen_component.rb:13:7: C: Metrics/ClassLength: Class has too many lines. [217/200]
+lib/ebook_reader/components/screens/browse_screen_component.rb:13:7: C: Metrics/ClassLength: Class has too many lines. [226/200]
       class BrowseScreenComponent < BaseComponent ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 lib/ebook_reader/components/screens/browse_screen_component.rb:95:9: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for filter_books is too high. [10/8]
@@ -141,31 +141,31 @@ lib/ebook_reader/components/screens/browse_screen_component.rb:95:9: C: Metrics/
 lib/ebook_reader/components/screens/browse_screen_component.rb:95:9: C: Metrics/PerceivedComplexity: Perceived complexity for filter_books is too high. [10/9]
         def filter_books ...
         ^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/browse_screen_component.rb:108:9: C: Metrics/MethodLength: Method has too many lines. [17/15]
+lib/ebook_reader/components/screens/browse_screen_component.rb:108:9: C: Metrics/MethodLength: Method has too many lines. [19/15]
         def render_status(surface, bounds, layout) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/browse_screen_component.rb:143:9: C: Metrics/AbcSize: Assignment Branch Condition size for render_books_list is too high. [<16, 20, 11> 27.87/20]
+lib/ebook_reader/components/screens/browse_screen_component.rb:145:9: C: Metrics/AbcSize: Assignment Branch Condition size for render_books_list is too high. [<16, 20, 11> 27.87/20]
         def render_books_list(surface, bounds, layout) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/browse_screen_component.rb:143:9: C: Metrics/MethodLength: Method has too many lines. [22/15]
+lib/ebook_reader/components/screens/browse_screen_component.rb:145:9: C: Metrics/MethodLength: Method has too many lines. [22/15]
         def render_books_list(surface, bounds, layout) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/browse_screen_component.rb:173:9: C: Metrics/AbcSize: Assignment Branch Condition size for render_book_item is too high. [<13, 31, 5> 33.99/20]
+lib/ebook_reader/components/screens/browse_screen_component.rb:175:9: C: Metrics/AbcSize: Assignment Branch Condition size for render_book_item is too high. [<16, 28, 5> 32.63/20]
         def render_book_item(surface, bounds, ctx) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/browse_screen_component.rb:173:9: C: Metrics/MethodLength: Method has too many lines. [18/15]
+lib/ebook_reader/components/screens/browse_screen_component.rb:175:9: C: Metrics/MethodLength: Method has too many lines. [21/15]
         def render_book_item(surface, bounds, ctx) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/browse_screen_component.rb:200:9: C: Metrics/AbcSize: Assignment Branch Condition size for draw_list_header is too high. [<6, 23, 2> 23.85/20]
+lib/ebook_reader/components/screens/browse_screen_component.rb:205:9: C: Metrics/AbcSize: Assignment Branch Condition size for draw_list_header is too high. [<8, 21, 2> 22.56/20]
         def draw_list_header(surface, bounds, layout, row) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/browse_screen_component.rb:223:33: C: Metrics/ParameterLists: Avoid parameter lists longer than 4 parameters. [5/4]
+lib/ebook_reader/components/screens/browse_screen_component.rb:230:33: C: Metrics/ParameterLists: Avoid parameter lists longer than 4 parameters. [5/4]
         def draw_inline_progress(surface, bounds, layout, row, progress)
                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/browse_screen_component.rb:252:9: C: Metrics/AbcSize: Assignment Branch Condition size for layout_metrics is too high. [<6, 25, 0> 25.71/20]
+lib/ebook_reader/components/screens/browse_screen_component.rb:259:9: C: Metrics/AbcSize: Assignment Branch Condition size for layout_metrics is too high. [<8, 21, 0> 22.47/20]
         def layout_metrics(bounds) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/browse_screen_component.rb:252:9: C: Metrics/MethodLength: Method has too many lines. [16/15]
+lib/ebook_reader/components/screens/browse_screen_component.rb:259:9: C: Metrics/MethodLength: Method has too many lines. [18/15]
         def layout_metrics(bounds) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^
 lib/ebook_reader/components/screens/library_screen_component.rb:51:9: C: Metrics/AbcSize: Assignment Branch Condition size for load_items is too high. [<3, 21, 11> 23.9/20]
@@ -216,19 +216,19 @@ lib/ebook_reader/components/screens/open_file_screen_component.rb:27:9: C: Metri
 lib/ebook_reader/components/screens/open_file_screen_component.rb:27:9: C: Metrics/MethodLength: Method has too many lines. [22/15]
         def do_render(surface, bounds) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/settings_screen_component.rb:49:9: C: Metrics/AbcSize: Assignment Branch Condition size for render_settings is too high. [<19, 27, 12> 35.13/20]
+lib/ebook_reader/components/screens/settings_screen_component.rb:49:9: C: Metrics/AbcSize: Assignment Branch Condition size for render_settings is too high. [<22, 22, 9> 32.39/20]
         def render_settings(surface, bounds, selected, text_values) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/settings_screen_component.rb:49:9: C: Metrics/MethodLength: Method has too many lines. [31/15]
+lib/ebook_reader/components/screens/settings_screen_component.rb:49:9: C: Metrics/MethodLength: Method has too many lines. [34/15]
         def render_settings(surface, bounds, selected, text_values) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/settings_screen_component.rb:111:9: C: Metrics/AbcSize: Assignment Branch Condition size for layout_metrics is too high. [<9, 33, 5> 34.57/20]
+lib/ebook_reader/components/screens/settings_screen_component.rb:115:9: C: Metrics/AbcSize: Assignment Branch Condition size for layout_metrics is too high. [<11, 31, 5> 33.27/20]
         def layout_metrics(bounds, text_values) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/settings_screen_component.rb:111:9: C: Metrics/MethodLength: Method has too many lines. [16/15]
+lib/ebook_reader/components/screens/settings_screen_component.rb:115:9: C: Metrics/MethodLength: Method has too many lines. [18/15]
         def layout_metrics(bounds, text_values) ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/components/screens/settings_screen_component.rb:144:32: C: Metrics/ParameterLists: Avoid parameter lists longer than 4 parameters. [8/4]
+lib/ebook_reader/components/screens/settings_screen_component.rb:150:32: C: Metrics/ParameterLists: Avoid parameter lists longer than 4 parameters. [8/4]
         def render_button_group(surface, bounds, item, row, indent, selected, current_value, buttons)
                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 lib/ebook_reader/components/sidebar/annotations_tab_renderer.rb:39:9: C: Metrics/MethodLength: Method has too many lines. [16/15]
@@ -336,82 +336,73 @@ lib/ebook_reader/controllers/menu_controller.rb:19:5: C: Metrics/ClassLength: Cl
 lib/ebook_reader/controllers/menu_controller.rb:48:7: C: Metrics/MethodLength: Method has too many lines. [21/15]
       def run ...
       ^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:6:5: C: Metrics/ClassLength: Class has too many lines. [260/200]
+lib/ebook_reader/controllers/state_controller.rb:6:5: C: Metrics/ClassLength: Class has too many lines. [265/200]
     class StateController ...
     ^^^^^^^^^^^^^^^^^^^^^
 lib/ebook_reader/controllers/state_controller.rb:48:7: C: Metrics/MethodLength: Method has too many lines. [20/15]
       def add_bookmark ...
       ^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:75:7: C: Metrics/AbcSize: Assignment Branch Condition size for jump_to_bookmark is too high. [<8, 26, 11> 29.34/20]
+lib/ebook_reader/controllers/state_controller.rb:75:7: C: Metrics/AbcSize: Assignment Branch Condition size for jump_to_bookmark is too high. [<10, 23, 11> 27.39/20]
       def jump_to_bookmark ...
       ^^^^^^^^^^^^^^^^^^^^
 lib/ebook_reader/controllers/state_controller.rb:75:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for jump_to_bookmark is too high. [10/8]
       def jump_to_bookmark ...
       ^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:75:7: C: Metrics/MethodLength: Method has too many lines. [28/15]
+lib/ebook_reader/controllers/state_controller.rb:75:7: C: Metrics/MethodLength: Method has too many lines. [30/15]
       def jump_to_bookmark ...
       ^^^^^^^^^^^^^^^^^^^^
 lib/ebook_reader/controllers/state_controller.rb:75:7: C: Metrics/PerceivedComplexity: Perceived complexity for jump_to_bookmark is too high. [11/9]
       def jump_to_bookmark ...
       ^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:163:7: C: Metrics/AbcSize: Assignment Branch Condition size for delete_annotation_by_id is too high. [<5, 20, 11> 23.37/20]
+lib/ebook_reader/controllers/state_controller.rb:167:7: C: Metrics/MethodLength: Method has too many lines. [19/15]
       def delete_annotation_by_id(annotation) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:163:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for delete_annotation_by_id is too high. [12/8]
-      def delete_annotation_by_id(annotation) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:163:7: C: Metrics/MethodLength: Method has too many lines. [18/15]
-      def delete_annotation_by_id(annotation) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:163:7: C: Metrics/PerceivedComplexity: Perceived complexity for delete_annotation_by_id is too high. [12/9]
-      def delete_annotation_by_id(annotation) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:277:7: C: Metrics/AbcSize: Assignment Branch Condition size for apply_progress_data is too high. [<10, 33, 18> 38.9/20]
+lib/ebook_reader/controllers/state_controller.rb:282:7: C: Metrics/AbcSize: Assignment Branch Condition size for apply_progress_data is too high. [<10, 33, 18> 38.9/20]
       def apply_progress_data(progress) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:277:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for apply_progress_data is too high. [14/8]
+lib/ebook_reader/controllers/state_controller.rb:282:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for apply_progress_data is too high. [14/8]
       def apply_progress_data(progress) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:277:7: C: Metrics/MethodLength: Method has too many lines. [36/15]
+lib/ebook_reader/controllers/state_controller.rb:282:7: C: Metrics/MethodLength: Method has too many lines. [36/15]
       def apply_progress_data(progress) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:277:7: C: Metrics/PerceivedComplexity: Perceived complexity for apply_progress_data is too high. [17/9]
+lib/ebook_reader/controllers/state_controller.rb:282:7: C: Metrics/PerceivedComplexity: Perceived complexity for apply_progress_data is too high. [17/9]
       def apply_progress_data(progress) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/state_controller.rb:284:121: C: Layout/LineLength: Line is too long. [123/120]
+lib/ebook_reader/controllers/state_controller.rb:289:121: C: Layout/LineLength: Line is too long. [123/120]
         @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(chapter >= @doc.chapter_count ? 0 : chapter))
                                                                                                                         ^^^
-lib/ebook_reader/controllers/ui_controller.rb:9:5: C: Metrics/ClassLength: Class has too many lines. [480/200]
+lib/ebook_reader/controllers/ui_controller.rb:9:5: C: Metrics/ClassLength: Class has too many lines. [488/200]
     class UIController ...
     ^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/ui_controller.rb:99:7: C: Metrics/AbcSize: Assignment Branch Condition size for open_sidebar_for is too high. [<8, 26, 8> 28.35/20]
+lib/ebook_reader/controllers/ui_controller.rb:113:7: C: Metrics/AbcSize: Assignment Branch Condition size for open_sidebar_for is too high. [<8, 26, 8> 28.35/20]
       def open_sidebar_for(tab) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/ui_controller.rb:99:7: C: Metrics/MethodLength: Method has too many lines. [34/15]
+lib/ebook_reader/controllers/ui_controller.rb:113:7: C: Metrics/MethodLength: Method has too many lines. [34/15]
       def open_sidebar_for(tab) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/ui_controller.rb:183:7: C: Metrics/AbcSize: Assignment Branch Condition size for sidebar_select is too high. [<7, 23, 6> 24.78/20]
+lib/ebook_reader/controllers/ui_controller.rb:197:7: C: Metrics/AbcSize: Assignment Branch Condition size for sidebar_select is too high. [<7, 23, 6> 24.78/20]
       def sidebar_select ...
       ^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/ui_controller.rb:183:7: C: Metrics/MethodLength: Method has too many lines. [19/15]
+lib/ebook_reader/controllers/ui_controller.rb:197:7: C: Metrics/MethodLength: Method has too many lines. [19/15]
       def sidebar_select ...
       ^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/ui_controller.rb:285:7: C: Metrics/MethodLength: Method has too many lines. [17/15]
+lib/ebook_reader/controllers/ui_controller.rb:299:7: C: Metrics/MethodLength: Method has too many lines. [18/15]
       def show_annotation_editor_overlay(text:, range:, chapter_index:, annotation: nil) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/ui_controller.rb:316:7: C: Metrics/AbcSize: Assignment Branch Condition size for update_sidebar_selection is too high. [<18, 31, 24> 43.14/20]
+lib/ebook_reader/controllers/ui_controller.rb:331:7: C: Metrics/AbcSize: Assignment Branch Condition size for update_sidebar_selection is too high. [<20, 30, 24> 43.31/20]
       def update_sidebar_selection(delta) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/ui_controller.rb:316:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for update_sidebar_selection is too high. [22/8]
+lib/ebook_reader/controllers/ui_controller.rb:331:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for update_sidebar_selection is too high. [22/8]
       def update_sidebar_selection(delta) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/ui_controller.rb:316:7: C: Metrics/MethodLength: Method has too many lines. [38/15]
+lib/ebook_reader/controllers/ui_controller.rb:331:7: C: Metrics/MethodLength: Method has too many lines. [40/15]
       def update_sidebar_selection(delta) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/ui_controller.rb:316:7: C: Metrics/PerceivedComplexity: Perceived complexity for update_sidebar_selection is too high. [22/9]
+lib/ebook_reader/controllers/ui_controller.rb:331:7: C: Metrics/PerceivedComplexity: Perceived complexity for update_sidebar_selection is too high. [22/9]
       def update_sidebar_selection(delta) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/controllers/ui_controller.rb:515:7: C: Metrics/MethodLength: Method has too many lines. [21/15]
+lib/ebook_reader/controllers/ui_controller.rb:537:7: C: Metrics/MethodLength: Method has too many lines. [21/15]
       def save_annotation_from_overlay(note, overlay) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 lib/ebook_reader/domain/actions/update_sidebar_action.rb:10:9: C: Metrics/MethodLength: Method has too many lines. [16/15]
@@ -747,72 +738,6 @@ lib/ebook_reader/helpers/html_processor.rb:71:7: C: Metrics/AbcSize: Assignment 
 lib/ebook_reader/helpers/html_processor.rb:71:7: C: Metrics/MethodLength: Method has too many lines. [18/15]
       def self.decode_entities(text) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:14:5: C: Metrics/ClassLength: Class has too many lines. [393/200]
-    class OPFProcessor ...
-    ^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:37:7: C: Metrics/AbcSize: Assignment Branch Condition size for extract_metadata is too high. [<15, 31, 12> 36.47/20]
-      def extract_metadata ...
-      ^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:37:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for extract_metadata is too high. [13/8]
-      def extract_metadata ...
-      ^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:37:7: C: Metrics/MethodLength: Method has too many lines. [22/15]
-      def extract_metadata ...
-      ^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:37:7: C: Metrics/PerceivedComplexity: Perceived complexity for extract_metadata is too high. [13/9]
-      def extract_metadata ...
-      ^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:117:7: C: Metrics/AbcSize: Assignment Branch Condition size for find_ncx_path is too high. [<11, 22, 13> 27.82/20]
-      def find_ncx_path(manifest) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:117:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for find_ncx_path is too high. [14/8]
-      def find_ncx_path(manifest) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:117:7: C: Metrics/MethodLength: Method has too many lines. [19/15]
-      def find_ncx_path(manifest) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:117:7: C: Metrics/PerceivedComplexity: Perceived complexity for find_ncx_path is too high. [14/9]
-      def find_ncx_path(manifest) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:240:7: C: Metrics/AbcSize: Assignment Branch Condition size for traverse_nav_points is too high. [<8, 18, 6> 20.59/20]
-      def traverse_nav_points(node, chapter_titles, entries, level:, source_path:) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:240:7: C: Metrics/MethodLength: Method has too many lines. [17/15]
-      def traverse_nav_points(node, chapter_titles, entries, level:, source_path:) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:269:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for fallback_nav_label is too high. [10/8]
-      def fallback_nav_label(href, title, source_path:) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:269:7: C: Metrics/MethodLength: Method has too many lines. [16/15]
-      def fallback_nav_label(href, title, source_path:) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:269:7: C: Metrics/PerceivedComplexity: Perceived complexity for fallback_nav_label is too high. [10/9]
-      def fallback_nav_label(href, title, source_path:) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:339:121: C: Layout/LineLength: Line is too long. [130/120]
-        regex = %r{<(?<tag>[^>\s]+)[^>]*\s(?:id|name|xml:id)\s*=\s*["']#{Regexp.escape(anchor)}["'][^>]*>(?<text>.*?)</\k<tag>>}im
-                                                                                                                        ^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:358:121: C: Layout/LineLength: Line is too long. [124/120]
-        content.scan(%r{<(h[1-6])[^>]*?(?:id|name|xml:id)\s*=\s*["']([^"']+)["'][^>]*>(.*?)</\1>}im) do |_tag, anchor, text|
-                                                                                                                        ^^^^
-lib/ebook_reader/helpers/opf_processor.rb:398:25: C: Performance/CollectionLiteralInLoop: Avoid immutable Array literals in loops. It is better to extract it into a local variable or a constant.
-          return nav if %w[toc doc-toc].include?(normalized)
-                        ^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:411:7: C: Metrics/AbcSize: Assignment Branch Condition size for traverse_nav_list is too high. [<9, 29, 11> 32.3/20]
-      def traverse_nav_list(list, titles, entries, level:, source_path:) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:411:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for traverse_nav_list is too high. [12/8]
-      def traverse_nav_list(list, titles, entries, level:, source_path:) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:411:7: C: Metrics/MethodLength: Method has too many lines. [20/15]
-      def traverse_nav_list(list, titles, entries, level:, source_path:) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:411:7: C: Metrics/PerceivedComplexity: Perceived complexity for traverse_nav_list is too high. [12/9]
-      def traverse_nav_list(list, titles, entries, level:, source_path:) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/helpers/opf_processor.rb:489:7: C: Metrics/MethodLength: Method has too many lines. [16/15]
-      def normalize_xml_text(content) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 lib/ebook_reader/helpers/terminal_sanitizer.rb:39:7: C: Metrics/AbcSize: Assignment Branch Condition size for sanitize is too high. [<15, 25, 20> 35.36/20]
       def sanitize(text, preserve_newlines: false, preserve_tabs: false) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -873,88 +798,43 @@ lib/ebook_reader/helpers/text_metrics.rb:202:7: C: Metrics/PerceivedComplexity: 
 lib/ebook_reader/helpers/text_metrics.rb:211:9: C: Metrics/BlockLength: Block has too many lines. [36/35]
         text.to_s.each_grapheme_cluster do |cluster| ...
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+lib/ebook_reader/helpers/xml_text_normalizer.rb:11:7: C: Metrics/MethodLength: Method has too many lines. [16/15]
+      def normalize(text) ...
+      ^^^^^^^^^^^^^^^^^^^
 lib/ebook_reader/infrastructure/atomic_file_writer.rb:16:7: C: Metrics/MethodLength: Method has too many lines. [21/15]
       def self.write_using(path, binary: false) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:33:7: C: Metrics/AbcSize: Assignment Branch Condition size for load is too high. [<13, 40, 13> 44.02/20]
-      def load(path, formatting_service: nil) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:33:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for load is too high. [14/8]
-      def load(path, formatting_service: nil) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:33:7: C: Metrics/MethodLength: Method has too many lines. [41/15]
-      def load(path, formatting_service: nil) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:33:7: C: Metrics/PerceivedComplexity: Perceived complexity for load is too high. [14/9]
-      def load(path, formatting_service: nil) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:86:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for cache_incomplete? is too high. [10/8]
-      def cache_incomplete?(cache, payload) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:86:7: C: Metrics/PerceivedComplexity: Perceived complexity for cache_incomplete? is too high. [10/9]
-      def cache_incomplete?(cache, payload) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:117:7: C: Metrics/AbcSize: Assignment Branch Condition size for fast_load_for_source is too high. [<14, 19, 8> 24.92/20]
-      def fast_load_for_source(source_path, formatting_service) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:117:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for fast_load_for_source is too high. [9/8]
-      def fast_load_for_source(source_path, formatting_service) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:117:7: C: Metrics/MethodLength: Method has too many lines. [32/15]
-      def fast_load_for_source(source_path, formatting_service) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:159:7: C: Metrics/AbcSize: Assignment Branch Condition size for sha_from_manifest is too high. [<18, 39, 25> 49.7/20]
-      def sha_from_manifest(source_path, source_mtime, source_size_bytes) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:159:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for sha_from_manifest is too high. [21/8]
-      def sha_from_manifest(source_path, source_mtime, source_size_bytes) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:159:7: C: Metrics/MethodLength: Method has too many lines. [31/15]
-      def sha_from_manifest(source_path, source_mtime, source_size_bytes) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:159:7: C: Metrics/PerceivedComplexity: Perceived complexity for sha_from_manifest is too high. [21/9]
-      def sha_from_manifest(source_path, source_mtime, source_size_bytes) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:220:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for rebuild_from_pointer is too high. [10/8]
-      def rebuild_from_pointer(cache, formatting_service) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:220:7: C: Metrics/MethodLength: Method has too many lines. [16/15]
-      def rebuild_from_pointer(cache, formatting_service) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/book_cache_pipeline.rb:220:7: C: Metrics/PerceivedComplexity: Perceived complexity for rebuild_from_pointer is too high. [10/9]
-      def rebuild_from_pointer(cache, formatting_service) ...
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 lib/ebook_reader/infrastructure/document_service.rb:46:11: C: Naming/AccessorMethodName: Do not prefix reader method names with get_.
       def get_table_of_contents
           ^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/epub_importer.rb:33:7: C: Metrics/AbcSize: Assignment Branch Condition size for import is too high. [<15, 27, 6> 31.46/20]
+lib/ebook_reader/infrastructure/epub_importer.rb:34:7: C: Metrics/AbcSize: Assignment Branch Condition size for import is too high. [<15, 27, 6> 31.46/20]
       def import(epub_path) ...
       ^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/epub_importer.rb:33:7: C: Metrics/MethodLength: Method has too many lines. [32/15]
+lib/ebook_reader/infrastructure/epub_importer.rb:34:7: C: Metrics/MethodLength: Method has too many lines. [32/15]
       def import(epub_path) ...
       ^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/epub_importer.rb:83:7: C: Metrics/AbcSize: Assignment Branch Condition size for locate_opf_path is too high. [<7, 17, 8> 20.05/20]
+lib/ebook_reader/infrastructure/epub_importer.rb:84:7: C: Metrics/AbcSize: Assignment Branch Condition size for locate_opf_path is too high. [<7, 17, 8> 20.05/20]
       def locate_opf_path(zip, container_xml) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/epub_importer.rb:83:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for locate_opf_path is too high. [9/8]
+lib/ebook_reader/infrastructure/epub_importer.rb:84:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for locate_opf_path is too high. [9/8]
       def locate_opf_path(zip, container_xml) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/epub_importer.rb:102:7: C: Metrics/MethodLength: Method has too many lines. [19/15]
+lib/ebook_reader/infrastructure/epub_importer.rb:103:7: C: Metrics/MethodLength: Method has too many lines. [19/15]
       def build_chapters(zip, opf_path, processor, manifest, chapter_titles) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/epub_importer.rb:102:25: C: Metrics/ParameterLists: Avoid parameter lists longer than 4 parameters. [5/4]
+lib/ebook_reader/infrastructure/epub_importer.rb:103:25: C: Metrics/ParameterLists: Avoid parameter lists longer than 4 parameters. [5/4]
       def build_chapters(zip, opf_path, processor, manifest, chapter_titles)
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/epub_importer.rb:127:7: C: Metrics/AbcSize: Assignment Branch Condition size for build_toc_entries is too high. [<12, 19, 6> 23.26/20]
+lib/ebook_reader/infrastructure/epub_importer.rb:128:7: C: Metrics/AbcSize: Assignment Branch Condition size for build_toc_entries is too high. [<12, 19, 6> 23.26/20]
       def build_toc_entries(chapters, toc_entries, chapter_hrefs, opf_path) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/epub_importer.rb:127:7: C: Metrics/MethodLength: Method has too many lines. [21/15]
+lib/ebook_reader/infrastructure/epub_importer.rb:128:7: C: Metrics/MethodLength: Method has too many lines. [21/15]
       def build_toc_entries(chapters, toc_entries, chapter_hrefs, opf_path) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/epub_importer.rb:154:7: C: Metrics/AbcSize: Assignment Branch Condition size for resolve_toc_target is too high. [<5, 18, 8> 20.32/20]
+lib/ebook_reader/infrastructure/epub_importer.rb:155:7: C: Metrics/AbcSize: Assignment Branch Condition size for resolve_toc_target is too high. [<5, 18, 8> 20.32/20]
       def resolve_toc_target(opf_path, entry) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-lib/ebook_reader/infrastructure/epub_importer.rb:154:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for resolve_toc_target is too high. [9/8]
+lib/ebook_reader/infrastructure/epub_importer.rb:155:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for resolve_toc_target is too high. [9/8]
       def resolve_toc_target(opf_path, entry) ...
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 lib/ebook_reader/infrastructure/epub_resource_loader.rb:28:7: C: Metrics/CyclomaticComplexity: Cyclomatic complexity for fetch is too high. [9/8]
@@ -1240,7 +1120,7 @@ lib/ebook_reader/ui/view_models/reader_view_model.rb:95:9: C: Metrics/MethodLeng
         def with(**changes) ...
         ^^^^^^^^^^^^^^^^^^^
 
-270 files inspected, 412 offenses detected
+284 files inspected, 372 offenses detected
 
 The following RuboCop extension libraries are installed but not loaded in config:
   * rubocop-rspec

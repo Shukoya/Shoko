@@ -7,7 +7,24 @@ module EbookReader
   module Controllers
     # Handles all UI-related functionality: modes, overlays, popups, sidebar
     class UIController
+      # Raised when required dependencies are missing for a UI action.
       class MissingDependencyError < StandardError; end
+
+      # Builds the annotation editor screen component for annotation editor mode.
+      class AnnotationEditorMode
+        def initialize(controller, dependencies)
+          @controller = controller
+          @dependencies = dependencies
+        end
+
+        def build_component(**)
+          Components::Screens::AnnotationEditorScreenComponent.new(
+            @controller,
+            **,
+            dependencies: @dependencies
+          )
+        end
+      end
 
       def initialize(state, dependencies)
         @state = state
@@ -16,17 +33,14 @@ module EbookReader
       end
 
       def switch_mode(mode, **)
-        close_annotations_overlay unless mode == :annotation_editor
-        close_annotation_editor_overlay unless mode == :annotation_editor
+        annotation_editor_mode =
+          mode == :annotation_editor ? AnnotationEditorMode.new(self, @dependencies) : nil
+        close_annotations_overlay unless annotation_editor_mode
+        close_annotation_editor_overlay unless annotation_editor_mode
         @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(mode))
 
-        if mode == :annotation_editor
-          @current_mode = Components::Screens::AnnotationEditorScreenComponent.new(self, **,
-                                                                                   dependencies: @dependencies)
-        else
-          # Rendered via screen/sidebar components; no standalone mode component
-          @current_mode = nil
-        end
+        # Rendered via screen/sidebar components; no standalone mode component
+        @current_mode = annotation_editor_mode&.build_component(**)
 
         # Keep input dispatcher in sync with mode to prevent cross-mode key leaks
         begin
@@ -283,6 +297,7 @@ module EbookReader
       end
 
       def show_annotation_editor_overlay(text:, range:, chapter_index:, annotation: nil)
+        message = 'Annotation editor unavailable'
         overlay = Components::AnnotationEditorOverlayComponent.new(
           selected_text: text,
           range: range,
@@ -291,15 +306,15 @@ module EbookReader
         )
         @state.dispatch(EbookReader::Domain::Actions::UpdateAnnotationEditorOverlayAction.new(overlay))
         if activate_annotation_editor_overlay_session
-          set_message('Annotation editor active (Ctrl+S save, Esc cancel)', 3)
+          message = 'Annotation editor active (Ctrl+S save, Esc cancel)'
         else
           cleanup_annotation_editor_overlay_fallback
-          set_message('Annotation editor unavailable', 3)
         end
       rescue StandardError => e
         cleanup_annotation_editor_overlay_fallback
         log_dependency_error(:show_annotation_editor_overlay, e)
-        set_message('Annotation editor unavailable', 3)
+      ensure
+        set_message(message, 3)
       end
 
       def close_annotation_editor_overlay
@@ -322,11 +337,13 @@ module EbookReader
                                  doc = safe_resolve(:document)
                                  entries = toc_entries_for(doc)
                                  indices = navigable_toc_entry_indices(entries)
-                                 cur = (@state.get(%i[reader sidebar_toc_selected]) || indices.first || 0).to_i
+                                 first_index = indices.first
+                                 last_index = indices.last
+                                 cur = (@state.get(%i[reader sidebar_toc_selected]) || first_index || 0).to_i
                                  target = if delta.positive?
-                                            indices.find { |idx| idx > cur } || indices.last || cur
+                                            indices.find { |idx| idx > cur } || last_index || cur
                                           elsif delta.negative?
-                                            indices.reverse.find { |idx| idx < cur } || indices.first || cur
+                                            indices.reverse.find { |idx| idx < cur } || first_index || cur
                                           else
                                             cur
                                           end
@@ -376,12 +393,13 @@ module EbookReader
 
       def navigable_toc_entry_indices(entries)
         indices = []
-        Array(entries).each_with_index do |entry, idx|
+        entries = Array(entries)
+        entries.each_with_index do |entry, idx|
           indices << idx if entry&.chapter_index
         end
         return indices unless indices.empty?
 
-        (0...Array(entries).length).to_a
+        (0...entries.length).to_a
       end
 
       def toc_index_for_chapter(entries, chapter_index)
@@ -439,42 +457,39 @@ module EbookReader
       end
 
       def open_annotation_from_overlay(annotation)
-        normalized = normalize_annotation(annotation)
-        return unless normalized
-
-        state_controller = @dependencies.resolve(:state_controller)
-        state_controller.jump_to_annotation(normalized) if state_controller.respond_to?(:jump_to_annotation)
-        close_annotations_overlay
+        with_normalized_annotation(annotation) do |normalized|
+          state_controller = @dependencies.resolve(:state_controller)
+          state_controller.jump_to_annotation(normalized) if state_controller.respond_to?(:jump_to_annotation)
+          close_annotations_overlay
+        end
       rescue StandardError
         close_annotations_overlay
       end
 
       def edit_annotation_from_overlay(annotation)
-        normalized = normalize_annotation(annotation)
-        return unless normalized
-
-        close_annotations_overlay
-        show_annotation_editor_overlay(text: normalized[:text],
-                                       range: normalized[:range],
-                                       chapter_index: normalized[:chapter_index],
-                                       annotation: normalized)
+        with_normalized_annotation(annotation) do |normalized|
+          close_annotations_overlay
+          show_annotation_editor_overlay(text: normalized[:text],
+                                         range: normalized[:range],
+                                         chapter_index: normalized[:chapter_index],
+                                         annotation: normalized)
+        end
       end
 
       def delete_annotation_from_overlay(annotation)
-        normalized = normalize_annotation(annotation)
-        return unless normalized
+        with_normalized_annotation(annotation) do |normalized|
+          state_controller = @dependencies.resolve(:state_controller)
+          new_index = if state_controller.respond_to?(:delete_annotation_by_id)
+                        state_controller.delete_annotation_by_id(normalized)
+                      end
 
-        state_controller = @dependencies.resolve(:state_controller)
-        new_index = if state_controller.respond_to?(:delete_annotation_by_id)
-                      state_controller.delete_annotation_by_id(normalized)
-                    end
+          overlay = Domain::Selectors::ReaderSelectors.annotations_overlay(@state)
+          overlay.selected_index = new_index if overlay.respond_to?(:selected_index=) && !new_index.nil?
 
-        overlay = Domain::Selectors::ReaderSelectors.annotations_overlay(@state)
-        overlay.selected_index = new_index if overlay.respond_to?(:selected_index=) && !new_index.nil?
-
-        annotations = @state.get(%i[reader annotations]) || []
-        close_annotations_overlay if annotations.empty?
-        set_message('Annotation deleted', 2)
+          annotations = @state.get(%i[reader annotations]) || []
+          close_annotations_overlay if annotations.empty?
+          set_message('Annotation deleted', 2)
+        end
       rescue StandardError
         close_annotations_overlay
       end
@@ -491,6 +506,13 @@ module EbookReader
         annotation.transform_keys do |key|
           key.is_a?(String) ? key.to_sym : key
         end
+      end
+
+      def with_normalized_annotation(annotation)
+        normalized = normalize_annotation(annotation)
+        return unless normalized
+
+        yield normalized
       end
 
       def cleanup_annotation_editor_overlay_fallback

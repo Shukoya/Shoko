@@ -78,14 +78,16 @@ module EbookReader
         bookmark = bookmarks[selected_idx]
         return unless bookmark
 
-        navigation = if @dependencies.respond_to?(:resolve) && @dependencies.registered?(:navigation_service)
+        has_resolve = @dependencies.respond_to?(:resolve)
+        navigation = if has_resolve && @dependencies.registered?(:navigation_service)
                        @dependencies.resolve(:navigation_service)
                      end
 
+        chapter_index = bookmark.chapter_index
         if navigation
-          navigation.jump_to_chapter(bookmark.chapter_index)
+          navigation.jump_to_chapter(chapter_index)
         else
-          @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(bookmark.chapter_index))
+          @state.dispatch(EbookReader::Domain::Actions::UpdateChapterAction.new(chapter_index))
         end
 
         offset = bookmark.line_offset.to_i
@@ -97,8 +99,8 @@ module EbookReader
         }
 
         if EbookReader::Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic &&
-           @dependencies.respond_to?(:resolve) && @dependencies.registered?(:page_calculator)
-          page_index = @dependencies.resolve(:page_calculator)&.find_page_index(bookmark.chapter_index,
+           has_resolve && @dependencies.registered?(:page_calculator)
+          page_index = @dependencies.resolve(:page_calculator)&.find_page_index(chapter_index,
                                                                                 offset)
           payload[:current_page_index] = page_index if page_index
         end
@@ -147,13 +149,15 @@ module EbookReader
         normalized = normalize_annotation(annotation)
         return unless normalized
 
+        chapter_index = normalized[:chapter_index]
+        range = normalized[:range]
         navigation = if @dependencies.respond_to?(:resolve) && @dependencies.registered?(:navigation_service)
                        @dependencies.resolve(:navigation_service)
                      end
-        navigation&.jump_to_chapter(normalized[:chapter_index]) if normalized[:chapter_index]
+        navigation&.jump_to_chapter(chapter_index) if chapter_index
 
-        if normalized[:range]
-          selection = normalize_selection_for_state(normalized[:range])
+        if range
+          selection = normalize_selection_for_state(range)
           @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionAction.new(selection)) if selection
         end
 
@@ -161,19 +165,20 @@ module EbookReader
       end
 
       def delete_annotation_by_id(annotation)
+        current_index = @state.get(%i[reader sidebar_annotations_selected]) || 0
         normalized = normalize_annotation(annotation)
-        return @state.get(%i[reader sidebar_annotations_selected]) || 0 unless normalized
+        annotation_id = normalized[:id]
 
         svc = if @dependencies.respond_to?(:resolve) && @dependencies.registered?(:annotation_service)
                 @dependencies.resolve(:annotation_service)
               end
-        return @state.get(%i[reader sidebar_annotations_selected]) || 0 unless svc && normalized[:id]
+        return current_index unless svc && annotation_id
 
-        svc.delete(@path, normalized[:id])
+        svc.delete(@path, annotation_id)
         annotations = svc.list_for_book(@path)
         @state.dispatch(EbookReader::Domain::Actions::UpdateAnnotationsAction.new(annotations))
 
-        new_index = [@state.get(%i[reader sidebar_annotations_selected]) || 0, annotations.length - 1].min
+        new_index = [current_index, annotations.length - 1].min
         new_index = 0 if new_index.negative?
         @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(
                           annotations_selected: new_index,
@@ -181,7 +186,7 @@ module EbookReader
                         ))
         new_index
       rescue StandardError
-        @state.get(%i[reader sidebar_annotations_selected]) || 0
+        current_index
       end
 
       def quit_to_menu
