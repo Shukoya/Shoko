@@ -10,20 +10,24 @@ module EbookReader
     module AnnotationEditorOverlay
       # Renders note contents and cursor inside the annotation editor overlay.
       class NoteRenderer
-        def initialize(background:, text_color:, cursor_color:, geometry:)
+        def initialize(background:, text_color:, cursor_color:, geometry:, placeholder_text: nil, placeholder_color: nil)
           @background = background
           @text_color = text_color
           @cursor_color = cursor_color
           @geometry = geometry
+          @placeholder_text = placeholder_text
+          @placeholder_color = placeholder_color
         end
 
         def render(surface, bounds, note:, cursor_pos:)
-          wrapped_note = wrap_lines(note, @geometry.text_width)
-          cursor_lines = wrap_lines(note[0...cursor_pos], @geometry.text_width)
+          note_text = note.to_s
+          wrapped_note = wrap_lines(note_text, @geometry.text_width)
+          cursor_lines = wrap_lines(note_text[0...cursor_pos], @geometry.text_width)
           cursor_line_index = [cursor_lines.length - 1, 0].max
 
           visible_start, visible_lines = visible_window(wrapped_note, cursor_line_index, @geometry.note_rows)
           render_lines(surface, bounds, visible_lines)
+          render_placeholder(surface, bounds) if note_text.strip.empty?
           cursor_row, cursor_col = cursor_position(cursor_lines, cursor_line_index, visible_start)
           render_cursor(surface, bounds, cursor_row, cursor_col)
         end
@@ -53,6 +57,15 @@ module EbookReader
           end
         end
 
+        def render_placeholder(surface, bounds)
+          return unless @placeholder_text && @placeholder_color
+
+          truncated = EbookReader::Helpers::TextMetrics.truncate_to(@placeholder_text, @geometry.text_width)
+          padded = UI::TextUtils.pad_right(truncated, @geometry.text_width)
+          surface.write(bounds, @geometry.note_top, @geometry.text_x,
+                        "#{@background}#{@placeholder_color}#{padded}#{Terminal::ANSI::RESET}")
+        end
+
         def cursor_position(cursor_lines, cursor_line_index, visible_start)
           cursor_display_row = (cursor_line_index - visible_start).clamp(0, @geometry.note_rows - 1)
           cursor_row = @geometry.note_top + cursor_display_row
@@ -63,7 +76,8 @@ module EbookReader
         end
 
         def render_cursor(surface, bounds, cursor_row, cursor_col)
-          surface.write(bounds, cursor_row, cursor_col, "#{@cursor_color}_#{Terminal::ANSI::RESET}")
+          surface.write(bounds, cursor_row, cursor_col,
+                        "#{@background}#{@cursor_color}_#{Terminal::ANSI::RESET}")
         end
       end
     end

@@ -367,15 +367,17 @@ module EbookReader
 
       # Handles cache loading/rebuilding for a specific cache instance.
       class CacheSession
-        def initialize(cache:, formatting_service:, importer_class:, load_callback:)
+        def initialize(cache:, formatting_service:, importer_class:, load_callback:, progress_reporter: nil)
           @cache = cache
           @formatting_service = formatting_service
           @importer_class = importer_class
           @load_callback = load_callback
+          @progress_reporter = progress_reporter
         end
 
         def load
           cache_file = @cache.cache_file?
+          report('Loading cached book...') if cache_file
           result = result_from_initial_payload
           return result if result
 
@@ -385,6 +387,7 @@ module EbookReader
         end
 
         def fast_load
+          report('Loading cached book...')
           payload, cache_status = payload_from_cache
           context = PayloadContext.new(payload: payload, cache_status: cache_status)
           result_from_payload_or_nil(context)
@@ -458,9 +461,14 @@ module EbookReader
         end
 
         def rebuild_cache
-          importer = @importer_class.new(formatting_service: @formatting_service)
+          importer = @importer_class.new(
+            formatting_service: @formatting_service,
+            progress_reporter: @progress_reporter
+          )
           book_data = importer.import(@cache.source_path)
+          report('Creating JSON cache...', progress: 0.0)
           @cache.write_book!(book_data)
+          report('Finalizing cache...', progress: 1.0)
           payload_from_source
         end
 
@@ -472,11 +480,26 @@ module EbookReader
         end
 
         def rebuild_from_pointer
+          report('Rebuilding cache from source...')
           PointerRebuilder.new(
             cache: @cache,
             formatting_service: @formatting_service,
             load_callback: @load_callback
           ).call
+        end
+
+        def report(message, progress: nil)
+          reporter = @progress_reporter
+          return unless reporter
+          return if message.nil? || message.to_s.strip.empty?
+
+          if reporter.respond_to?(:call)
+            reporter.call(message: message, progress: progress)
+          elsif reporter.respond_to?(:update_status)
+            reporter.update_status(message: message, progress: progress)
+          end
+        rescue StandardError
+          nil
         end
       end
       private_constant :CacheSession
@@ -495,11 +518,12 @@ module EbookReader
       end
       private_constant :LoadErrorHandler
 
-      def initialize(cache_class: EpubCache, cache_root: CachePaths.reader_root)
+      def initialize(cache_class: EpubCache, cache_root: CachePaths.reader_root, progress_reporter: nil)
         @cache_class = cache_class
         @cache_root = cache_root
         @importer_class = EpubImporter
         @pointer_manager_class = CachePointerManager
+        @progress_reporter = progress_reporter
       end
 
       def load(path, formatting_service: nil)
@@ -513,6 +537,7 @@ module EbookReader
       private
 
       def perform_load(path, formatting_service)
+        report('Checking cache...')
         expanded = File.expand_path(path)
         fast = fast_load_if_available(expanded, formatting_service)
         return fast if fast
@@ -536,7 +561,8 @@ module EbookReader
           cache: cache,
           formatting_service: formatting_service,
           importer_class: @importer_class,
-          load_callback: method(:load)
+          load_callback: method(:load),
+          progress_reporter: @progress_reporter
         )
       end
 
@@ -556,6 +582,7 @@ module EbookReader
       end
 
       def perform_fast_load(source_path, formatting_service)
+        report('Looking up cached data...')
         pointer_path, sha = pointer_for_source(source_path)
         return nil unless pointer_path
 
@@ -606,6 +633,20 @@ module EbookReader
           source_path: source_path,
           manager_class: @pointer_manager_class
         ).call
+      end
+
+      def report(message, progress: nil)
+        reporter = @progress_reporter
+        return unless reporter
+        return if message.nil? || message.to_s.strip.empty?
+
+        if reporter.respond_to?(:call)
+          reporter.call(message: message, progress: progress)
+        elsif reporter.respond_to?(:update_status)
+          reporter.update_status(message: message, progress: progress)
+        end
+      rescue StandardError
+        nil
       end
     end
   end

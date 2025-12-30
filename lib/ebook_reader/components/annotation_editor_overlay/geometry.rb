@@ -12,20 +12,40 @@ module EbookReader
           @layout = layout
         end
 
-        def text_x
-          layout.inner_x + 1
+        def content_x
+          layout.inner_x + 2
         end
 
-        def text_width
-          [layout.inner_width - 2, 1].max
+        def content_width
+          [layout.inner_width - 4, 1].max
         end
 
-        def note_rows
-          [layout.inner_height - 3, 1].max
+        def header_row
+          layout.inner_y + 1
+        end
+
+        def subheader_row
+          header_row + 1
+        end
+
+        def label_row
+          subheader_row + 2
         end
 
         def note_top
-          layout.inner_y + 1
+          label_row + 1
+        end
+
+        def note_rows
+          [buttons_row - note_top, 1].max
+        end
+
+        def text_x
+          content_x
+        end
+
+        def text_width
+          content_width
         end
 
         def buttons_row

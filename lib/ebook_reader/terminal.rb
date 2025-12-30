@@ -114,8 +114,8 @@ module EbookReader
         @input.read_key
       end
 
-      def read_key_blocking
-        @input.read_key_blocking
+      def read_key_blocking(timeout: nil)
+        @input.read_key_blocking(timeout: timeout)
       end
 
       # Mouse helpers
@@ -127,8 +127,8 @@ module EbookReader
         @input.disable_mouse
       end
 
-      def read_input_with_mouse
-        @input.read_input_with_mouse
+      def read_input_with_mouse(timeout: nil)
+        @input.read_input_with_mouse(timeout: timeout)
       end
     end
   end

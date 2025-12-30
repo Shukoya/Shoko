@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require_relative '../ui/text_utils'
 require_relative '../../terminal'
+require_relative '../../helpers/text_metrics'
 
 module EbookReader
   module Components
@@ -9,22 +9,21 @@ module EbookReader
     module AnnotationEditorOverlay
       # Renders the footer buttons for the annotation editor overlay.
       class FooterRenderer
-        ButtonSpec = Struct.new(:row, :col, :label, :background, :width, keyword_init: true)
+        SegmentSpec = Struct.new(:row, :col, :key, :text, :width, keyword_init: true)
 
-        def initialize(background:, button_fg:, save_bg:, cancel_bg:)
+        def initialize(background:, text_fg:, key_fg:)
           @background = background
-          @button_fg = button_fg
-          @save_bg = save_bg
-          @cancel_bg = cancel_bg
+          @text_fg = text_fg
+          @key_fg = key_fg
         end
 
         def render(surface, bounds, geometry)
           button_row = geometry.buttons_row
           fill_footer(surface, bounds, geometry, button_row)
-          save_spec, cancel_spec = button_specs(geometry, button_row)
+          save_spec, cancel_spec = segment_specs(geometry, button_row)
 
-          draw_button(surface, bounds, save_spec)
-          draw_button(surface, bounds, cancel_spec)
+          draw_segment(surface, bounds, save_spec)
+          draw_segment(surface, bounds, cancel_spec)
 
           abs_row = geometry.button_row_abs(bounds)
           {
@@ -36,33 +35,42 @@ module EbookReader
         private
 
         def fill_footer(surface, bounds, geometry, button_row)
-          footer_bg = "#{@background}#{' ' * geometry.text_width}#{Terminal::ANSI::RESET}"
-          surface.write(bounds, button_row, geometry.text_x, footer_bg)
+          footer_bg = "#{@background}#{' ' * geometry.content_width}#{Terminal::ANSI::RESET}"
+          surface.write(bounds, button_row, geometry.content_x, footer_bg)
         end
 
-        def button_specs(geometry, button_row)
-          cancel_label = 'Cancel'
-          save_label = 'Save'
-          cancel_width = cancel_label.length + 4
-          save_width = save_label.length + 4
+        def segment_specs(geometry, button_row)
+          save_spec = build_segment_spec(geometry, button_row, key: 'Ctrl+S', text: 'Save', align: :left)
+          cancel_spec = build_segment_spec(geometry, button_row, key: 'Esc', text: 'Cancel', align: :right)
 
-          cancel_col = geometry.text_x + geometry.text_width - cancel_width
-          cancel_col = [cancel_col, geometry.text_x].max
-          save_col = cancel_col - 2 - save_width
-          save_col = [save_col, geometry.text_x].max
+          min_cancel_col = save_spec.col + save_spec.width + 2
+          max_cancel_col = geometry.content_x + geometry.content_width - cancel_spec.width
+          if cancel_spec.col < min_cancel_col
+            cancel_spec.col = [min_cancel_col, max_cancel_col].min
+          end
 
-          save_spec = ButtonSpec.new(row: button_row, col: save_col, label: save_label,
-                                     background: @save_bg, width: save_width)
-          cancel_spec = ButtonSpec.new(row: button_row, col: cancel_col, label: cancel_label,
-                                       background: @cancel_bg, width: cancel_width)
           [save_spec, cancel_spec]
         end
 
-        def draw_button(surface, bounds, spec)
-          text = " #{spec.label} "
-          padded = UI::TextUtils.pad_right(text, spec.width)
-          surface.write(bounds, spec.row, spec.col,
-                        "#{spec.background}#{@button_fg}#{padded}#{Terminal::ANSI::RESET}")
+        def build_segment_spec(geometry, row, key:, text:, align:)
+          label = "#{key} #{text}"
+          width = EbookReader::Helpers::TextMetrics.visible_length(label)
+
+          col = if align == :right
+                  geometry.content_x + geometry.content_width - width
+                else
+                  geometry.content_x
+                end
+          col = [col, geometry.content_x].max
+
+          SegmentSpec.new(row: row, col: col, key: key, text: text, width: width)
+        end
+
+        def draw_segment(surface, bounds, spec)
+          reset = Terminal::ANSI::RESET
+          label = "#{@background}#{@key_fg}#{spec.key}#{reset}" \
+                  "#{@background}#{@text_fg} #{spec.text}#{reset}"
+          surface.write(bounds, spec.row, spec.col, label)
         end
 
         def region_for(bounds, abs_row, spec)

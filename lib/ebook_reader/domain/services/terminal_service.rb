@@ -22,8 +22,8 @@ module EbookReader
           Terminal.disable_mouse
         end
 
-        def read_input_with_mouse
-          Terminal.read_input_with_mouse
+        def read_input_with_mouse(timeout: nil)
+          Terminal.read_input_with_mouse(timeout: timeout)
         end
 
         def read_key
@@ -73,8 +73,8 @@ module EbookReader
           Terminal.start_frame(width: width, height: height)
         end
 
-        def read_key_blocking
-          Terminal.read_key_blocking
+        def read_key_blocking(timeout: nil)
+          Terminal.read_key_blocking(timeout: timeout)
         end
 
         # Read one blocking key, then drain a few non-blocking extras.
@@ -82,8 +82,8 @@ module EbookReader
         #
         # @param limit [Integer] maximum total keys to return
         # @return [Array<String>]
-        def read_keys_blocking(limit: 10)
-          first = read_key_blocking
+        def read_keys_blocking(limit: 10, timeout: nil)
+          first = read_key_blocking(timeout: timeout)
           return [] unless first
 
           keys = [first]

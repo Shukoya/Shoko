@@ -49,16 +49,27 @@ module EbookReader
       nil
     end
 
-    def read_key_blocking
+    def read_key_blocking(timeout: nil)
+      deadline = timeout ? monotonic_now + timeout.to_f : nil
       loop do
         key = read_key
         return key if key
 
-        timeout = @decoder.pending_timeout(now: monotonic_now)
-        if timeout
-          next if timeout <= 0
+        now = monotonic_now
+        remaining = deadline ? (deadline - now) : nil
+        return nil if remaining && remaining <= 0
 
-          @input.wait_readable(timeout)
+        pending = @decoder.pending_timeout(now: now)
+        wait = if pending && remaining
+                 [pending, remaining].min
+               else
+                 pending || remaining
+               end
+
+        if wait
+          next if wait <= 0
+
+          @input.wait_readable(wait)
         else
           @input.wait_readable
         end
@@ -76,8 +87,8 @@ module EbookReader
       @output.flush
     end
 
-    def read_input_with_mouse
-      read_key_blocking
+    def read_input_with_mouse(timeout: nil)
+      read_key_blocking(timeout: timeout)
     end
 
     def setup_signal_handlers(&cleanup_callback)

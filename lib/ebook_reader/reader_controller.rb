@@ -412,8 +412,8 @@ module EbookReader
       # left for compatibility; now handled by PaginationCoordinator
     end
 
-    def read_input_keys
-      terminal_service.read_keys_blocking(limit: 10)
+    def read_input_keys(timeout: nil)
+      terminal_service.read_keys_blocking(limit: 10, timeout: timeout)
     end
 
     # Override helper to delegate to the DI-backed wrapping service
@@ -502,6 +502,8 @@ module EbookReader
 
     # Encapsulates the main reader event loop to tame ReaderController complexity.
     class ReaderEventLoop
+      NOTIFICATION_POLL_INTERVAL = 0.1
+
       def initialize(controller, state, metrics_start_time, instrumentation)
         @controller = controller
         @state = state
@@ -515,9 +517,17 @@ module EbookReader
         startup_reference = metrics_start_time
 
         while running?
-          keys = controller.read_input_keys
+          notification_active = toast_message_active?
+          keys = if notification_active
+                   controller.read_input_keys(timeout: NOTIFICATION_POLL_INTERVAL)
+                 else
+                   controller.read_input_keys
+                 end
           record_tti(startup_reference, keys)
-          next if keys.empty?
+          if keys.empty?
+            controller.draw_screen if notification_active
+            next
+          end
 
           controller.dispatch_input_keys(keys)
           controller.draw_screen
@@ -542,6 +552,13 @@ module EbookReader
           0
         )
         @tti_recorded = true
+      end
+
+      def toast_message_active?
+        message = EbookReader::Domain::Selectors::ReaderSelectors.message(state)
+        message && !message.to_s.empty?
+      rescue StandardError
+        false
       end
     end
   end

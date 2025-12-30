@@ -19,6 +19,7 @@ module EbookReader
 
       THEMES = {
         default: DEFAULT_PALETTE,
+        standard: DEFAULT_PALETTE,
         gray: DEFAULT_PALETTE.merge(
           primary: Terminal::ANSI::LIGHT_GREY,
           accent: Terminal::ANSI::BRIGHT_WHITE,

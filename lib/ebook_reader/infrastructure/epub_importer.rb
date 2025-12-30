@@ -26,22 +26,29 @@ module EbookReader
       DEFAULT_LANGUAGE = 'en_US'
       CONTAINER_PATH   = 'META-INF/container.xml'
 
-      def initialize(formatting_service: nil, extract_resources: false)
+      def initialize(formatting_service: nil, extract_resources: false, progress_reporter: nil)
         @formatting_service = formatting_service
         @extract_resources = !!extract_resources
+        @progress_reporter = progress_reporter
       end
 
       def import(epub_path)
         @epub_path = File.expand_path(epub_path)
         raise EbookReader::FileNotFoundError, epub_path unless File.file?(@epub_path)
 
+        report('Opening EPUB archive...', progress: 0.0)
         Zip::File.open(@epub_path) do |zip|
+          report('Reading container.xml...', progress: 0.0)
           container_xml = read_container(zip)
+          report('Locating OPF package...', progress: 0.0)
           opf_path      = locate_opf_path(zip, container_xml)
+          report('Parsing OPF metadata...', progress: 0.0)
           processor     = Helpers::OPFProcessor.new(opf_path, zip: zip)
 
           metadata = processor.extract_metadata
+          report('Building manifest...', progress: 0.0)
           manifest = processor.build_manifest_map
+          report('Reading navigation data...', progress: 0.0)
           chapter_titles = processor.extract_chapter_titles(manifest)
 
           chapters_data = build_chapters(zip, opf_path, processor, manifest, chapter_titles)
@@ -49,7 +56,9 @@ module EbookReader
           chapter_hrefs = chapters_data[:hrefs]
           spine         = chapters_data[:spine]
 
+          report('Building table of contents...', progress: 0.0)
           toc_entries = build_toc_entries(chapters, processor.toc_entries, chapter_hrefs, opf_path)
+          report('Extracting resources...', progress: 0.0) if @extract_resources
           resources   = @extract_resources ? extract_resources(zip, opf_path, manifest) : {}
 
           EpubCache::BookData.new(
@@ -105,7 +114,21 @@ module EbookReader
         hrefs    = []
         spine    = []
 
-        processor.process_spine(manifest, chapter_titles) do |item|
+        items = []
+        processor.process_spine(manifest, chapter_titles) { |item| items << item }
+        total = items.length
+
+        if total.positive?
+          report("Extracting HTML (0/#{total})...", progress: 0.0)
+        else
+          report('Extracting HTML...', progress: 0.0)
+        end
+
+        items.each_with_index do |item, index|
+          report(
+            "Extracting HTML (#{index + 1}/#{total})...",
+            progress: ratio(index + 1, total)
+          )
           raw = read_text_entry(zip, item.file_path)
           resolved_href = resolve_href(opf_path, item.href)
           chapter = Domain::Models::Chapter.new(
@@ -220,6 +243,25 @@ module EbookReader
       def fallback_title(path)
         raw = File.basename(path, File.extname(path)).tr('_', ' ')
         Helpers::TerminalSanitizer.sanitize(raw, preserve_newlines: false, preserve_tabs: false)
+      end
+
+      def report(message, progress: nil)
+        reporter = @progress_reporter
+        return unless reporter
+        return if message.nil? || message.to_s.strip.empty?
+
+        if reporter.respond_to?(:call)
+          reporter.call(message: message, progress: progress)
+        elsif reporter.respond_to?(:update_status)
+          reporter.update_status(message: message, progress: progress)
+        end
+      rescue StandardError
+        nil
+      end
+
+      def ratio(done, total)
+        denom = [total.to_f, 1.0].max
+        done.to_f / denom
       end
     end
   end

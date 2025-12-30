@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 require_relative 'base_component'
-require_relative 'ui/box_drawer'
+require_relative 'render_style'
 require_relative 'ui/overlay_layout'
 require_relative 'annotation_editor_overlay/footer_renderer'
 require_relative 'annotation_editor_overlay/geometry'
 require_relative 'annotation_editor_overlay/note_renderer'
+require_relative '../helpers/text_metrics'
 require_relative '../input/key_definitions'
 require_relative '../helpers/terminal_sanitizer'
 
@@ -14,13 +15,9 @@ module EbookReader
     # Overlay for creating/editing annotations without leaving the reader view.
     class AnnotationEditorOverlayComponent < BaseComponent
       include Constants::UIConstants
-      include UI::BoxDrawer
 
       SAVE_KEYS = ["\x13"].freeze # Ctrl+S
       BACKSPACE_KEYS = ["\x08", "\x7F", '\b'].freeze
-      SAVE_BUTTON_BG = "\e[48;2;69;173;130m"
-      CANCEL_BUTTON_BG = "\e[48;2;191;97;106m"
-      BUTTON_FG = Terminal::ANSI::BRIGHT_WHITE
 
       attr_reader :visible, :selected_text, :note, :chapter_index, :annotation_id
 
@@ -37,11 +34,11 @@ module EbookReader
         @button_regions = {}
         @overlay_sizing = UI::OverlaySizing.new(
           width_ratio: 0.7,
-          width_padding: 6,
-          min_width: 50,
+          width_padding: 10,
+          min_width: 60,
           height_ratio: 0.6,
           height_padding: 6,
-          min_height: 14
+          min_height: 16
         )
       end
 
@@ -66,23 +63,26 @@ module EbookReader
 
         layout = overlay_layout(bounds)
 
-        layout.fill_background(surface, bounds, background: POPUP_BG_DEFAULT)
-        draw_box(surface, bounds, layout.origin_y, layout.origin_x, layout.height, layout.width, label: 'Annotation')
+        render_panel(surface, bounds, layout)
 
         geometry = AnnotationEditorOverlay::Geometry.new(layout)
+        render_header(surface, bounds, geometry)
+        render_selection_summary(surface, bounds, geometry)
+        render_field_label(surface, bounds, geometry)
         note_renderer = AnnotationEditorOverlay::NoteRenderer.new(
-          background: POPUP_BG_DEFAULT,
-          text_color: COLOR_TEXT_PRIMARY,
-          cursor_color: SELECTION_HIGHLIGHT,
-          geometry: geometry
+          background: ANNOTATION_PANEL_BG,
+          text_color: theme_primary,
+          cursor_color: theme_accent,
+          geometry: geometry,
+          placeholder_text: 'Write your annotation...',
+          placeholder_color: COLOR_TEXT_DIM
         )
         note_renderer.render(surface, bounds, note: @note, cursor_pos: @cursor_pos)
 
         footer_renderer = AnnotationEditorOverlay::FooterRenderer.new(
-          background: POPUP_BG_DEFAULT,
-          button_fg: BUTTON_FG,
-          save_bg: SAVE_BUTTON_BG,
-          cancel_bg: CANCEL_BUTTON_BG
+          background: ANNOTATION_PANEL_BG,
+          text_fg: theme_primary,
+          key_fg: COLOR_TEXT_DIM
         )
         @button_regions = footer_renderer.render(surface, bounds, geometry)
       end
@@ -172,6 +172,59 @@ module EbookReader
       end
 
       private
+
+      def render_panel(surface, bounds, layout)
+        layout.fill_background(surface, bounds, background: ANNOTATION_PANEL_BG)
+      end
+
+      def render_header(surface, bounds, geometry)
+        reset = Terminal::ANSI::RESET
+        title = 'Annotation'
+        surface.write(bounds, geometry.header_row, geometry.content_x,
+                      "#{ANNOTATION_PANEL_BG}#{ANNOTATION_HEADER_FG}#{title}#{reset}")
+      end
+
+      def render_selection_summary(surface, bounds, geometry)
+        reset = Terminal::ANSI::RESET
+        summary = selection_summary_text(geometry)
+        return if summary.empty?
+
+        surface.write(bounds, geometry.subheader_row, geometry.content_x,
+                      "#{ANNOTATION_PANEL_BG}#{summary}#{reset}")
+      end
+
+      def render_field_label(surface, bounds, geometry)
+        label = 'Note'
+        surface.write(bounds, geometry.label_row, geometry.content_x,
+                      "#{ANNOTATION_PANEL_BG}#{COLOR_TEXT_DIM}#{label}#{Terminal::ANSI::RESET}")
+      end
+
+      def selection_summary_text(geometry)
+        sanitized = Helpers::TerminalSanitizer.sanitize(@selected_text.to_s,
+                                                       preserve_newlines: false,
+                                                       preserve_tabs: false)
+        condensed = sanitized.gsub(/\s+/, ' ').strip
+        if condensed.empty?
+          return "#{COLOR_TEXT_DIM}Write your note below"
+        end
+
+        label = 'Selected: '
+        max = geometry.content_width - EbookReader::Helpers::TextMetrics.visible_length(label)
+        snippet = EbookReader::Helpers::TextMetrics.truncate_to(condensed, [max, 1].max)
+        "#{COLOR_TEXT_DIM}#{label}#{theme_primary}#{snippet}"
+      end
+
+      def theme_accent
+        EbookReader::Components::RenderStyle.color(:accent)
+      rescue StandardError
+        COLOR_TEXT_ACCENT
+      end
+
+      def theme_primary
+        EbookReader::Components::RenderStyle.color(:primary)
+      rescue StandardError
+        COLOR_TEXT_PRIMARY
+      end
 
       def overlay_layout(bounds)
         width = calculate_width(bounds.width)

@@ -105,11 +105,36 @@ module EbookReader
           {
             timestamp: Time.now.iso8601,
             severity: severity.upcase,
-            message:,
-            context:,
-            metadata:,
+            message: normalize_string(message),
+            context: sanitize_payload(context),
+            metadata: sanitize_payload(metadata),
             thread_id: Thread.current.object_id,
           }.to_json
+        end
+
+        def sanitize_payload(value)
+          case value
+          when String
+            normalize_string(value)
+          when Hash
+            value.each_with_object({}) do |(key, val), acc|
+              safe_key = key.is_a?(String) ? normalize_string(key) : key
+              acc[safe_key] = sanitize_payload(val)
+            end
+          when Array
+            value.map { |item| sanitize_payload(item) }
+          else
+            value
+          end
+        end
+
+        def normalize_string(value)
+          str = value.to_s
+          return str if str.encoding == Encoding::UTF_8 && str.valid_encoding?
+
+          str.encode(Encoding::UTF_8, invalid: :replace, undef: :replace, replace: '?')
+        rescue StandardError
+          value.to_s
         end
 
         # Clear logger state (used in tests)

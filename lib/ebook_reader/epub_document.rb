@@ -17,10 +17,11 @@ module EbookReader
     attr_reader :title, :chapters, :language, :source_path,
                 :cache_path, :cache_sha, :toc_entries, :metadata, :resources
 
-    def initialize(path, formatting_service: nil, background_worker: nil)
+    def initialize(path, formatting_service: nil, background_worker: nil, progress_reporter: nil)
       @open_path = File.expand_path(path)
       @formatting_service = formatting_service
       @background_worker = background_worker
+      @progress_reporter = progress_reporter
       @formatting_pending = {}
       @formatting_pending_mutex = Mutex.new
 
@@ -82,7 +83,8 @@ module EbookReader
     def load_via_pipeline!
       result = Infrastructure::PerformanceMonitor.time('import.pipeline') do
         Infrastructure::PerfTracer.measure('cache.pipeline') do
-          Infrastructure::BookCachePipeline.new.load(@open_path, formatting_service: @formatting_service)
+          Infrastructure::BookCachePipeline.new(progress_reporter: @progress_reporter)
+                                           .load(@open_path, formatting_service: @formatting_service)
         end
       end
 

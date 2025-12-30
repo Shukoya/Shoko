@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_component'
+require_relative '../helpers/text_metrics'
 require_relative '../models/selection_anchor'
 module EbookReader
   module Components
@@ -28,6 +29,7 @@ module EbookReader
         render_popup_menu(surface, bounds)
         render_annotations_overlay(surface, bounds)
         render_annotation_editor_overlay(surface, bounds)
+        render_toast_notification(surface, bounds)
       end
 
       private
@@ -79,6 +81,24 @@ module EbookReader
         return unless overlay.respond_to?(:visible?) && overlay.visible?
 
         overlay.render(surface, bounds)
+      end
+
+      def render_toast_notification(surface, bounds)
+        message = Domain::Selectors::ReaderSelectors.message(@controller.state)
+        message = message.to_s
+        return if message.empty?
+
+        ui = Constants::UIConstants
+        width = bounds.width
+        max_width = [width - 2, 1].max
+        label_max = [max_width - 1, 1].max
+        label = " #{message} "
+        label = EbookReader::Helpers::TextMetrics.truncate_to(label, label_max)
+        content = "|#{label}"
+        col = [width - EbookReader::Helpers::TextMetrics.visible_length(content) + 1, 1].max
+
+        toast = "#{Terminal::ANSI::RESET}#{ui::TOAST_ACCENT}|#{ui::TOAST_FG}#{label}#{Terminal::ANSI::RESET}"
+        surface.write(bounds, 1, col, toast)
       end
 
       def render_text_highlight(surface, bounds, range, color)

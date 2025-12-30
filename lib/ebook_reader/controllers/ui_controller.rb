@@ -107,7 +107,7 @@ module EbookReader
         end
         @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(visible: false))
         @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
-        set_message("#{tab.to_s.capitalize} closed", 1)
+        set_message("#{tab.to_s.capitalize} closed", 1) unless tab == :toc
       end
 
       def open_sidebar_for(tab)
@@ -147,7 +147,7 @@ module EbookReader
           )
         end
         @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
-        set_message("#{tab.to_s.capitalize} opened", 1)
+        set_message("#{tab.to_s.capitalize} opened", 1) unless tab == :toc
       end
 
       public

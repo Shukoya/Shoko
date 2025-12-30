@@ -43,6 +43,20 @@ module EbookReader
       POPUP_FG_DEFAULT = COLOR_TEXT_PRIMARY
       POPUP_FG_SELECTED = Terminal::ANSI::BLACK
 
+      # Tooltip menu colors
+      TOOLTIP_BG_DEFAULT = POPUP_BG_DEFAULT
+      TOOLTIP_BG_SELECTED = "\e[48;2;255;135;135m"
+      TOOLTIP_FG_DEFAULT = "\e[38;2;255;135;135m"
+      TOOLTIP_FG_SELECTED = "\e[38;2;88;88;88m"
+
+      # Annotation editor overlay colors
+      ANNOTATION_PANEL_BG = "\e[48;2;88;88;88m"
+      ANNOTATION_HEADER_FG = "\e[38;2;255;135;135m"
+
+      # Toast notification colors
+      TOAST_ACCENT = "\e[38;2;255;135;135m"
+      TOAST_FG = "\e[38;2;255;255;255m"
+
       # Icons
       ICON_BOOK = '󰂺'
       ICON_RECENT = '󰁯'

@@ -141,12 +141,12 @@ module EbookReader
           pop_key(non_block: true)
         end
 
-        def read_key_blocking
-          pop_key(timeout: 0.1)
+        def read_key_blocking(timeout: nil)
+          pop_key(timeout: timeout || 0.1)
         end
 
-        def read_input_with_mouse
-          read_key_blocking
+        def read_input_with_mouse(timeout: nil)
+          read_key_blocking(timeout: timeout)
         end
 
         private

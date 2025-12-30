@@ -33,8 +33,8 @@ module EbookReader
       terminal_service.disable_mouse
     end
 
-    def read_input_keys
-      key = terminal_service.read_input_with_mouse
+    def read_input_keys(timeout: nil)
+      key = terminal_service.read_input_with_mouse(timeout: timeout)
       return [] unless key
 
       if key.start_with?("\e[<")

@@ -216,7 +216,8 @@ module EbookReader
           height, width = terminal_service.size
           warm_launch_dependencies
 
-          document = load_document_for(path)
+          progress_reporter = progress_reporter_for(presenter)
+          document = load_document_for(path, progress_reporter: progress_reporter)
           if document_cached?(document)
             register_document(document)
             update_total_chapters(document)
@@ -240,9 +241,9 @@ module EbookReader
           ensure_background_worker
         end
 
-        def load_document_for(path)
+        def load_document_for(path, progress_reporter: nil)
           factory = dependencies.resolve(:document_service_factory)
-          factory.call(path).load_document
+          factory.call(path, progress_reporter: progress_reporter).load_document
         end
 
         def ensure_reader_document_for(path)
@@ -292,11 +293,32 @@ module EbookReader
           )
           return unless session
 
+          if presenter.respond_to?(:update_message)
+            presenter.update_message('Calculating pages...')
+            menu.draw_screen
+          end
+
           session.build_full_map! do |done, total|
             presenter.update(done: done, total: total)
             menu.draw_screen
           end
           presenter.update(done: 1, total: 1)
+        end
+
+        def progress_reporter_for(presenter)
+          return nil unless presenter.respond_to?(:update_status)
+
+          last_update = nil
+          lambda do |message: nil, progress: nil|
+            changed = presenter.update_status(message: message, progress: progress)
+            return unless changed
+
+            now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            if last_update.nil? || (now - last_update) >= 0.05
+              menu.draw_screen
+              last_update = now
+            end
+          end
         end
 
         def skip_progress_overlay?
@@ -492,6 +514,12 @@ module EbookReader
         def show(*) end
 
         def update(*) end
+
+        def update_status(*) end
+
+        def update_message(*) end
+
+        def set_progress(*) end
 
         def clear(*) end
       end

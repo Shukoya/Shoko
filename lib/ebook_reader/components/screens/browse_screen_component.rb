@@ -156,6 +156,7 @@ module EbookReader
           loading_path = @state.get(%i[menu loading_path])
           loading_active = @state.get(%i[menu loading_active])
           loading_progress = (@state.get(%i[menu loading_progress]) || 0.0).to_f
+          loading_message = @state.get(%i[menu loading_message])
 
           visible_books.each_with_index do |book, index|
             is_selected = (start_index + index) == selected
@@ -163,9 +164,9 @@ module EbookReader
             render_book_item(surface, bounds, ctx)
 
             progress_row = current_row + 1
-            if loading_active && loading_path == book['path'] && progress_row < bounds.bottom
-              draw_inline_progress(surface, bounds, layout, progress_row, loading_progress)
-              current_row += 2
+            if loading_active && loading_path == book['path'] && progress_row <= bounds.bottom
+              rows_used = draw_inline_progress(surface, bounds, layout, progress_row, loading_progress, loading_message)
+              current_row += 1 + rows_used
             else
               current_row += 1
             end
@@ -227,7 +228,22 @@ module EbookReader
           format('%.1f MB', mb)
         end
 
-        def draw_inline_progress(surface, bounds, layout, row, progress)
+        def draw_inline_progress(surface, bounds, layout, row, progress, message)
+          return 0 if row > bounds.bottom
+
+          rows_used = 0
+          indent = layout[:indent]
+          content_width = layout[:content_width]
+          message_text = message.to_s.strip
+
+          if !message_text.empty?
+            truncated = EbookReader::Helpers::TextMetrics.truncate_to(message_text, content_width)
+            surface.write(bounds, row, indent, "#{COLOR_TEXT_DIM}#{truncated}#{Terminal::ANSI::RESET}")
+            rows_used += 1
+            row += 1
+            return rows_used if row > bounds.bottom
+          end
+
           bar_col = layout[:indent]
           usable = [layout[:content_width], 10].max
           filled = (usable * progress.to_f.clamp(0.0, 1.0)).round
@@ -237,6 +253,7 @@ module EbookReader
           track = accent + ('━' * filled) + reset
           track << (dim + ('━' * (usable - filled)) + reset) if filled < usable
           surface.write(bounds, row, bar_col, track)
+          rows_used + 1
         end
 
         def render_search(surface, bounds, layout)

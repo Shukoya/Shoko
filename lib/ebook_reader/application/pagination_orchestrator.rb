@@ -118,7 +118,7 @@ module EbookReader
         # Returns a hash with optional :page_map_cache for absolute mode.
         def initial_build
           cache = nil
-          with_loading('Opening book…') do
+          with_loading('Calculating pages...') do
             map = strategy.build_initial_map(progress: progress_callback)
             cache = map ? build_absolute_cache_entry(map) : nil
           end

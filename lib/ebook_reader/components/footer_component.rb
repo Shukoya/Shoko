@@ -18,23 +18,16 @@ module EbookReader
         vm = resolve_view_model
         return 0 unless vm
 
-        height = 0
-        height = 1 if renderable_page_info?(vm)
-        height += 1 if message_present?(vm)
-        height
+        renderable_page_info?(vm) ? 1 : 0
       end
 
       def do_render(surface, bounds)
         vm = resolve_view_model
         return unless vm
 
-        page_rows = renderable_page_info?(vm) ? 1 : 0
-        if page_rows.positive?
-          page_row = [bounds.height - (message_present?(vm) ? 1 : 0), 1].max
-          render_page_info(surface, bounds, vm, page_row)
-        end
+        return unless renderable_page_info?(vm)
 
-        render_message_overlay(surface, bounds, vm) if message_present?(vm)
+        render_page_info(surface, bounds, vm, bounds.height)
       ensure
         @cached_view_model = nil
       end
@@ -47,11 +40,6 @@ module EbookReader
         @cached_view_model ||= @view_model_provider.call
       rescue StandardError
         nil
-      end
-
-      def message_present?(view_model)
-        msg = view_model&.message
-        msg && !msg.to_s.empty?
       end
 
       def renderable_page_info?(view_model)
@@ -105,17 +93,6 @@ module EbookReader
 
         write_colored(surface, bounds, row, right_col, right_label,
                       ui_constants::COLOR_TEXT_PRIMARY)
-      end
-
-      def render_message_overlay(surface, bounds, view_model)
-        ui = EbookReader::Constants::UIConstants
-        width = bounds.width
-        message = " #{view_model.message} "
-        message = EbookReader::Helpers::TextMetrics.truncate_to(message, [width - 2, 1].max)
-        col = [(width - EbookReader::Helpers::TextMetrics.visible_length(message)) / 2, 1].max
-        row = bounds.height
-        surface.write(bounds, row, col,
-                      "#{ui::BG_PRIMARY}#{ui::BG_ACCENT}#{message}#{Terminal::ANSI::RESET}")
       end
 
       # ----- helpers -----

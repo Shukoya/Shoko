@@ -209,12 +209,12 @@ module EbookReader
 
         # Document service factory (per-book instance)
         container.register_factory(:document_service_factory) do |c|
-          lambda do |path|
+          lambda do |path, progress_reporter: nil|
             wrapper = c.resolve(:wrapping_service)
             formatting = c.resolve(:formatting_service)
             worker = c.registered?(:background_worker) ? c.resolve(:background_worker) : nil
             klass = Infrastructure::DocumentService
-            instantiate_document_service(klass, path, wrapper, formatting, worker)
+            instantiate_document_service(klass, path, wrapper, formatting, worker, progress_reporter)
           end
         end
 
@@ -276,14 +276,20 @@ module EbookReader
         container
       end
 
-      def self.instantiate_document_service(klass, path, wrapper, formatting, worker)
-        klass.new(path, wrapper, formatting_service: formatting, background_worker: worker)
+      def self.instantiate_document_service(klass, path, wrapper, formatting, worker, progress_reporter = nil)
+        klass.new(
+          path,
+          wrapper,
+          formatting_service: formatting,
+          background_worker: worker,
+          progress_reporter: progress_reporter
+        )
       rescue ArgumentError
         begin
-          klass.new(path, wrapper, formatting_service: formatting)
+          klass.new(path, wrapper, formatting_service: formatting, progress_reporter: progress_reporter)
         rescue ArgumentError
           begin
-            klass.new(path, wrapper)
+            klass.new(path, wrapper, progress_reporter: progress_reporter)
           rescue ArgumentError
             klass.new(path)
           end

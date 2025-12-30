@@ -174,16 +174,16 @@ module EbookReader
         action = @available_actions[index]
 
         # Colors
-        sel_icon = is_selected ? '❯' : ' '
-        bg = is_selected ? POPUP_BG_SELECTED : POPUP_BG_DEFAULT
-        fg = is_selected ? POPUP_FG_SELECTED : POPUP_FG_DEFAULT
+        bg = is_selected ? TOOLTIP_BG_SELECTED : TOOLTIP_BG_DEFAULT
+        fg = is_selected ? TOOLTIP_FG_SELECTED : TOOLTIP_FG_DEFAULT
 
         # Background
         surface.write_abs(bounds, item_y, @x, "#{bg}#{' ' * @width}#{Terminal::ANSI::RESET}")
 
         # Content with icon
-        icon = action[:icon] || sel_icon
-        line_text = EbookReader::Helpers::TextMetrics.pad_right(" #{icon} #{item} ", @width)
+        indicator = is_selected ? '❯' : ' '
+        icon = action[:icon] || ' '
+        line_text = EbookReader::Helpers::TextMetrics.pad_right("#{indicator}#{icon} #{item} ", @width)
         surface.write_abs(bounds, item_y, @x, "#{bg}#{fg}#{line_text}#{Terminal::ANSI::RESET}")
       end
     end
