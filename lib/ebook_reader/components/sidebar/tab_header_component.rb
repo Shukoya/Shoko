@@ -79,6 +79,8 @@ module EbookReader
 
           reset = Terminal::ANSI::RESET
           target.write(1, 1, "#{COLOR_TEXT_DIM}#{'─' * line_width}#{reset}")
+          junction_col = width
+          target.write(1, junction_col, "#{COLOR_TEXT_DIM}┤#{reset}") if junction_col.positive?
         end
 
         def render_tab_navigation(target)

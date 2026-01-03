@@ -11,6 +11,8 @@ require_relative 'components/tooltip_overlay_component'
 module EbookReader
   # A Reader that supports mouse interactions for annotations.
   class MouseableReader < ReaderController
+    SCROLL_WHEEL_STEP = 3
+
     def initialize(epub_path, config = nil, dependencies = nil)
       # Pass dependencies to parent ReaderController
       super
@@ -19,6 +21,7 @@ module EbookReader
       @coordinate_service = dependencies.resolve(:coordinate_service)
 
       @mouse_handler = Annotations::MouseHandler.new
+      @sidebar_scroll_drag_active = false
       state.dispatch(Domain::Actions::ClearPopupMenuAction.new)
       @selected_text = nil
       state.dispatch(Domain::Actions::ClearSelectionAction.new)
@@ -93,14 +96,32 @@ module EbookReader
       height, width = terminal_service.size
       sidebar_bounds = render_coordinator.sidebar_bounds(width, height)
       return false unless sidebar_bounds
-      return false unless @coordinate_service.within_bounds?(
+      sidebar_component = render_coordinator.sidebar_component
+      return false unless sidebar_component
+
+      if @sidebar_scroll_drag_active
+        return handle_sidebar_scroll_drag(event, terminal_coords, sidebar_bounds, sidebar_component)
+      end
+
+      unless @coordinate_service.within_bounds?(
         terminal_coords[:x],
         terminal_coords[:y],
         sidebar_bounds
       )
+        @mouse_handler.reset
+        return false
+      end
+
+      if (delta = mouse_wheel_delta(event[:button]))
+        return true if handle_sidebar_wheel(delta, terminal_coords, sidebar_bounds, sidebar_component)
+      end
+
+      if event[:button].zero? && !event[:released]
+        return true if start_sidebar_scroll_drag(terminal_coords, sidebar_bounds, sidebar_component)
+      end
 
       if event[:released] && event[:button].zero?
-        tab = render_coordinator.sidebar_component&.tab_for_point(
+        tab = sidebar_component.tab_for_point(
           terminal_coords[:x],
           terminal_coords[:y],
           sidebar_bounds
@@ -108,11 +129,106 @@ module EbookReader
         if tab
           ui_controller.activate_sidebar_tab(tab)
           draw_screen
+          @mouse_handler.reset
+          return true
+        end
+
+        toc_item = sidebar_component.toc_entry_at(
+          terminal_coords[:x],
+          terminal_coords[:y],
+          sidebar_bounds
+        )
+        if toc_item && ui_controller.respond_to?(:handle_sidebar_toc_click)
+          ui_controller.handle_sidebar_toc_click(toc_item.full_index)
+          draw_screen
         end
       end
 
       @mouse_handler.reset
       true
+    end
+
+    def mouse_wheel_delta(button)
+      case button
+      when 64
+        -1
+      when 65
+        1
+      end
+    end
+
+    def handle_sidebar_wheel(delta, terminal_coords, sidebar_bounds, sidebar_component)
+      metrics = sidebar_component.toc_scroll_metrics(sidebar_bounds)
+      return false unless metrics
+      return false unless metrics.row_in_track?(terminal_coords[:y])
+
+      indices = metrics.navigable_indices
+      return false if indices.empty?
+
+      current_full = metrics.selected_full_index || indices.first
+      current_pos = metrics.nav_position_for(current_full)
+      if current_pos.nil? && metrics.selected_visible_index
+        fallback_full = metrics.visible_indices[metrics.selected_visible_index]
+        current_pos = metrics.nav_position_for(fallback_full)
+      end
+      current_pos ||= 0
+
+      step = SCROLL_WHEEL_STEP * delta
+      target_pos = (current_pos + step).clamp(0, indices.length - 1)
+      target_full = indices[target_pos]
+
+      if ui_controller.respond_to?(:set_sidebar_toc_selected)
+        ui_controller.set_sidebar_toc_selected(target_full)
+      else
+        state.dispatch(Domain::Actions::UpdateSidebarAction.new(toc_selected: target_full))
+      end
+      draw_screen
+      @mouse_handler.reset
+      true
+    end
+
+    def start_sidebar_scroll_drag(terminal_coords, sidebar_bounds, sidebar_component)
+      metrics = sidebar_component.toc_scroll_metrics(sidebar_bounds)
+      return false unless metrics
+      return false unless metrics.hit_scrollbar?(terminal_coords[:x], terminal_coords[:y])
+
+      @sidebar_scroll_drag_active = true
+      apply_sidebar_scroll_drag(metrics, terminal_coords[:y])
+      draw_screen
+      @mouse_handler.reset
+      true
+    end
+
+    def handle_sidebar_scroll_drag(event, terminal_coords, sidebar_bounds, sidebar_component)
+      if event[:released]
+        @sidebar_scroll_drag_active = false
+        @mouse_handler.reset
+        return true
+      end
+
+      return true unless drag_motion?(event) || event[:button].zero?
+
+      metrics = sidebar_component.toc_scroll_metrics(sidebar_bounds)
+      return true unless metrics
+
+      apply_sidebar_scroll_drag(metrics, terminal_coords[:y])
+      draw_screen
+      true
+    end
+
+    def drag_motion?(event)
+      (event[:button] & 32) != 0
+    end
+
+    def apply_sidebar_scroll_drag(metrics, abs_row)
+      full_index = metrics.full_index_for_abs_row(abs_row)
+      return unless full_index
+
+      if ui_controller.respond_to?(:set_sidebar_toc_selected)
+        ui_controller.set_sidebar_toc_selected(full_index)
+      else
+        state.dispatch(Domain::Actions::UpdateSidebarAction.new(toc_selected: full_index))
+      end
     end
 
     def handle_popup_click(event)

@@ -18,6 +18,8 @@ module EbookReader
               updates[%i[reader sidebar_active_tab]] = value
             when :toc_selected
               updates[%i[reader sidebar_toc_selected]] = value
+            when :toc_collapsed
+              updates[%i[reader sidebar_toc_collapsed]] = value
             when :annotations_selected
               updates[%i[reader sidebar_annotations_selected]] = value
             when :bookmarks_selected

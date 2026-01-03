@@ -131,8 +131,11 @@ module EbookReader
         when :toc
           doc = safe_resolve(:document)
           entries = toc_entries_for(doc)
+          collapsed = toc_collapsed_for(entries)
           current_chapter = (@state.get(%i[reader current_chapter]) || 0).to_i
-          updates[:toc_selected] = toc_index_for_chapter(entries, current_chapter)
+          selected = toc_index_for_chapter(entries, current_chapter)
+          updates[:toc_collapsed] = collapsed
+          updates[:toc_selected] = ensure_visible_toc_selection(entries, collapsed, selected)
         when :annotations
           updates[:annotations_selected] =
             @state.get(%i[reader sidebar_annotations_selected]) || 0
@@ -155,14 +158,16 @@ module EbookReader
         updates = { active_tab: tab }
         case tab
         when :toc
+          doc = safe_resolve(:document)
+          entries = toc_entries_for(doc)
+          collapsed = toc_collapsed_for(entries)
           selected = @state.get(%i[reader sidebar_toc_selected])
           if selected.nil?
-            doc = safe_resolve(:document)
-            entries = toc_entries_for(doc)
             current_chapter = (@state.get(%i[reader current_chapter]) || 0).to_i
             selected = toc_index_for_chapter(entries, current_chapter)
           end
-          updates[:toc_selected] = selected
+          updates[:toc_collapsed] = collapsed
+          updates[:toc_selected] = ensure_visible_toc_selection(entries, collapsed, selected)
         when :annotations
           updates[:annotations_selected] = @state.get(%i[reader sidebar_annotations_selected]) || 0
         when :bookmarks
@@ -182,6 +187,43 @@ module EbookReader
         end
       rescue StandardError => e
         set_message("Sidebar error: #{e.message}", 3)
+      end
+
+      def handle_sidebar_toc_click(index)
+        return unless sidebar_visible?
+        return unless index.is_a?(Integer)
+
+        doc = safe_resolve(:document)
+        entries = toc_entries_for(doc)
+        return if entries.empty?
+        return unless index.between?(0, entries.length - 1)
+
+        collapsed = toc_collapsed_for(entries)
+        updates = { toc_selected: index }
+
+        if toc_entry_has_children?(entries, index)
+          collapsed = toggle_toc_collapsed(collapsed, index)
+          updates[:toc_collapsed] = collapsed
+          updates[:toc_selected] = ensure_visible_toc_selection(entries, collapsed, index)
+        end
+
+        @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(updates))
+      end
+
+      def set_sidebar_toc_selected(index)
+        return unless sidebar_visible?
+
+        doc = safe_resolve(:document)
+        entries = toc_entries_for(doc)
+        return if entries.empty?
+
+        idx = index.to_i.clamp(0, entries.length - 1)
+        collapsed = toc_collapsed_for(entries)
+        idx = ensure_visible_toc_selection(entries, collapsed, idx)
+
+        updates = { toc_selected: idx }
+        updates[:toc_collapsed] = collapsed if collapsed != @state.get(%i[reader sidebar_toc_collapsed])
+        @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(updates))
       end
 
       def show_help
@@ -391,10 +433,13 @@ module EbookReader
                                when :toc
                                  doc = safe_resolve(:document)
                                  entries = toc_entries_for(doc)
-                                 indices = navigable_toc_entry_indices(entries)
+                                 raw_collapsed = @state.get(%i[reader sidebar_toc_collapsed])
+                                 collapsed = toc_collapsed_for(entries, raw_collapsed)
+                                 indices = navigable_toc_entry_indices(entries, collapsed)
                                  first_index = indices.first
                                  last_index = indices.last
                                  cur = (@state.get(%i[reader sidebar_toc_selected]) || first_index || 0).to_i
+                                 cur = ensure_visible_toc_selection(entries, collapsed, cur)
                                  target = if delta.positive?
                                             indices.find { |idx| idx > cur } || last_index || cur
                                           elsif delta.negative?
@@ -402,11 +447,9 @@ module EbookReader
                                           else
                                             cur
                                           end
-                                 @state.dispatch(
-                                   EbookReader::Domain::Actions::UpdateSidebarAction.new(
-                                     toc_selected: target
-                                   )
-                                 )
+                                 updates = { toc_selected: target }
+                                 updates[:toc_collapsed] = collapsed if raw_collapsed != collapsed
+                                 @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(updates))
                                  return
                                when :annotations
                                  cur = @state.get(%i[reader sidebar_annotations_selected]) || 0
@@ -445,15 +488,87 @@ module EbookReader
         end
       end
 
-      def navigable_toc_entry_indices(entries)
-        indices = []
+      def toc_collapsed_for(entries, raw = nil)
+        raw = @state.get(%i[reader sidebar_toc_collapsed]) if raw.nil?
         entries = Array(entries)
-        entries.each_with_index do |entry, idx|
-          indices << idx if entry&.chapter_index
+        return [] if entries.empty?
+        return default_toc_collapsed(entries) if raw.nil?
+
+        normalize_toc_collapsed(entries, raw)
+      end
+
+      def toggle_toc_collapsed(collapsed, index)
+        list = Array(collapsed).dup
+        if list.include?(index)
+          list.delete(index)
+        else
+          list << index
         end
+        list
+      end
+
+      def ensure_visible_toc_selection(entries, collapsed, current)
+        visible = toc_visible_indices(entries, collapsed)
+        return current if visible.include?(current)
+        return visible.first || 0 if visible.empty?
+
+        current_level = entries[current]&.level
+        if current_level
+          visible_set = visible.each_with_object({}) { |idx, memo| memo[idx] = true }
+          (current - 1).downto(0) do |idx|
+            next unless visible_set[idx]
+            return idx if entries[idx].level < current_level
+          end
+        end
+
+        visible.reverse.find { |idx| idx < current } || visible.first
+      end
+
+      def toc_visible_indices(entries, collapsed)
+        entries = Array(entries)
+        return [] if entries.empty?
+
+        collapsed_set = Array(collapsed).each_with_object({}) { |idx, memo| memo[idx] = true }
+        visible = []
+        skip_levels = []
+
+        entries.each_with_index do |entry, idx|
+          level = entry.level
+          skip_levels.pop while skip_levels.any? && level <= skip_levels.last
+          next if skip_levels.any?
+
+          visible << idx
+          next unless collapsed_set[idx]
+          next unless toc_entry_has_children?(entries, idx)
+
+          skip_levels << level
+        end
+
+        visible
+      end
+
+      def default_toc_collapsed(entries)
+        entries.each_index.select { |idx| toc_entry_has_children?(entries, idx) }
+      end
+
+      def normalize_toc_collapsed(entries, raw)
+        max_index = entries.length - 1
+        Array(raw).map(&:to_i).uniq.select do |idx|
+          idx.between?(0, max_index) && toc_entry_has_children?(entries, idx)
+        end
+      end
+
+      def toc_entry_has_children?(entries, index)
+        next_entry = entries[index + 1]
+        next_entry && next_entry.level > entries[index].level
+      end
+
+      def navigable_toc_entry_indices(entries, collapsed)
+        visible = toc_visible_indices(entries, collapsed)
+        indices = visible.select { |idx| entries[idx]&.chapter_index }
         return indices unless indices.empty?
 
-        (0...entries.length).to_a
+        visible
       end
 
       def toc_index_for_chapter(entries, chapter_index)

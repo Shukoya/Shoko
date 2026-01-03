@@ -43,6 +43,7 @@ module EbookReader
                            %i[reader sidebar_visible],
                            %i[reader sidebar_active_tab],
                            %i[reader sidebar_toc_selected],
+                           %i[reader sidebar_toc_collapsed],
                            %i[reader sidebar_annotations_selected],
                            %i[reader sidebar_bookmarks_selected])
       end
@@ -70,33 +71,33 @@ module EbookReader
         # Draw modern border
         draw_border(surface, bounds)
 
-        # Calculate layout areas - tabs now at bottom
-        header_height = HEADER_HEIGHT
-        tab_height = TAB_HEIGHT
-        help_height = HELP_HEIGHT
-        content_height = bh - header_height - tab_height - help_height
-
-        return if content_height <= 0
+        content_bounds = content_bounds_for(bounds)
+        return unless content_bounds
 
         # Render minimal header with title only
         header_bounds = Rect.new(x: bx, y: by, width: bw,
-                                 height: header_height)
+                                 height: HEADER_HEIGHT)
         render_header(surface, header_bounds)
 
         # Render active tab content
-        y_header = by + header_height
-        content_bounds = Rect.new(x: bx, y: y_header,
-                                  width: bw, height: content_height)
         render_active_tab(surface, content_bounds)
 
         # Render help text
-        help_bounds = Rect.new(x: bx, y: y_header + content_height,
-                               width: bw, height: help_height)
+        help_bounds = Rect.new(
+          x: bx,
+          y: content_bounds.y + content_bounds.height,
+          width: bw,
+          height: HELP_HEIGHT
+        )
         render_help(surface, help_bounds)
 
         # Render tab navigation at bottom
-        tab_bounds = Rect.new(x: bx, y: by + bh - tab_height,
-                              width: bw, height: tab_height)
+        tab_bounds = Rect.new(
+          x: bx,
+          y: by + bh - TAB_HEIGHT,
+          width: bw,
+          height: TAB_HEIGHT
+        )
         @tab_header.render(surface, tab_bounds)
       end
 
@@ -115,6 +116,30 @@ module EbookReader
 
         tab_bounds = tab_bounds_for(sidebar_bounds)
         @tab_header.tab_for_point(tab_bounds, col, row)
+      end
+
+      def toc_entry_at(col, row, sidebar_bounds)
+        return nil unless sidebar_bounds
+
+        active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(@state)
+        return nil unless active_tab == :toc
+
+        content_bounds = content_bounds_for(sidebar_bounds)
+        return nil unless content_bounds
+
+        @toc_renderer.entry_at(content_bounds, col, row)
+      end
+
+      def toc_scroll_metrics(sidebar_bounds)
+        return nil unless sidebar_bounds
+
+        active_tab = EbookReader::Domain::Selectors::ReaderSelectors.sidebar_active_tab(@state)
+        return nil unless active_tab == :toc
+
+        content_bounds = content_bounds_for(sidebar_bounds)
+        return nil unless content_bounds
+
+        @toc_renderer.scroll_metrics(content_bounds)
       end
 
       private
@@ -165,6 +190,18 @@ module EbookReader
         renderer = { toc: @toc_renderer, annotations: @annotations_renderer,
                      bookmarks: @bookmarks_renderer }[active_tab]
         renderer&.render(surface, bounds)
+      end
+
+      def content_bounds_for(bounds)
+        content_height = bounds.height - HEADER_HEIGHT - TAB_HEIGHT - HELP_HEIGHT
+        return nil if content_height <= 0
+
+        Rect.new(
+          x: bounds.x,
+          y: bounds.y + HEADER_HEIGHT,
+          width: bounds.width,
+          height: content_height
+        )
       end
 
       def tab_bounds_for(sidebar_bounds)

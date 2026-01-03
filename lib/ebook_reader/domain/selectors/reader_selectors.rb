@@ -157,6 +157,10 @@ module EbookReader
           state.get(%i[reader sidebar_toc_selected])
         end
 
+        def self.sidebar_toc_collapsed(state)
+          state.get(%i[reader sidebar_toc_collapsed])
+        end
+
         def self.sidebar_annotations_selected(state)
           state.get(%i[reader sidebar_annotations_selected])
         end

@@ -232,6 +232,7 @@ module EbookReader
             sidebar_bookmarks_selected: 0,
             sidebar_toc_filter: nil,
             sidebar_toc_filter_active: false,
+            sidebar_toc_collapsed: nil,
           },
 
           menu: {
