@@ -6,7 +6,7 @@ require_relative 'screens/menu_screen_component'
 require_relative 'screens/browse_screen_component'
 require_relative 'screens/library_screen_component'
 require_relative 'screens/settings_screen_component'
-require_relative 'screens/open_file_screen_component'
+require_relative 'screens/download_books_screen_component'
 require_relative 'screens/annotations_screen_component'
 require_relative 'screens/annotation_edit_screen_component'
 
@@ -33,7 +33,11 @@ module EbookReader
       def state_changed(path, _old_value, new_value)
         return unless path == %i[menu mode]
 
-        mapped = new_value == :search ? :browse : new_value
+        mapped = case new_value
+                 when :search then :browse
+                 when :download_search, :download then :download
+                 else new_value
+                 end
         @current_screen = @screen_components[mapped] || @screen_components[:menu]
       end
 
@@ -62,8 +66,8 @@ module EbookReader
         @screen_components[:settings]
       end
 
-      def open_file_screen
-        @screen_components[:open_file]
+      def download_books_screen
+        @screen_components[:download]
       end
 
       def annotations_screen
@@ -82,7 +86,7 @@ module EbookReader
           browse: Screens::BrowseScreenComponent.new(@catalog, @state),
           library: Screens::LibraryScreenComponent.new(@state, @dependencies),
           settings: Screens::SettingsScreenComponent.new(@state, @catalog),
-          open_file: Screens::OpenFileScreenComponent.new(@state),
+          download: Screens::DownloadBooksScreenComponent.new(@state),
           annotations: Screens::AnnotationsScreenComponent.new(@state),
           annotation_editor: Screens::AnnotationEditScreenComponent.new(@state, @dependencies),
           annotation_detail: Screens::AnnotationDetailScreenComponent.new(@state),

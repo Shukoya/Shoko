@@ -40,7 +40,8 @@ module EbookReader
           register_search_bindings
           register_library_bindings
           register_settings_bindings
-          register_open_file_bindings
+          register_download_bindings
+          register_download_search_bindings
           register_annotations_bindings
           register_annotation_detail_bindings
           register_annotation_editor_bindings
@@ -121,10 +122,25 @@ module EbookReader
           dispatcher.register_mode(:settings, bindings)
         end
 
-        def register_open_file_bindings
-          bindings = EbookReader::Input::CommandFactory.text_input_commands(:file_input)
+        def register_download_bindings
+          bindings = {}
+          add_nav_up_down(bindings, :download_up, :download_down)
+          add_confirm_bindings(bindings, :download_confirm)
           add_back_bindings(bindings)
-          dispatcher.register_mode(:open_file, bindings)
+          bindings['/'] = :download_start_search
+          %w[n N].each { |k| bindings[k] = :download_next_page }
+          %w[p P].each { |k| bindings[k] = :download_prev_page }
+          bindings['r'] = :download_refresh
+          dispatcher.register_mode(:download, bindings)
+        end
+
+        def register_download_search_bindings
+          bindings = EbookReader::Input::CommandFactory.text_input_commands(:download_query, nil,
+                                                                            cursor_field: :download_cursor)
+          add_confirm_bindings(bindings, :download_submit_search)
+          bindings['/'] = :download_exit_search
+          Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = :download_exit_search }
+          dispatcher.register_mode(:download_search, bindings)
         end
 
         def register_annotations_bindings
@@ -148,23 +164,23 @@ module EbookReader
 
         def register_annotation_editor_bindings
           bindings = {}
-          cancel_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.cancel
+          cancel_cmd = EbookReader::Application::Commands::AnnotationEditorCommandFactory.cancel
           Input::KeyDefinitions::ACTIONS[:cancel].each { |k| bindings[k] = cancel_cmd }
 
-          save_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
+          save_cmd = EbookReader::Application::Commands::AnnotationEditorCommandFactory.save
           bindings["\x13"] = save_cmd
           bindings['S'] = save_cmd
 
-          backspace_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.backspace
+          backspace_cmd = EbookReader::Application::Commands::AnnotationEditorCommandFactory.backspace
           Input::KeyDefinitions::ACTIONS[:backspace].each { |k| bindings[k] = backspace_cmd }
 
           enter_keys = []
           enter_keys += Array(Input::KeyDefinitions::ACTIONS[:enter]) if Input::KeyDefinitions::ACTIONS.key?(:enter)
           enter_keys += Array(EbookReader::Input::KeyDefinitions::ACTIONS[:confirm])
-          enter_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.enter
+          enter_cmd = EbookReader::Application::Commands::AnnotationEditorCommandFactory.enter
           enter_keys.each { |k| bindings[k] = enter_cmd }
 
-          bindings[:__default__] = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.insert_char
+          bindings[:__default__] = EbookReader::Application::Commands::AnnotationEditorCommandFactory.insert_char
           dispatcher.register_mode(:annotation_editor, bindings)
         end
       end

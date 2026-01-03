@@ -25,9 +25,7 @@ module EbookReader
         nil
       end
 
-      def background_worker
-        @background_worker
-      end
+      attr_reader :background_worker
 
       def run
         ensure_background_worker

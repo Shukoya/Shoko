@@ -29,16 +29,32 @@ module EbookReader
           state.get(%i[menu search_cursor])
         end
 
-        def self.file_input(state)
-          state.get(%i[menu file_input]) || ''
-        end
-
         def self.search_active(state)
           state.get(%i[menu search_active])
         end
 
         def self.search_active?(state)
           search_active(state)
+        end
+
+        def self.download_query(state)
+          state.get(%i[menu download_query]) || ''
+        end
+
+        def self.download_cursor(state)
+          state.get(%i[menu download_cursor])
+        end
+
+        def self.download_selected(state)
+          state.get(%i[menu download_selected])
+        end
+
+        def self.download_status(state)
+          state.get(%i[menu download_status])
+        end
+
+        def self.download_progress(state)
+          state.get(%i[menu download_progress])
         end
       end
     end

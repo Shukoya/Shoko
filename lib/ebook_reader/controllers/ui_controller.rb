@@ -58,8 +58,11 @@ module EbookReader
       end
 
       def open_bookmarks
-        switch_mode(:bookmarks)
-        @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(bookmark_selected: 0))
+        toggle_sidebar(:bookmarks)
+      end
+
+      def open_annotations_tab
+        toggle_sidebar(:annotations)
       end
 
       def open_annotations
@@ -83,8 +86,10 @@ module EbookReader
       # Unified sidebar toggling for :toc, :annotations, :bookmarks
       def toggle_sidebar(tab)
         close_annotations_overlay
-        if sidebar_open_for?(tab)
-          close_sidebar_with_restore(tab)
+        if sidebar_visible?
+          return close_sidebar_with_restore(tab) if sidebar_open_for?(tab)
+
+          switch_sidebar_tab(tab)
         else
           open_sidebar_for(tab)
         end
@@ -137,20 +142,47 @@ module EbookReader
         end
 
         @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(updates))
-        if tab == :toc
-          selected = updates[:toc_selected].to_i
-          @state.dispatch(
-            EbookReader::Domain::Actions::UpdateSelectionsAction.new(
-              toc_selected: selected,
-              sidebar_toc_selected: selected
-            )
-          )
-        end
         @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
         set_message("#{tab.to_s.capitalize} opened", 1) unless tab == :toc
       end
 
+      def switch_sidebar_tab(tab)
+        return unless sidebar_visible?
+
+        current_tab = @state.get(%i[reader sidebar_active_tab])
+        return if current_tab == tab
+
+        updates = { active_tab: tab }
+        case tab
+        when :toc
+          selected = @state.get(%i[reader sidebar_toc_selected])
+          if selected.nil?
+            doc = safe_resolve(:document)
+            entries = toc_entries_for(doc)
+            current_chapter = (@state.get(%i[reader current_chapter]) || 0).to_i
+            selected = toc_index_for_chapter(entries, current_chapter)
+          end
+          updates[:toc_selected] = selected
+        when :annotations
+          updates[:annotations_selected] = @state.get(%i[reader sidebar_annotations_selected]) || 0
+        when :bookmarks
+          updates[:bookmarks_selected] = @state.get(%i[reader sidebar_bookmarks_selected]) || 0
+        end
+
+        @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(updates))
+      end
+
       public
+
+      def activate_sidebar_tab(tab)
+        if sidebar_visible?
+          switch_sidebar_tab(tab)
+        else
+          open_sidebar_for(tab)
+        end
+      rescue StandardError => e
+        set_message("Sidebar error: #{e.message}", 3)
+      end
 
       def show_help
         switch_mode(:help)
@@ -217,6 +249,29 @@ module EbookReader
           end
           @state.dispatch(EbookReader::Domain::Actions::UpdateSidebarAction.new(visible: false))
           @state.dispatch(EbookReader::Domain::Actions::UpdateReaderModeAction.new(:read))
+        when :bookmarks
+          bookmarks = @state.get(%i[reader bookmarks]) || []
+          selected = (@state.get(%i[reader sidebar_bookmarks_selected]) || 0).to_i
+          selected = selected.clamp(0, [bookmarks.length - 1, 0].max)
+          bookmark = bookmarks[selected]
+          return unless bookmark
+
+          bookmark_service = safe_resolve(:bookmark_service)
+          if bookmark_service
+            bookmark_service.jump_to_bookmark(bookmark)
+            safe_resolve(:state_controller)&.save_progress
+          end
+          close_sidebar_with_restore(:bookmarks)
+        when :annotations
+          annotations = @state.get(%i[reader annotations]) || []
+          selected = (@state.get(%i[reader sidebar_annotations_selected]) || 0).to_i
+          selected = selected.clamp(0, [annotations.length - 1, 0].max)
+          annotation = annotations[selected]
+          return unless annotation
+
+          state_controller = safe_resolve(:state_controller)
+          state_controller&.jump_to_annotation(annotation)
+          close_sidebar_with_restore(:annotations)
         end
       end
 
@@ -348,8 +403,7 @@ module EbookReader
                                             cur
                                           end
                                  @state.dispatch(
-                                   EbookReader::Domain::Actions::UpdateSelectionsAction.new(
-                                     sidebar_toc_selected: target,
+                                   EbookReader::Domain::Actions::UpdateSidebarAction.new(
                                      toc_selected: target
                                    )
                                  )

@@ -28,6 +28,10 @@ module EbookReader
           File.join(reader_config_root, *segments)
         end
 
+        def downloads_root
+          reader_config_path('downloads')
+        end
+
         def cache_root
           if @cache_paths.respond_to?(:reader_root)
             @cache_paths.reader_root

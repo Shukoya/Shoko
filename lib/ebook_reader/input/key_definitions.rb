@@ -41,6 +41,7 @@ module EbookReader
         show_toc: %w[t T].freeze,
         add_bookmark: ['b'].freeze,
         show_bookmarks: ['B'].freeze,
+        show_annotations_tab: ['A'].freeze,
         show_help: ['?'].freeze,
         show_annotations: ["\u0001"].freeze,
         rebuild_pagination: ['R'].freeze,
@@ -50,7 +51,7 @@ module EbookReader
       # Menu navigation keys
       MENU = {
         browse: ['f'].freeze,
-        open_file: ['o'].freeze,
+        download_books: ['d'].freeze,
         settings: ['s'].freeze,
         search: ['S'].freeze,
         refresh_scan: ['r'].freeze,

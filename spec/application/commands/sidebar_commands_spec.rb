@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe EbookReader::Domain::Commands::SidebarCommand do
+RSpec.describe EbookReader::Application::Commands::SidebarCommand do
   let(:container) { EbookReader::Domain::ContainerFactory.create_test_container }
   let(:state_store) { EbookReader::Infrastructure::StateStore.new(EbookReader::Infrastructure::EventBus.new) }
   let(:context) { double('Context', dependencies: container) }

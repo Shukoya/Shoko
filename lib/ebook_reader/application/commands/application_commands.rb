@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
+require_relative 'base_command'
+
 module EbookReader
-  module Domain
+  module Application
     module Commands
       # Application-level commands for mode switching and system control.
       class ApplicationCommand < BaseCommand
@@ -84,32 +86,23 @@ module EbookReader
 
         def handle_show_toc(deps)
           controller = resolve_optional(deps, :ui_controller)
-          if controller.respond_to?(:open_toc)
-            controller.open_toc
-          else
-            state_store = resolve_state_store(deps)
-            state_store&.set(%i[reader mode], :toc)
-          end
+          return unless controller.respond_to?(:open_toc)
+
+          controller.open_toc
         end
 
         def handle_show_bookmarks(deps)
           controller = resolve_optional(deps, :ui_controller)
-          if controller.respond_to?(:open_bookmarks)
-            controller.open_bookmarks
-          else
-            state_store = resolve_state_store(deps)
-            state_store&.set(%i[reader mode], :bookmarks)
-          end
+          return unless controller.respond_to?(:open_bookmarks)
+
+          controller.open_bookmarks
         end
 
         def handle_show_annotations(deps)
           controller = resolve_optional(deps, :ui_controller)
-          if controller.respond_to?(:open_annotations)
-            controller.open_annotations
-          else
-            state_store = resolve_state_store(deps)
-            state_store&.set(%i[reader mode], :annotations)
-          end
+          return unless controller.respond_to?(:open_annotations)
+
+          controller.open_annotations
         end
 
         def dependencies_from(context)
@@ -160,7 +153,7 @@ module EbookReader
         def validate_parameters(params)
           super
 
-          valid_modes = %i[read help toc bookmarks search]
+          valid_modes = %i[read help search]
           return if valid_modes.include?(@mode)
 
           raise ValidationError.new("Mode must be one of #{valid_modes}", command_name: name)
@@ -172,42 +165,7 @@ module EbookReader
           state_store = context.dependencies.resolve(:state_store)
           state_store.set(%i[reader mode], @mode)
 
-          # Mode-specific initialization
-          case @mode
-          when :toc
-            # Load table of contents if not already loaded
-            load_toc_if_needed(context)
-          when :bookmarks
-            # Refresh bookmarks
-            refresh_bookmarks(context)
-          end
-
           @mode
-        end
-
-        private
-
-        def load_toc_if_needed(context)
-          # This would integrate with document service to load TOC
-          # For now, just mark that TOC is needed
-          deps = context.dependencies
-          state_store = deps.resolve(:state_store)
-          current_state = state_store.current_state
-
-          return if current_state.dig(:reader, :toc_loaded)
-
-          state_store.set(%i[reader toc_loaded], true)
-        end
-
-        def refresh_bookmarks(context)
-          deps = context.dependencies
-          return unless deps.registered?(:bookmark_service)
-
-          bookmark_service = deps.resolve(:bookmark_service)
-          bookmarks = bookmark_service.bookmarks
-
-          state_store = deps.resolve(:state_store)
-          state_store.set(%i[reader bookmarks], bookmarks)
         end
       end
 

@@ -3,6 +3,7 @@
 require 'time'
 
 require_relative '../helpers/terminal_sanitizer'
+require_relative '../infrastructure/config_paths'
 
 module EbookReader
   class EPUBFinder
@@ -33,6 +34,7 @@ module EbookReader
 
       def priority_directories
         [
+          Infrastructure::ConfigPaths.downloads_root,
           '~/Books',
           '~/Bücher', # German books directory
           '~/Documents/Books',

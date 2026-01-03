@@ -8,6 +8,7 @@ require_relative '../infrastructure/pagination_cache'
 require_relative '../infrastructure/cache_paths'
 require_relative '../infrastructure/epub_cache'
 require_relative '../infrastructure/kitty_image_renderer'
+require_relative '../infrastructure/gutendex_client'
 require_relative '../infrastructure/repositories/cached_library_repository'
 require_relative '../infrastructure/parsers/xhtml_content_parser'
 require_relative '../infrastructure/render_registry'
@@ -15,6 +16,7 @@ require_relative 'services/cache_service'
 require_relative 'services/file_writer_service'
 require_relative 'services/instrumentation_service'
 require_relative 'services/path_service'
+require_relative 'services/download_service'
 
 module EbookReader
   module Domain
@@ -150,6 +152,9 @@ module EbookReader
         container.register(:atomic_file_writer, Infrastructure::AtomicFileWriter)
         container.register(:epub_cache_factory, ->(path) { Infrastructure::EpubCache.new(path) })
         container.register(:epub_cache_predicate, ->(path) { Infrastructure::EpubCache.cache_file?(path) })
+        container.register_singleton(:gutendex_client) do |c|
+          Infrastructure::GutendexClient.new(logger: c.resolve(:logger))
+        end
         container.register(:background_worker_factory,
                            lambda do |name: 'reader-worker'|
                              Infrastructure::BackgroundWorker.new(name:)
@@ -185,6 +190,7 @@ module EbookReader
         container.register_factory(:annotation_service) { |c| Domain::Services::AnnotationService.new(c) }
         container.register_factory(:library_service) { |c| Domain::Services::LibraryService.new(c) }
         container.register_factory(:catalog_service) { |c| Domain::Services::CatalogService.new(c) }
+        container.register_factory(:download_service) { |c| Domain::Services::DownloadService.new(c) }
         # WrappingService caches windows/chapters; make it a singleton to share cache
         container.register_singleton(:wrapping_service) { |c| Domain::Services::WrappingService.new(c) }
         container.register_singleton(:formatting_service) { |c| Domain::Services::FormattingService.new(c) }

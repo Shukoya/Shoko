@@ -236,7 +236,7 @@ module EbookReader
           content_width = layout[:content_width]
           message_text = message.to_s.strip
 
-          if !message_text.empty?
+          unless message_text.empty?
             truncated = EbookReader::Helpers::TextMetrics.truncate_to(message_text, content_width)
             surface.write(bounds, row, indent, "#{COLOR_TEXT_DIM}#{truncated}#{Terminal::ANSI::RESET}")
             rows_used += 1

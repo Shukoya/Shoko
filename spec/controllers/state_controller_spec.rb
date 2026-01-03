@@ -60,7 +60,7 @@ RSpec.describe EbookReader::Controllers::StateController do
   it 'loads bookmarks into state and can delete' do
     sc.load_bookmarks
     expect(state.get(%i[reader bookmarks])).not_to be_empty
-    state.set(%i[reader bookmark_selected], 0)
+    state.set(%i[reader sidebar_bookmarks_selected], 0)
     expect { sc.delete_selected_bookmark }.not_to raise_error
   end
 

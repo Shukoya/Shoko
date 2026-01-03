@@ -22,7 +22,7 @@ module EbookReader
           end
 
           def current_view_mode(snapshot)
-            snapshot.dig(:config, :view_mode) || snapshot.dig(:reader, :view_mode) || :split
+            snapshot.dig(:config, :view_mode) || :split
           end
 
           def current_chapter(snapshot)

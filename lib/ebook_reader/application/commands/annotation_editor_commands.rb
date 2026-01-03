@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
+require_relative 'base_command'
+
 module EbookReader
-  module Domain
+  module Application
     module Commands
       # Commands for driving the Annotation Editor screen via a clean, public API.
       class AnnotationEditorCommand < BaseCommand

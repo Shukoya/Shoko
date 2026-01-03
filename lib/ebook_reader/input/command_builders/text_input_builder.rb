@@ -12,7 +12,7 @@ module EbookReader
 
         INPUT_PATHS = {
           search_query: %i[menu search_query],
-          file_input: %i[menu file_input],
+          download_query: %i[menu download_query],
         }.freeze
 
         BACKSPACE_KEYS = Helpers::ACTION_CACHE[:backspace]

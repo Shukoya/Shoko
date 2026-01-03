@@ -69,10 +69,28 @@ module EbookReader
         #
         # @param bookmark [Bookmark] Bookmark to navigate to
         def jump_to_bookmark(bookmark)
-          apply_state_updates({
-                                %i[reader current_chapter] => bookmark.chapter_index,
-                                %i[reader current_page] => bookmark.page_offset,
-                              })
+          snapshot = safe_snapshot
+          line_offset = bookmark.line_offset.to_i
+          updates = {
+            %i[reader current_chapter] => bookmark.chapter_index,
+            %i[reader current_page] => line_offset,
+          }
+
+          view_mode = snapshot.dig(:config, :view_mode) || :split
+          if view_mode == :split
+            stride = split_stride_for(snapshot)
+            updates[%i[reader left_page]] = line_offset
+            updates[%i[reader right_page]] = line_offset + stride
+          else
+            updates[%i[reader single_page]] = line_offset
+          end
+
+          if dynamic_mode?(snapshot)
+            page_index = page_index_for(bookmark.chapter_index, line_offset)
+            updates[%i[reader current_page_index]] = page_index if page_index
+          end
+
+          apply_state_updates(updates)
 
           # Publish domain event
           @domain_event_bus.publish(Events::BookmarkNavigated.new(
@@ -137,11 +155,19 @@ module EbookReader
           @event_bus = resolve(:event_bus)
           @bookmark_repository = resolve(:bookmark_repository)
           @domain_event_bus = resolve(:domain_event_bus)
+          @page_calculator = resolve(:page_calculator) if registered?(:page_calculator)
+          @layout_service = resolve(:layout_service) if registered?(:layout_service)
+          @terminal_service = resolve(:terminal_service) if registered?(:terminal_service)
         end
 
         private
 
         def get_current_line_offset(state)
+          if dynamic_mode?(state)
+            offset = line_offset_for_dynamic_state(state)
+            return offset if offset
+          end
+
           # Get the current line position depending on view mode
           view_mode = state.dig(:config, :view_mode) || :split
           if view_mode == :split
@@ -149,6 +175,50 @@ module EbookReader
           else
             state.dig(:reader, :single_page) || 0
           end
+        end
+
+        def dynamic_mode?(state)
+          (state.dig(:config, :page_numbering_mode) || :dynamic) == :dynamic
+        end
+
+        def page_index_for(chapter_index, line_offset)
+          return nil unless @page_calculator
+
+          idx = @page_calculator.find_page_index(chapter_index, line_offset)
+          idx && idx >= 0 ? idx : nil
+        rescue StandardError
+          nil
+        end
+
+        def line_offset_for_dynamic_state(state)
+          return nil unless @page_calculator
+
+          page_index = state.dig(:reader, :current_page_index) || 0
+          page = @page_calculator.get_page(page_index)
+          offset = page && (page[:start_line] || page['start_line'])
+          offset&.to_i
+        rescue StandardError
+          nil
+        end
+
+        def split_stride_for(state)
+          return 1 unless @layout_service
+
+          width = state.dig(:ui, :terminal_width)
+          height = state.dig(:ui, :terminal_height)
+          height, width = @terminal_service.size if (!width || !height) && @terminal_service
+          width = width.to_i
+          height = height.to_i
+          width = 80 if width <= 0
+          height = 24 if height <= 0
+
+          _, content_height = @layout_service.calculate_metrics(width, height, :split)
+          spacing = state.dig(:config, :line_spacing) || EbookReader::Constants::DEFAULT_LINE_SPACING
+          stride = @layout_service.adjust_for_line_spacing(content_height, spacing)
+          stride = 1 if stride.to_i <= 0
+          stride
+        rescue StandardError
+          1
         end
 
         def generate_text_snippet(state)

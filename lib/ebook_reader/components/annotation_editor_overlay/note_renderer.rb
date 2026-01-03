@@ -10,7 +10,8 @@ module EbookReader
     module AnnotationEditorOverlay
       # Renders note contents and cursor inside the annotation editor overlay.
       class NoteRenderer
-        def initialize(background:, text_color:, cursor_color:, geometry:, placeholder_text: nil, placeholder_color: nil)
+        def initialize(background:, text_color:, cursor_color:, geometry:, placeholder_text: nil,
+                       placeholder_color: nil)
           @background = background
           @text_color = text_color
           @cursor_color = cursor_color

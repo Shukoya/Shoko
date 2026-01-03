@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
+require_relative 'base_command'
+
 module EbookReader
-  module Domain
+  module Application
     module Commands
       # Navigation commands using proper domain services.
       # Eliminates direct controller coupling and state manipulation.

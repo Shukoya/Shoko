@@ -24,14 +24,15 @@ RSpec.describe EbookReader::ReaderController do
 
   it 'skips non-navigable TOC headings when moving through TOC' do
     controller = described_class.new('/tmp/fake.epub')
-    controller.toc_down
-    expect(controller.state.get(%i[reader toc_selected])).to eq(1)
+    controller.state.set(%i[reader sidebar_visible], true)
+    controller.state.set(%i[reader sidebar_active_tab], :toc)
+    controller.state.set(%i[reader sidebar_toc_selected], 0)
+
+    controller.sidebar_down
     expect(controller.state.get(%i[reader sidebar_toc_selected])).to eq(1)
 
-    controller.state.set(%i[reader toc_selected], 2)
     controller.state.set(%i[reader sidebar_toc_selected], 2)
-    controller.toc_up
-    expect(controller.state.get(%i[reader toc_selected])).to eq(1)
+    controller.sidebar_up
     expect(controller.state.get(%i[reader sidebar_toc_selected])).to eq(1)
   end
 end

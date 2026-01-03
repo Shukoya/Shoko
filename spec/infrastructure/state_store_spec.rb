@@ -13,7 +13,7 @@ RSpec.describe EbookReader::Infrastructure::StateStore do
   describe '#initialize' do
     it 'creates initial state' do
       expect(state_store.get(%i[reader current_chapter])).to eq(0)
-      expect(state_store.get(%i[reader view_mode])).to eq(:split)
+      expect(state_store.get(%i[config view_mode])).to eq(:split)
       expect(state_store.get(%i[config theme])).to eq(:dark)
     end
   end
@@ -21,7 +21,7 @@ RSpec.describe EbookReader::Infrastructure::StateStore do
   describe '#get' do
     it 'retrieves values by path' do
       expect(state_store.get(%i[reader current_chapter])).to eq(0)
-      expect(state_store.get(%i[menu selected_index])).to eq(0)
+      expect(state_store.get(%i[menu selected])).to eq(0)
     end
 
     it 'returns nil for non-existent paths' do
@@ -138,7 +138,7 @@ RSpec.describe EbookReader::Infrastructure::StateStore do
 
     it 'validates view mode is valid' do
       expect do
-        state_store.set(%i[reader view_mode], :invalid)
+        state_store.set(%i[config view_mode], :invalid)
       end.to raise_error(ArgumentError, 'invalid view_mode')
     end
 

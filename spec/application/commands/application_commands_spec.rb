@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe EbookReader::Domain::Commands::ApplicationCommand do
+RSpec.describe EbookReader::Application::Commands::ApplicationCommand do
   let(:container) { EbookReader::Domain::ContainerFactory.create_test_container }
   let(:state_store) { EbookReader::Infrastructure::StateStore.new(EbookReader::Infrastructure::EventBus.new) }
   let(:context) { double('Context', dependencies: container) }
@@ -36,7 +36,7 @@ RSpec.describe EbookReader::Domain::Commands::ApplicationCommand do
     end
 
     it 'toggles view mode via state store when UI controller missing' do
-      state_store.set(%i[reader view_mode], :split)
+      state_store.set(%i[config view_mode], :split)
 
       described_class.new(:toggle_view_mode).execute(context)
 

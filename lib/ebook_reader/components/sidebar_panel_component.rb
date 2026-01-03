@@ -17,6 +17,7 @@ module EbookReader
 
       TABS = %i[toc annotations bookmarks].freeze
       TAB_TITLES = { toc: 'Contents', annotations: 'Annotations', bookmarks: 'Bookmarks' }.freeze
+      TAB_KEYS = { toc: 'T', annotations: 'A', bookmarks: 'B' }.freeze
       HELP_TEXTS = {
         toc: '↑↓ Navigate • ⏎ Jump • / Filter',
         annotations: '↑↓ Navigate • ⏎ Jump • e Edit • d Delete',
@@ -24,6 +25,9 @@ module EbookReader
       }.freeze
       DEFAULT_WIDTH_PERCENT = 30
       MIN_WIDTH = 24
+      HEADER_HEIGHT = 2
+      TAB_HEIGHT = 3
+      HELP_HEIGHT = 1
 
       def initialize(state, dependencies)
         super() # Call BaseComponent constructor
@@ -41,15 +45,6 @@ module EbookReader
                            %i[reader sidebar_toc_selected],
                            %i[reader sidebar_annotations_selected],
                            %i[reader sidebar_bookmarks_selected])
-        @needs_redraw = true
-      end
-
-      def state_changed(path, old_value, new_value)
-        # Call parent invalidate to properly trigger re-rendering
-        super
-
-        # Keep legacy @needs_redraw for backward compatibility
-        @needs_redraw = true
       end
 
       def preferred_width(total_width)
@@ -76,9 +71,9 @@ module EbookReader
         draw_border(surface, bounds)
 
         # Calculate layout areas - tabs now at bottom
-        header_height = 2
-        tab_height = 3
-        help_height = 1
+        header_height = HEADER_HEIGHT
+        tab_height = TAB_HEIGHT
+        help_height = HELP_HEIGHT
         content_height = bh - header_height - tab_height - help_height
 
         return if content_height <= 0
@@ -103,8 +98,23 @@ module EbookReader
         tab_bounds = Rect.new(x: bx, y: by + bh - tab_height,
                               width: bw, height: tab_height)
         @tab_header.render(surface, tab_bounds)
+      end
 
-        @needs_redraw = false
+      def sidebar_bounds_for(total_width, total_height)
+        return nil unless @state.get(%i[reader sidebar_visible])
+
+        width = preferred_width(total_width)
+        return nil unless width.is_a?(Integer) && width.positive?
+
+        width = [width, total_width].min
+        Rect.new(x: 1, y: 1, width: width, height: total_height)
+      end
+
+      def tab_for_point(col, row, sidebar_bounds)
+        return nil unless sidebar_bounds
+
+        tab_bounds = tab_bounds_for(sidebar_bounds)
+        @tab_header.tab_for_point(tab_bounds, col, row)
       end
 
       private
@@ -131,21 +141,9 @@ module EbookReader
 
         # Close indicator
         w = bounds.width
-        close_text = "#{COLOR_TEXT_DIM}[t]#{reset}"
+        key = TAB_KEYS[active_tab] || 'T'
+        close_text = "#{COLOR_TEXT_DIM}[#{key}]#{reset}"
         surface.write(bounds, 1, w - 5, close_text)
-      end
-
-      def get_clean_title(active_tab)
-        case active_tab
-        when :toc
-          'Contents'
-        when :annotations
-          'Annotations'
-        when :bookmarks
-          'Bookmarks'
-        else
-          'Sidebar'
-        end
       end
 
       def render_help(surface, bounds)
@@ -167,6 +165,15 @@ module EbookReader
         renderer = { toc: @toc_renderer, annotations: @annotations_renderer,
                      bookmarks: @bookmarks_renderer }[active_tab]
         renderer&.render(surface, bounds)
+      end
+
+      def tab_bounds_for(sidebar_bounds)
+        Rect.new(
+          x: sidebar_bounds.x,
+          y: sidebar_bounds.y + sidebar_bounds.height - TAB_HEIGHT,
+          width: sidebar_bounds.width,
+          height: TAB_HEIGHT
+        )
       end
     end
   end

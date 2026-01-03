@@ -22,7 +22,7 @@ module EbookReader
           { icon: '', label: 'Browse Library' },
           { icon: '', label: 'Library' },
           { icon: '', label: 'Annotations' },
-          { icon: '', label: 'Open File' },
+          { icon: '', label: 'Download Books' },
           { icon: '', label: 'Settings' },
           { icon: '', label: 'Quit' },
         ].freeze

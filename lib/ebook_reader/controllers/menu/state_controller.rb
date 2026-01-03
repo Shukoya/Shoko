@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../mouseable_reader'
+require_relative '../../helpers/terminal_sanitizer'
 require_relative '../../application/pagination_orchestrator'
 require_relative '../../main_menu/menu_progress_presenter'
 
@@ -87,37 +88,91 @@ module EbookReader
           cache_service&.valid_cache?(path) || false
         end
 
-        def sanitize_input_path(input)
-          return '' unless input
-
-          path = input.chomp.strip
-          if (path.start_with?("'") && path.end_with?("'")) ||
-             (path.start_with?('"') && path.end_with?('"'))
-            path = path[1..-2]
-          end
-          path = path.delete('"')
-          File.expand_path(path)
-        end
-
-        def handle_file_path(path)
-          return invalid_file_path unless File.exist?(path)
-
-          if path.downcase.end_with?('.epub') || cache_service&.cache_file?(path)
-            recent_path = canonical_recent_path(path)
-            recent_repository&.add(recent_path) if recent_path
-            run_reader(path)
-          else
-            invalid_file_path
-          end
-        end
-
-        def invalid_file_path
-          catalog.scan_message = 'Invalid file path'
-          catalog.scan_status = :error
-        end
-
         def refresh_scan(force: false)
           catalog.start_scan(force: force)
+        end
+
+        def search_downloads(query:, page_url: nil)
+          service = download_service
+          unless service
+            update_download_state(download_status: :error, download_message: 'Download service unavailable')
+            return
+          end
+
+          update_download_state(
+            download_status: :searching,
+            download_message: 'Searching Gutendex...',
+            download_progress: 0.0,
+            download_results: [],
+            download_count: 0,
+            download_next: nil,
+            download_prev: nil,
+            download_selected: 0
+          )
+          menu.draw_screen
+
+          result = service.search(query: query, page_url: page_url)
+          message = if result[:books].empty?
+                      'No results'
+                    else
+                      "Found #{result[:books].length} of #{result[:count]}"
+                    end
+          update_download_state(
+            download_results: result[:books],
+            download_count: result[:count],
+            download_next: result[:next],
+            download_prev: result[:previous],
+            download_selected: 0,
+            download_status: :done,
+            download_message: message,
+            download_progress: 0.0
+          )
+        rescue StandardError => e
+          update_download_state(download_status: :error,
+                                download_message: "Search failed: #{e.message}",
+                                download_progress: 0.0)
+        ensure
+          menu.draw_screen
+        end
+
+        def download_book(book)
+          service = download_service
+          unless service
+            update_download_state(download_status: :error, download_message: 'Download service unavailable')
+            menu.draw_screen
+            return
+          end
+
+          title = safe_book_title(book)
+          update_download_state(download_status: :downloading,
+                                download_message: "Downloading #{title}...",
+                                download_progress: 0.0)
+          menu.draw_screen
+
+          last_draw = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          result = service.download(book) do |done, total|
+            progress = total.to_i.positive? ? done.to_f / total : 0.0
+            now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            next if (now - last_draw) < 0.08 && progress < 1.0
+
+            percent = total.to_i.positive? ? (progress * 100).round : nil
+            message = percent ? "Downloading #{title}... #{percent}%" : "Downloading #{title}..."
+            update_download_state(download_progress: progress, download_message: message)
+            menu.draw_screen
+            last_draw = now
+          end
+
+          downloaded_message = result[:existing] ? 'Already downloaded' : "Saved to #{File.basename(result[:path])}"
+          update_download_state(download_status: :done,
+                                download_message: downloaded_message,
+                                download_progress: 0.0)
+          refresh_scan(force: true)
+        rescue StandardError => e
+          update_download_state(download_status: :error,
+                                download_message: "Download failed: #{e.message}",
+                                download_progress: 0.0)
+        ensure
+          menu.draw_screen
         end
 
         def open_selected_annotation
@@ -181,6 +236,10 @@ module EbookReader
           @cache_service ||= resolve_optional(:cache_service)
         end
 
+        def download_service
+          @download_service ||= resolve_optional(:download_service)
+        end
+
         def logger
           @logger ||= resolve_optional(:logger)
         end
@@ -189,6 +248,18 @@ module EbookReader
           dependencies.resolve(name)
         rescue StandardError
           nil
+        end
+
+        def update_download_state(payload)
+          state.dispatch(action(:update_menu, payload))
+        end
+
+        def safe_book_title(book)
+          return 'book' unless book.respond_to?(:[])
+
+          title = book[:title] || book['title'] || 'book'
+          EbookReader::Helpers::TerminalSanitizer.sanitize(title.to_s, preserve_newlines: false,
+                                                                       preserve_tabs: false)
         end
 
         def build_background_worker(name:)

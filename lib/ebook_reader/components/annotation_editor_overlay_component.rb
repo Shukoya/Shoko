@@ -201,12 +201,10 @@ module EbookReader
 
       def selection_summary_text(geometry)
         sanitized = Helpers::TerminalSanitizer.sanitize(@selected_text.to_s,
-                                                       preserve_newlines: false,
-                                                       preserve_tabs: false)
+                                                        preserve_newlines: false,
+                                                        preserve_tabs: false)
         condensed = sanitized.gsub(/\s+/, ' ').strip
-        if condensed.empty?
-          return "#{COLOR_TEXT_DIM}Write your note below"
-        end
+        return "#{COLOR_TEXT_DIM}Write your note below" if condensed.empty?
 
         label = 'Selected: '
         max = geometry.content_width - EbookReader::Helpers::TextMetrics.visible_length(label)

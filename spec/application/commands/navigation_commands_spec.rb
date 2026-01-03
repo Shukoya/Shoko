@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe EbookReader::Domain::Commands::NavigationCommand do
+RSpec.describe EbookReader::Application::Commands::NavigationCommand do
   let(:navigation_service) { instance_double(EbookReader::Domain::Services::NavigationService) }
   let(:state_store) { instance_double(EbookReader::Infrastructure::StateStore) }
   let(:dependencies) { create_test_dependencies }
@@ -79,7 +79,7 @@ RSpec.describe EbookReader::Domain::Commands::NavigationCommand do
 
       expect do
         command.execute(context_without_deps)
-      end.to raise_error(EbookReader::Domain::Commands::BaseCommand::ValidationError)
+      end.to raise_error(EbookReader::Application::Commands::BaseCommand::ValidationError)
     end
 
     it 'checks service availability' do
@@ -94,7 +94,7 @@ RSpec.describe EbookReader::Domain::Commands::NavigationCommand do
   end
 end
 
-RSpec.describe EbookReader::Domain::Commands::ScrollCommand do
+RSpec.describe EbookReader::Application::Commands::ScrollCommand do
   let(:navigation_service) { instance_double(EbookReader::Domain::Services::NavigationService) }
   let(:dependencies) { create_test_dependencies }
   let(:context) { double('Context', dependencies: dependencies) }
@@ -126,19 +126,19 @@ RSpec.describe EbookReader::Domain::Commands::ScrollCommand do
 
       expect do
         command.execute(context)
-      end.to raise_error(EbookReader::Domain::Commands::BaseCommand::ValidationError, /Direction must be one of/)
+      end.to raise_error(EbookReader::Application::Commands::BaseCommand::ValidationError, /Direction must be one of/)
     end
 
     it 'validates lines is positive integer' do
       expect do
         command = described_class.new(:up, lines: -1)
         command.execute(context)
-      end.to raise_error(EbookReader::Domain::Commands::BaseCommand::ValidationError, /Lines must be a positive integer/)
+      end.to raise_error(EbookReader::Application::Commands::BaseCommand::ValidationError, /Lines must be a positive integer/)
     end
   end
 end
 
-RSpec.describe EbookReader::Domain::Commands::JumpToChapterCommand do
+RSpec.describe EbookReader::Application::Commands::JumpToChapterCommand do
   let(:navigation_service) { instance_double(EbookReader::Domain::Services::NavigationService) }
   let(:dependencies) { create_test_dependencies }
   let(:context) { double('Context', dependencies: dependencies) }
@@ -175,12 +175,12 @@ RSpec.describe EbookReader::Domain::Commands::JumpToChapterCommand do
 
       expect do
         command.execute(context)
-      end.to raise_error(EbookReader::Domain::Commands::BaseCommand::ValidationError, /Chapter index must be a non-negative integer/)
+      end.to raise_error(EbookReader::Application::Commands::BaseCommand::ValidationError, /Chapter index must be a non-negative integer/)
     end
   end
 end
 
-RSpec.describe EbookReader::Domain::Commands::NavigationCommandFactory do
+RSpec.describe EbookReader::Application::Commands::NavigationCommandFactory do
   let(:dependencies) { create_test_dependencies }
   let(:context) { double('Context', dependencies: dependencies) }
   let(:navigation_service) { instance_double(EbookReader::Domain::Services::NavigationService) }

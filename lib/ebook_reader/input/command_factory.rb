@@ -7,7 +7,6 @@ require_relative 'command_builders/menu_selection_builder'
 require_relative 'command_builders/reader_navigation_builder'
 require_relative 'command_builders/reader_control_builder'
 require_relative 'command_builders/text_input_builder'
-require_relative 'command_builders/bookmark_builder'
 require_relative 'command_builders/helpers'
 
 module EbookReader
@@ -61,15 +60,6 @@ module EbookReader
         end
       end
 
-      # Builders for bookmark-mode command maps.
-      module Bookmarks
-        module_function
-
-        def list(empty_handler = nil)
-          CommandBuilders::BookmarkBuilder.new(empty_handler).build
-        end
-      end
-
       module_function
 
       def navigation_commands(_context, selection_field, max_value_proc)
@@ -94,10 +84,6 @@ module EbookReader
 
       def text_input_commands(input_field, context_method = nil, cursor_field: nil)
         TextInput.commands(input_field, context_method: context_method, cursor_field: cursor_field)
-      end
-
-      def bookmark_commands(empty_handler = nil)
-        Bookmarks.list(empty_handler)
       end
     end
   end

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module EbookReader
-  module Domain
+  module Application
     module Commands
       # Enhanced base command with proper error handling and validation.
       # Replaces the mixed command patterns with consistent implementation.

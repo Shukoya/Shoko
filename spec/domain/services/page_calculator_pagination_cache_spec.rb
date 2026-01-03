@@ -92,7 +92,7 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
     # Configure state to dynamic numbering and layout
     state.update({ %i[config page_numbering_mode] => :dynamic,
                    %i[config line_spacing] => :normal,
-                   %i[reader view_mode] => :single,
+                   %i[config view_mode] => :single,
                    %i[ui terminal_width] => 80,
                    %i[ui terminal_height] => 24 })
 

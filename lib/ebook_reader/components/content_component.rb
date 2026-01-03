@@ -4,15 +4,11 @@ require_relative 'base_component'
 require_relative 'surface'
 require_relative 'reading/view_renderer_factory'
 require_relative 'reading/help_renderer'
-require_relative 'reading/toc_renderer'
-require_relative 'reading/bookmarks_renderer'
 
 module EbookReader
   module Components
     # ContentComponent coordinates the main reading content area.
-    # It switches between help/TOC/bookmarks screens and the active
-    # view renderer based on state, and ensures rendered lines are
-    # reset each frame for selection/highlighting overlays.
+    # It switches between help and the active view renderer based on state.
     class ContentComponent < BaseComponent
       def initialize(controller)
         super(controller&.dependencies) # Initialize BaseComponent with dependencies
@@ -20,14 +16,11 @@ module EbookReader
         @view_renderer = nil
         deps = controller&.dependencies
         @help_renderer = Reading::HelpRenderer.new(deps)
-        @toc_renderer = Reading::TocRenderer.new(deps)
-        @bookmarks_renderer = Reading::BookmarksRenderer.new(deps)
 
         state = @controller.state
         # Observe core fields that affect content rendering via StateStore paths
         state.add_observer(self, %i[reader current_chapter], %i[reader left_page], %i[reader right_page],
                            %i[reader single_page], %i[reader current_page_index], %i[reader mode], %i[config view_mode])
-        @needs_redraw = true
       end
 
       # Observer callback triggered by ObserverStateStore
@@ -37,9 +30,6 @@ module EbookReader
 
         # Call parent invalidate to properly trigger re-rendering
         super
-
-        # Keep legacy @needs_redraw for backward compatibility
-        @needs_redraw = true
       end
 
       # Fill remaining space after fixed components
@@ -53,14 +43,9 @@ module EbookReader
         case state.get(%i[reader mode])
         when :help
           @help_renderer.render(surface, bounds)
-        when :toc
-          @toc_renderer.render(surface, bounds)
-        when :bookmarks
-          @bookmarks_renderer.render(surface, bounds)
         else
           view_renderer.render(surface, bounds)
         end
-        @needs_redraw = false
       end
 
       private

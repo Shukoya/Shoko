@@ -19,7 +19,7 @@ module EbookReader
 
           def build_dynamic(doc:, width:, height:, config:, &on_progress)
             key = dynamic_cache_key(width, height, config)
-            cached = key ? load_cached_pages(doc, key, config) : nil
+            cached = key ? load_cached_pages(doc, key) : nil
             if cached&.any?
               annotate_profile(pagination_cache: 'hit')
               return Result.new(pages: cached, cached: true)
@@ -92,25 +92,11 @@ module EbookReader
             @pagination_cache.layout_key(width, height, view_mode, line_spacing, kitty_images: kitty_images)
           end
 
-          def load_cached_pages(doc, key, config)
+          def load_cached_pages(doc, key)
             return nil unless @pagination_cache
 
             cached = @pagination_cache.load_for_document(doc, key)
-            return cached if cached&.any?
-
-            return nil unless config.respond_to?(:get)
-
-            view_mode_reader = config.get(%i[reader view_mode])
-            return nil unless view_mode_reader
-
-            alt_key = @pagination_cache.layout_key(
-              config.get(%i[ui terminal_width]) || 0,
-              config.get(%i[ui terminal_height]) || 0,
-              view_mode_reader,
-              resolve_line_spacing(config),
-              kitty_images: EbookReader::Infrastructure::KittyGraphics.enabled_for?(config)
-            )
-            @pagination_cache.load_for_document(doc, alt_key)
+            cached if cached&.any?
           rescue StandardError
             nil
           end
@@ -149,9 +135,9 @@ module EbookReader
 
           def resolve_view_mode(config)
             if config.respond_to?(:dig)
-              config.dig(:reader, :view_mode) || config.dig(:config, :view_mode)
+              config.dig(:config, :view_mode)
             elsif config.respond_to?(:get)
-              config.get(%i[config view_mode]) || config.get(%i[reader view_mode])
+              config.get(%i[config view_mode])
             else
               :split
             end || :split

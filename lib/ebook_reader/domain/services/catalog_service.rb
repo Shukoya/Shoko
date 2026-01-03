@@ -41,7 +41,9 @@ module EbookReader
         end
 
         def process_results
-          @scanner.process_results
+          results = @scanner.process_results
+          update_entries(results) if results
+          results
         end
 
         def entries

@@ -5,7 +5,7 @@ require_relative 'base_action'
 module EbookReader
   module Domain
     module Actions
-      # Action for updating the reader mode (read, help, toc, bookmarks, etc.)
+      # Action for updating the reader mode (read/help/annotation editor).
       class UpdateReaderModeAction < BaseAction
         def initialize(new_mode)
           super(mode: new_mode)

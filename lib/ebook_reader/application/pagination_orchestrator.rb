@@ -102,8 +102,8 @@ module EbookReader
           strategy.build_full_map(progress: progress)
         end
 
-        def build_full_map(progress: nil, &block)
-          build_full_map!(progress: progress, &block)
+        def build_full_map(progress: nil, &)
+          build_full_map!(progress: progress, &)
         end
 
         def refresh_after_resize

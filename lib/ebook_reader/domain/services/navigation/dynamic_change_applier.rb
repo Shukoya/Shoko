@@ -17,9 +17,9 @@ module EbookReader
 
             update_page_index(changes[:current_page_index]) if changes.key?(:current_page_index)
 
-            if changes.key?(:current_chapter)
-              @state_updater.apply(%i[reader current_chapter] => changes[:current_chapter])
-            end
+            return unless changes.key?(:current_chapter)
+
+            @state_updater.apply(%i[reader current_chapter] => changes[:current_chapter])
           end
 
           private

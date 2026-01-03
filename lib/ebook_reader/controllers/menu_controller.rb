@@ -91,8 +91,44 @@ module EbookReader
         ui_controller.switch_to_mode(mode)
       end
 
-      def open_file_dialog
-        ui_controller.open_file_dialog
+      def open_download_screen
+        ui_controller.open_download_screen
+      end
+
+      def download_start_search
+        ui_controller.download_start_search
+      end
+
+      def download_exit_search
+        ui_controller.download_exit_search
+      end
+
+      def download_submit_search
+        ui_controller.download_submit_search
+      end
+
+      def download_refresh
+        ui_controller.download_refresh
+      end
+
+      def download_next_page
+        ui_controller.download_next_page
+      end
+
+      def download_prev_page
+        ui_controller.download_prev_page
+      end
+
+      def download_up
+        ui_controller.download_up
+      end
+
+      def download_down
+        ui_controller.download_down
+      end
+
+      def download_confirm
+        ui_controller.download_confirm
       end
 
       def cleanup_and_exit(code, message, error = nil)
@@ -101,14 +137,6 @@ module EbookReader
 
       def handle_browse_navigation(key)
         ui_controller.handle_browse_navigation(key)
-      end
-
-      def handle_backspace_input
-        ui_controller.handle_backspace_input
-      end
-
-      def handle_character_input(key)
-        ui_controller.handle_character_input(key)
       end
 
       def switch_to_edit_annotation(annotation, book_path)
@@ -183,8 +211,8 @@ module EbookReader
         @main_menu_component.settings_screen
       end
 
-      def open_file_screen
-        @main_menu_component.open_file_screen
+      def download_books_screen
+        @main_menu_component.download_books_screen
       end
 
       def annotations_screen
@@ -224,7 +252,6 @@ module EbookReader
       def process_scan_results_if_available
         return unless (epubs = @catalog.process_results)
 
-        @catalog.update_entries(epubs) if epubs
         @filtered_epubs = epubs
         @main_menu_component.browse_screen.filtered_epubs = epubs
         @main_menu_component.library_screen.invalidate_cache!
@@ -256,7 +283,7 @@ module EbookReader
 
       private
 
-      # Provide current editor component for domain commands in menu context
+      # Provide current editor component for application commands in menu context
       def current_editor_component
         return nil unless EbookReader::Domain::Selectors::MenuSelectors.mode(@state) == :annotation_editor
 
@@ -264,8 +291,6 @@ module EbookReader
       end
 
       # file_not_found and handle_reader_error provided by Actions::FileActions
-
-      # Use Actions::FileActions#sanitize_input_path and #handle_file_path
 
       def load_recent_books
         recent_repository = begin

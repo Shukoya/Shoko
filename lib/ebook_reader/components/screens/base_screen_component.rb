@@ -11,7 +11,6 @@ module EbookReader
       class BaseScreenComponent < BaseComponent
         def initialize(services = nil)
           super
-          @needs_redraw = true
         end
 
         # Screens typically take the full available height

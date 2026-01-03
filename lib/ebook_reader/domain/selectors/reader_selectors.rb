@@ -63,14 +63,6 @@ module EbookReader
           state.get(%i[reader annotations]) || []
         end
 
-        def self.toc_selected(state)
-          state.get(%i[reader toc_selected])
-        end
-
-        def self.bookmark_selected(state)
-          state.get(%i[reader bookmark_selected])
-        end
-
         # Pagination selectors
         def self.page_map(state)
           state.get(%i[reader page_map]) || []
@@ -159,10 +151,6 @@ module EbookReader
 
         def self.sidebar_active_tab(state)
           state.get(%i[reader sidebar_active_tab])
-        end
-
-        def self.sidebar_width_percent(state)
-          state.get(%i[reader sidebar_width_percent])
         end
 
         def self.sidebar_toc_selected(state)

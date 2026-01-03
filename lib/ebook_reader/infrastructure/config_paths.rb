@@ -22,6 +22,11 @@ module EbookReader
       def legacy_reader_root
         File.join(Dir.home, '.config', 'reader')
       end
+
+      # Downloaded books directory under config root.
+      def downloads_root
+        File.join(reader_root, 'downloads')
+      end
     end
   end
 end

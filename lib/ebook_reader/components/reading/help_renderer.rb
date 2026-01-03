@@ -29,6 +29,8 @@ module EbookReader
           '  t         Show Table of Contents',
           '  b         Add a bookmark',
           '  B         Show bookmarks',
+          '  A         Show annotations sidebar',
+          '  Ctrl+A    Toggle annotations overlay',
           '',
           'Other Keys:',
           '  ?         Show/hide this help',

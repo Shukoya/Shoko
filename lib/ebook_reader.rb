@@ -28,6 +28,7 @@ require_relative 'ebook_reader/infrastructure/cache_pointer_manager'
 require_relative 'ebook_reader/infrastructure/document_service'
 require_relative 'ebook_reader/infrastructure/pagination_cache'
 require_relative 'ebook_reader/infrastructure/library_scanner'
+require_relative 'ebook_reader/infrastructure/gutendex_client'
 require_relative 'ebook_reader/application/pagination_cache_preloader'
 
 # Error definitions
@@ -62,7 +63,7 @@ require_relative 'ebook_reader/recent_files'
 require_relative 'ebook_reader/epub_document'
 require_relative 'ebook_reader/helpers/text_metrics'
 
-# Legacy command system removed - now using Domain commands only
+# Legacy command system removed - now using Application commands only
 
 # Input system - load early for dependency resolution
 require_relative 'ebook_reader/input/key_definitions'
@@ -103,15 +104,16 @@ require_relative 'ebook_reader/domain/services/notification_service'
 require_relative 'ebook_reader/domain/services/library_service'
 require_relative 'ebook_reader/domain/services/catalog_service'
 require_relative 'ebook_reader/domain/services/settings_service'
-require_relative 'ebook_reader/domain/commands/base_command'
-require_relative 'ebook_reader/domain/commands/navigation_commands'
-require_relative 'ebook_reader/domain/commands/application_commands'
-require_relative 'ebook_reader/domain/commands/bookmark_commands'
-require_relative 'ebook_reader/domain/commands/sidebar_commands'
-require_relative 'ebook_reader/domain/commands/conditional_navigation_commands'
-require_relative 'ebook_reader/domain/commands/menu_commands'
-require_relative 'ebook_reader/domain/commands/annotation_editor_commands'
-require_relative 'ebook_reader/domain/commands/reader_commands'
+require_relative 'ebook_reader/domain/services/download_service'
+require_relative 'ebook_reader/application/commands/base_command'
+require_relative 'ebook_reader/application/commands/navigation_commands'
+require_relative 'ebook_reader/application/commands/application_commands'
+require_relative 'ebook_reader/application/commands/bookmark_commands'
+require_relative 'ebook_reader/application/commands/sidebar_commands'
+require_relative 'ebook_reader/application/commands/conditional_navigation_commands'
+require_relative 'ebook_reader/application/commands/menu_commands'
+require_relative 'ebook_reader/application/commands/annotation_editor_commands'
+require_relative 'ebook_reader/application/commands/reader_commands'
 require_relative 'ebook_reader/domain/actions/base_action'
 require_relative 'ebook_reader/domain/actions/toggle_view_mode_action'
 require_relative 'ebook_reader/domain/actions/switch_reader_mode_action'
@@ -123,7 +125,6 @@ require_relative 'ebook_reader/domain/actions/update_message_action'
 require_relative 'ebook_reader/domain/actions/update_chapter_action'
 require_relative 'ebook_reader/domain/actions/update_config_action'
 require_relative 'ebook_reader/domain/actions/update_bookmarks_action'
-require_relative 'ebook_reader/domain/actions/update_mode_action'
 require_relative 'ebook_reader/domain/actions/update_sidebar_action'
 require_relative 'ebook_reader/domain/actions/update_selections_action'
 require_relative 'ebook_reader/domain/actions/update_popup_menu_action'
@@ -142,8 +143,8 @@ require_relative 'ebook_reader/domain/selectors/reader_selectors'
 require_relative 'ebook_reader/domain/selectors/menu_selectors'
 require_relative 'ebook_reader/domain/selectors/config_selectors'
 
-# Input system bridge (load after domain commands)
-require_relative 'ebook_reader/input/domain_command_bridge'
+# Input system bridge (load after application commands)
+require_relative 'ebook_reader/input/command_bridge'
 
 # UI layer - new architecture
 require_relative 'ebook_reader/ui/view_models/reader_view_model'
@@ -182,8 +183,6 @@ require_relative 'ebook_reader/components/reading/base_view_renderer'
 require_relative 'ebook_reader/components/reading/split_view_renderer'
 require_relative 'ebook_reader/components/reading/single_view_renderer'
 require_relative 'ebook_reader/components/reading/help_renderer'
-require_relative 'ebook_reader/components/reading/toc_renderer'
-require_relative 'ebook_reader/components/reading/bookmarks_renderer'
 require_relative 'ebook_reader/components/reading/view_renderer_factory'
 
 # Component system

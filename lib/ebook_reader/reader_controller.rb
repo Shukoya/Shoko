@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'forwardable'
-# Legacy reader modes removed (help/toc/bookmarks now rendered via components)
+# Legacy reader modes removed; TOC/bookmarks live in the sidebar.
 require_relative 'constants/ui_constants'
 require_relative 'errors'
 require_relative 'constants/messages'
@@ -54,7 +54,8 @@ module EbookReader
 
     # Navigation is handled via Domain::NavigationService through input commands
 
-    def_delegators :ui_controller, :switch_mode, :open_toc, :open_bookmarks, :open_annotations,
+    def_delegators :ui_controller, :switch_mode, :open_toc, :open_bookmarks, :open_annotations_tab,
+                   :open_annotations,
                    :show_help, :toggle_view_mode, :increase_line_spacing, :decrease_line_spacing,
                    :toggle_page_numbering_mode, :sidebar_down, :sidebar_up, :sidebar_select,
                    :handle_popup_action
@@ -93,8 +94,8 @@ module EbookReader
         instrumentation: resolve_optional(:instrumentation_service)
       )
       lifecycle = Application::ReaderLifecycle.new(self,
-                                                  dependencies: deps,
-                                                  terminal_service: terminal_service)
+                                                   dependencies: deps,
+                                                   terminal_service: terminal_service)
       @coordinators = Coordinators.new(lifecycle: lifecycle,
                                        pagination_coordinator: nil,
                                        render_coordinator: nil)
@@ -102,7 +103,6 @@ module EbookReader
 
       # Load document before creating controllers that depend on it
       @context.doc = preload_document_from_dependencies
-      reset_navigable_toc_cache! if doc
       load_document unless doc
       # Expose current book path in state for downstream services/screens
       state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(book_path: path))
@@ -134,7 +134,10 @@ module EbookReader
           pagination_cache: resolve_optional(:pagination_cache),
           frame_coordinator: frame_coordinator,
           ui_controller: ui,
-          render_callback: -> { force_redraw; draw_screen },
+          render_callback: lambda {
+            force_redraw
+            draw_screen
+          },
           background_worker_provider: -> { background_worker }
         )
       )
@@ -243,87 +246,6 @@ module EbookReader
     end
 
     # Page calculation and navigation support
-    # Compatibility methods for legacy mode handlers
-    def exit_help
-      ui_controller.switch_mode(:read)
-    end
-
-    def exit_toc
-      ui_controller.switch_mode(:read)
-    end
-
-    def exit_bookmarks
-      ui_controller.switch_mode(:read)
-    end
-
-    def toc_down
-      current = state.get(%i[reader toc_selected]) || 0
-      next_index = next_navigable_toc_index(current)
-      return if next_index == current
-
-      state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(
-                        toc_selected: next_index,
-                        sidebar_toc_selected: next_index
-                      ))
-    end
-
-    def toc_up
-      current = state.get(%i[reader toc_selected]) || 0
-      next_index = previous_navigable_toc_index(current)
-      return if next_index == current
-
-      state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(
-                        toc_selected: next_index,
-                        sidebar_toc_selected: next_index
-                      ))
-    end
-
-    def toc_select
-      document = doc
-      return unless document
-
-      entries = document.respond_to?(:toc_entries) ? Array(document.toc_entries) : []
-      if entries.empty?
-        entries = Array(document.chapters).each_with_index.map do |chapter, idx|
-          Domain::Models::TOCEntry.new(
-            title: chapter&.title || "Chapter #{idx + 1}",
-            href: nil,
-            level: 0,
-            chapter_index: idx,
-            navigable: true
-          )
-        end
-      end
-
-      selected = (state.get(%i[reader toc_selected]) || 0).to_i
-      selected = selected.clamp(0, [entries.length - 1, 0].max)
-      chapter_index = entries[selected]&.chapter_index
-      return unless chapter_index
-
-      nav = dependencies.resolve(:navigation_service)
-      nav.jump_to_chapter(chapter_index)
-    end
-
-    def bookmark_down
-      bookmarks = state.get(%i[reader bookmarks]) || []
-      return if bookmarks.empty?
-
-      current = (state.get(%i[reader bookmark_selected]) || 0).to_i
-      next_index = [current + 1, bookmarks.length - 1].min
-      return if next_index == current
-
-      state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(bookmark_selected: next_index))
-    end
-
-    def bookmark_up
-      state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(bookmark_selected: [state.get(%i[reader bookmark_selected]) - 1,
-                                                                                                   0].max))
-    end
-
-    def bookmark_select
-      jump_to_bookmark
-    end
-
     private
 
     def resolve_optional(service_name)
@@ -351,9 +273,7 @@ module EbookReader
     def wrapping_service
       return memo[:wrapping_service] if memo.key?(:wrapping_service)
 
-      memo[:wrapping_service] = if dependencies.registered?(:wrapping_service)
-                                  dependencies.resolve(:wrapping_service)
-                                end
+      memo[:wrapping_service] = (dependencies.resolve(:wrapping_service) if dependencies.registered?(:wrapping_service))
     rescue StandardError
       memo[:wrapping_service] = nil
     end
@@ -372,15 +292,14 @@ module EbookReader
       factory = dependencies.resolve(:document_service_factory)
       document_service = factory.call(path)
       @context.doc = document_service.load_document
-      reset_navigable_toc_cache!
 
       # Register document in dependency container for services to access
       dependencies.register(:document, doc)
       # Expose chapter count for navigation service logic
       begin
         state.dispatch(EbookReader::Domain::Actions::UpdatePaginationStateAction.new(
-                          total_chapters: doc&.chapter_count || 0
-                        ))
+                         total_chapters: doc&.chapter_count || 0
+                       ))
       rescue StandardError
         # best-effort
       end
@@ -408,10 +327,6 @@ module EbookReader
       service.normalize_range(state, range)
     end
 
-    def initialize_page_calculations
-      # left for compatibility; now handled by PaginationCoordinator
-    end
-
     def read_input_keys(timeout: nil)
       terminal_service.read_keys_blocking(limit: 10, timeout: timeout)
     end
@@ -425,41 +340,6 @@ module EbookReader
       end
       # Fallback (tests/dev only)
       lines
-    end
-
-    def navigable_toc_indices
-      return memo[:navigable_toc_indices] if memo[:navigable_toc_indices]
-
-      entries = if doc.respond_to?(:toc_entries)
-                  Array(doc.toc_entries)
-                else
-                  []
-                end
-      indices = []
-      entries.each_with_index do |entry, idx|
-        indices << idx if entry&.chapter_index
-      end
-
-      if indices.empty?
-        fallback_count = entries.empty? ? doc&.chapters&.length.to_i : entries.length
-        memo[:navigable_toc_indices] = (0...fallback_count).to_a
-      else
-        memo[:navigable_toc_indices] = indices
-      end
-    end
-
-    def next_navigable_toc_index(current)
-      indices = navigable_toc_indices
-      indices.find { |idx| idx > current } || indices.last || current
-    end
-
-    def previous_navigable_toc_index(current)
-      indices = navigable_toc_indices
-      indices.reverse.find { |idx| idx < current } || indices.first || current
-    end
-
-    def reset_navigable_toc_cache!
-      memo[:navigable_toc_indices] = nil
     end
 
     # Hook for subclasses (MouseableReader) to clear any active selection/popup

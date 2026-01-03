@@ -6,7 +6,7 @@ require_relative '../domain/selectors/reader_selectors'
 module EbookReader
   module Application
     # Adapter exposing the annotation editor overlay through the same interface as
-    # the legacy screen component so Domain commands can drive it via the input
+    # the legacy screen component so Application commands can drive it via the input
     # dispatcher.
     class AnnotationEditorOverlaySession
       def initialize(state, dependencies, ui_controller)

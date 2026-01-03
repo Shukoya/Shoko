@@ -5,10 +5,11 @@ require 'spec_helper'
 RSpec.describe EbookReader::Domain::Selectors::MenuSelectors do
   let(:state) { EbookReader::Infrastructure::StateStore.new(EbookReader::Infrastructure::EventBus.new) }
 
-  it 'exposes menu selection and file input fields' do
+  it 'exposes menu selection and download fields' do
     expect(described_class.selected(state)).to eq(0)
     expect(described_class.selected_item(state)).to eq(0)
-    expect(described_class.file_input(state)).to eq('')
+    expect(described_class.download_query(state)).to eq('')
+    expect(described_class.download_selected(state)).to eq(0)
     expect([true, false]).to include(described_class.search_active?(state))
   end
 

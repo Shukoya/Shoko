@@ -5,7 +5,7 @@ require_relative 'navigation_commands'
 require_relative 'sidebar_commands'
 
 module EbookReader
-  module Domain
+  module Application
     module Commands
       # Commands that route to different actions based on application state
       class ConditionalNavigationCommand < BaseCommand

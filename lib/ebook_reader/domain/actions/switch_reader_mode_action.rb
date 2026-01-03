@@ -5,9 +5,9 @@ require_relative 'base_action'
 module EbookReader
   module Domain
     module Actions
-      # Switch reader mode: :read, :help, :toc, :bookmarks, :annotations
+      # Switch reader mode: :read, :help
       class SwitchReaderModeAction < BaseAction
-        VALID = %i[read help toc bookmarks annotations].freeze
+        VALID = %i[read help].freeze
 
         def apply(state)
           mode = (payload[:mode] || :read).to_sym

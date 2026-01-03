@@ -33,14 +33,6 @@ module EbookReader
           state_controller.valid_cache_path?(path)
         end
 
-        def sanitize_input_path(input)
-          state_controller.sanitize_input_path(input)
-        end
-
-        def handle_file_path(path)
-          state_controller.handle_file_path(path)
-        end
-
         private
 
         def state_controller

@@ -3,7 +3,7 @@
 require_relative 'base_command'
 
 module EbookReader
-  module Domain
+  module Application
     module Commands
       # Commands for sidebar navigation and interaction
       class SidebarCommand < BaseCommand

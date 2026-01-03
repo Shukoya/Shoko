@@ -31,7 +31,7 @@ module EbookReader
 
           def lines_per_page_for(content_height, config)
             spacing = if config.respond_to?(:dig)
-                        config.dig(:config, :line_spacing) || config.dig(:reader, :line_spacing)
+                        config.dig(:config, :line_spacing)
                       else
                         EbookReader::Domain::Selectors::ConfigSelectors.line_spacing(config)
                       end
@@ -66,7 +66,7 @@ module EbookReader
 
           def resolve_view_mode(config)
             if config.respond_to?(:dig)
-              config.dig(:reader, :view_mode) || config.dig(:config, :view_mode)
+              config.dig(:config, :view_mode)
             else
               EbookReader::Domain::Selectors::ConfigSelectors.view_mode(config)
             end || :split

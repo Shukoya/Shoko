@@ -123,8 +123,6 @@ module EbookReader
 
         # Keep legacy bindings for modes not yet converted
         register_help_bindings_new(reader_controller)
-        register_toc_bindings_new(reader_controller)
-        register_bookmarks_bindings_new(reader_controller)
         register_annotation_editor_bindings_new(reader_controller)
         register_library_bindings_new(reader_controller)
       end
@@ -170,49 +168,6 @@ module EbookReader
         @dispatcher.register_mode(:help, bindings)
       end
 
-      def register_toc_bindings_new(_reader_controller)
-        bindings = {}
-
-        # Exit TOC
-        bindings['t'] = :exit_toc
-        cancel_keys = Input::KeyDefinitions::ACTIONS[:cancel]
-        cancel_keys.each { |k| bindings[k] = :exit_toc }
-
-        # Navigation
-        nav_down = Input::KeyDefinitions::NAVIGATION[:down]
-        nav_up   = Input::KeyDefinitions::NAVIGATION[:up]
-        nav_down.each { |k| bindings[k] = :toc_down }
-        nav_up.each   { |k| bindings[k] = :toc_up }
-
-        # Selection
-        confirm_keys = Input::KeyDefinitions::ACTIONS[:confirm]
-        confirm_keys.each { |k| bindings[k] = :toc_select }
-
-        @dispatcher.register_mode(:toc, bindings)
-      end
-
-      def register_bookmarks_bindings_new(_reader_controller)
-        bindings = {}
-
-        # Exit bookmarks
-        bindings['B'] = :exit_bookmarks
-        cancel_keys = Input::KeyDefinitions::ACTIONS[:cancel]
-        cancel_keys.each { |k| bindings[k] = :exit_bookmarks }
-
-        # Navigation
-        nav_down = Input::KeyDefinitions::NAVIGATION[:down]
-        nav_up   = Input::KeyDefinitions::NAVIGATION[:up]
-        nav_down.each { |k| bindings[k] = :bookmark_down }
-        nav_up.each   { |k| bindings[k] = :bookmark_up }
-
-        # Actions
-        confirm_keys = Input::KeyDefinitions::ACTIONS[:confirm]
-        confirm_keys.each { |k| bindings[k] = :bookmark_select }
-        bindings['d'] = :delete_selected_bookmark
-
-        @dispatcher.register_mode(:bookmarks, bindings)
-      end
-
       def register_library_bindings_new(_reader_controller)
         # Keys are registered in MainMenu#register_library_bindings; this hook ensures mode exists
         # No-op here as dispatcher registration happens in MainMenu.
@@ -221,11 +176,11 @@ module EbookReader
       def register_annotation_editor_bindings_new(_reader_controller)
         bindings = {}
 
-        cancel_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.cancel
-        save_cmd   = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.save
-        back_cmd   = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.backspace
-        enter_cmd  = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.enter
-        insert_cmd = EbookReader::Domain::Commands::AnnotationEditorCommandFactory.insert_char
+        cancel_cmd = EbookReader::Application::Commands::AnnotationEditorCommandFactory.cancel
+        save_cmd   = EbookReader::Application::Commands::AnnotationEditorCommandFactory.save
+        back_cmd   = EbookReader::Application::Commands::AnnotationEditorCommandFactory.backspace
+        enter_cmd  = EbookReader::Application::Commands::AnnotationEditorCommandFactory.enter
+        insert_cmd = EbookReader::Application::Commands::AnnotationEditorCommandFactory.insert_char
 
         # Cancel editor
         bindings["\e"] = cancel_cmd
@@ -260,10 +215,6 @@ module EbookReader
           @dispatcher.activate(:annotation_editor)
         when :help
           @dispatcher.activate(:help)
-        when :toc
-          @dispatcher.activate(:toc)
-        when :bookmarks
-          @dispatcher.activate(:bookmarks)
         else
           @dispatcher.activate_stack([:read])
         end

@@ -50,8 +50,6 @@ module EbookReader
           @action_type ||= case selection_field
                            when :selected, :browse_selected
                              :menu
-                           when :toc_selected, :bookmark_selected
-                             :selections
                            when :sidebar_toc_selected, :sidebar_bookmarks_selected, :sidebar_annotations_selected
                              :sidebar
                            end

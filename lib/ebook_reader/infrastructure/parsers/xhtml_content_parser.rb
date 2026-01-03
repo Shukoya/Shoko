@@ -51,7 +51,7 @@ module EbookReader
             br: br,
             img: img,
             table: table,
-            block_level_elements: block_level_elements
+            block_level_elements: block_level_elements,
           }.freeze
         end
 
@@ -71,8 +71,8 @@ module EbookReader
           return [] unless body
 
           build_blocks(body)
-        rescue REXML::ParseException => error
-          Infrastructure::Logger.error('Failed to parse chapter HTML', error: error.message)
+        rescue REXML::ParseException => e
+          Infrastructure::Logger.error('Failed to parse chapter HTML', error: e.message)
           fallback_blocks
         end
 
@@ -407,7 +407,7 @@ module EbookReader
           rows = collect_descendants(element, 'tr')
           return [] if rows.empty?
 
-          lines = rows.map { |row| table_row_text(row) }.compact
+          lines = rows.filter_map { |row| table_row_text(row) }
           return [] if lines.empty?
 
           inline_newline = @tag_sets[:inline_newline]
@@ -480,13 +480,13 @@ module EbookReader
           'u' => { underline: true },
           'code' => { code: true, preserve_whitespace: true },
           'kbd' => { code: true, preserve_whitespace: true },
-          'samp' => { code: true, preserve_whitespace: true }
+          'samp' => { code: true, preserve_whitespace: true },
         }.freeze
 
         SPAN_STYLE_MATCHERS = {
           bold: /font-weight\s*:\s*bold/i,
           italic: /font-style\s*:\s*italic/i,
-          underline: /text-decoration\s*:\s*underline/i
+          underline: /text-decoration\s*:\s*underline/i,
         }.freeze
 
         PLACEHOLDER_TEXT = '[Image]'

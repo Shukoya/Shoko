@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative 'domain_command_bridge'
+require_relative 'command_bridge'
 
 module EbookReader
   module Input
@@ -16,17 +16,17 @@ module EbookReader
       # - BaseCommand instance: calls command.execute(context, key)
       def execute(command, context, key = nil)
         case command
-        when EbookReader::Domain::Commands::BaseCommand
-          # New: Support domain commands with parameter conversion
+        when EbookReader::Application::Commands::BaseCommand
+          # Support application commands with parameter conversion
           params = { key: key, triggered_by: :input }
           command.execute(context, params)
         when Symbol
-          # Route all symbols through domain command bridge
-          if DomainCommandBridge.domain_command?(command)
-            domain_command = DomainCommandBridge.symbol_to_command(command, context)
-            return :pass unless domain_command
+          # Route all symbols through the command bridge
+          if CommandBridge.command?(command)
+            mapped_command = CommandBridge.symbol_to_command(command, context)
+            return :pass unless mapped_command
 
-            execute(domain_command, context, key)
+            execute(mapped_command, context, key)
           else
             execute_symbol(command, context, key)
           end

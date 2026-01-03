@@ -3,7 +3,7 @@
 require 'spec_helper'
 require 'ebook_reader/controllers/input_controller'
 require 'ebook_reader/input/dispatcher'
-require 'ebook_reader/domain/commands/annotation_editor_commands'
+require 'ebook_reader/application/commands/annotation_editor_commands'
 
 RSpec.describe EbookReader::Controllers::InputController do
   let(:state) { instance_double('StateStore', get: :read, dispatch: nil) }

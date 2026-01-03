@@ -103,6 +103,17 @@ module EbookReader
         EbookReader::Components::RenderStyle.configure(EbookReader::Constants::Themes::DEFAULT_PALETTE)
       end
 
+      def sidebar_component
+        components.sidebar
+      end
+
+      def sidebar_bounds(total_width, total_height)
+        sidebar = components.sidebar
+        return nil unless sidebar
+
+        sidebar.sidebar_bounds_for(total_width, total_height)
+      end
+
       private
 
       attr_reader :deps, :components

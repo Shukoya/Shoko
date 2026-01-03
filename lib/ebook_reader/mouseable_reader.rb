@@ -66,6 +66,8 @@ module EbookReader
         return
       end
 
+      return if handle_sidebar_mouse(event)
+
       result = @mouse_handler.handle_event(event)
       return unless result
 
@@ -83,6 +85,35 @@ module EbookReader
     end
 
     private
+
+    def handle_sidebar_mouse(event)
+      return false if @mouse_handler.selecting
+
+      terminal_coords = @coordinate_service.mouse_to_terminal(event[:x], event[:y])
+      height, width = terminal_service.size
+      sidebar_bounds = render_coordinator.sidebar_bounds(width, height)
+      return false unless sidebar_bounds
+      return false unless @coordinate_service.within_bounds?(
+        terminal_coords[:x],
+        terminal_coords[:y],
+        sidebar_bounds
+      )
+
+      if event[:released] && event[:button].zero?
+        tab = render_coordinator.sidebar_component&.tab_for_point(
+          terminal_coords[:x],
+          terminal_coords[:y],
+          sidebar_bounds
+        )
+        if tab
+          ui_controller.activate_sidebar_tab(tab)
+          draw_screen
+        end
+      end
+
+      @mouse_handler.reset
+      true
+    end
 
     def handle_popup_click(event)
       # Use coordinate service for consistent mouse-to-terminal conversion

@@ -78,7 +78,7 @@ RSpec.describe EbookReader::Domain::Services::PageCalculatorService do
     state = container.resolve(:global_state)
     state.update({ %i[config page_numbering_mode] => :dynamic,
                    %i[config line_spacing] => :normal,
-                   %i[reader view_mode] => :single })
+                   %i[config view_mode] => :single })
 
     # WrappingService double should not be called during build_page_map when cached exists
     wrapper = instance_double(EbookReader::Domain::Services::WrappingService)

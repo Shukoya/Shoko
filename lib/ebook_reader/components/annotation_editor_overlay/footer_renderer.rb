@@ -45,9 +45,7 @@ module EbookReader
 
           min_cancel_col = save_spec.col + save_spec.width + 2
           max_cancel_col = geometry.content_x + geometry.content_width - cancel_spec.width
-          if cancel_spec.col < min_cancel_col
-            cancel_spec.col = [min_cancel_col, max_cancel_col].min
-          end
+          cancel_spec.col = [min_cancel_col, max_cancel_col].min if cancel_spec.col < min_cancel_col
 
           [save_spec, cancel_spec]
         end

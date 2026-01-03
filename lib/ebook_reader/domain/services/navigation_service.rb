@@ -16,35 +16,6 @@ module EbookReader
       # Pure business logic for book navigation.
       # Replaces the coupled NavigationService with clean domain logic.
       class NavigationService < BaseService
-        # Adapts the legacy two-argument initializer to the DI-backed BaseService API.
-        class LegacyDependencyWrapper
-          def initialize(state_store, page_calculator)
-            @state_store = state_store
-            @page_calculator = page_calculator
-          end
-
-          def resolve(name)
-            case name
-            when :state_store then @state_store
-            when :page_calculator then @page_calculator
-            else
-              raise ArgumentError, "Legacy dependency :#{name} not available"
-            end
-          end
-
-          def registered?(name)
-            %i[state_store page_calculator].include?(name)
-          end
-        end
-
-        def initialize(*args)
-          if args.length == 1
-            super(args.first)
-          else
-            super(LegacyDependencyWrapper.new(*args))
-          end
-        end
-
         # Navigate to next page
         def next_page
           ctx = build_nav_context
@@ -74,7 +45,9 @@ module EbookReader
                                @state_updater.apply({ %i[reader current_chapter] => chapter_index,
                                                       %i[reader current_page_index] => page_index })
                              end,
-                             -> { @absolute_applier.apply(Navigation::AbsoluteStrategy.jump_to_chapter(ctx, chapter_index)) })
+                             lambda {
+                               @absolute_applier.apply(Navigation::AbsoluteStrategy.jump_to_chapter(ctx, chapter_index))
+                             })
         end
 
         # Navigate to beginning of book
@@ -171,7 +144,6 @@ module EbookReader
 
           raise ArgumentError, "Chapter index #{index} exceeds total chapters #{total_chapters}"
         end
-
       end
     end
   end

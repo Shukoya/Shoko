@@ -4,7 +4,7 @@ require 'spec_helper'
 
 RSpec.describe EbookReader::Input::Commands do
   before do
-    allow(EbookReader::Input::DomainCommandBridge).to receive(:domain_command?).and_return(false)
+    allow(EbookReader::Input::CommandBridge).to receive(:command?).and_return(false)
   end
 
   it 'executes symbol methods with or without args' do
@@ -36,7 +36,7 @@ RSpec.describe EbookReader::Input::Commands do
   end
 
   it 'routes BaseCommand to execute with params' do
-    cmd = Class.new(EbookReader::Domain::Commands::BaseCommand) do
+    cmd = Class.new(EbookReader::Application::Commands::BaseCommand) do
       def perform(_context, params = {})
         :handled if params[:triggered_by] == :input
       end

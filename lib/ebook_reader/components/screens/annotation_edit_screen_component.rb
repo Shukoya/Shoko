@@ -49,7 +49,7 @@ module EbookReader
           :fill
         end
 
-        # --- Unified editor API (used by Domain::Commands) ---
+        # --- Unified editor API (used by Application::Commands) ---
         def save_annotation
           payload = edit_state.annotation_update_payload
           return unless payload

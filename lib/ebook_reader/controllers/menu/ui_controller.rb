@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative '../../helpers/terminal_sanitizer'
-
 module EbookReader
   module Controllers
     module Menu
@@ -21,7 +19,7 @@ module EbookReader
           when 0 then switch_to_browse
           when 1 then switch_to_mode(:library)
           when 2 then switch_to_mode(:annotations)
-          when 3 then open_file_dialog
+          when 3 then open_download_screen
           when 4 then switch_to_mode(:settings)
           when 5 then cleanup_and_exit(0, '')
           end
@@ -57,10 +55,9 @@ module EbookReader
           input_controller.activate(selectors.mode(state))
         end
 
-        def open_file_dialog
-          state.dispatch(menu_action(file_input: ''))
-          menu.open_file_screen.input = ''
-          state.dispatch(menu_action(mode: :open_file))
+        def open_download_screen
+          reset_download_state
+          state.dispatch(menu_action(mode: :download))
           input_controller.activate(selectors.mode(state))
         end
 
@@ -79,22 +76,57 @@ module EbookReader
           menu.main_menu_component.browse_screen.navigate(direction) if direction
         end
 
-        def handle_backspace_input
-          if selectors.search_active?(state)
-            handle_search_backspace
-          else
-            handle_file_backspace
-          end
-          menu.open_file_screen.input = state.get(%i[menu file_input])
+        def download_start_search
+          query = (state.get(%i[menu download_query]) || '').to_s
+          state.dispatch(menu_action(mode: :download_search, download_cursor: query.length))
+          input_controller.activate(selectors.mode(state))
         end
 
-        def handle_character_input(key)
-          char = key.to_s
-          return unless EbookReader::Helpers::TerminalSanitizer.printable_char?(char)
+        def download_exit_search
+          state.dispatch(menu_action(mode: :download))
+          input_controller.activate(selectors.mode(state))
+        end
 
-          file_input = (selectors.file_input(state) || '').to_s
-          state.dispatch(menu_action(file_input: file_input + char))
-          menu.open_file_screen.input = state.get(%i[menu file_input])
+        def download_submit_search
+          query = (state.get(%i[menu download_query]) || '').to_s
+          state_controller.search_downloads(query: query)
+          download_exit_search
+        end
+
+        def download_refresh
+          query = (state.get(%i[menu download_query]) || '').to_s
+          state_controller.search_downloads(query: query)
+        end
+
+        def download_next_page
+          next_url = state.get(%i[menu download_next])
+          return unless next_url
+
+          query = (state.get(%i[menu download_query]) || '').to_s
+          state_controller.search_downloads(query: query, page_url: next_url)
+        end
+
+        def download_prev_page
+          prev_url = state.get(%i[menu download_prev])
+          return unless prev_url
+
+          query = (state.get(%i[menu download_query]) || '').to_s
+          state_controller.search_downloads(query: query, page_url: prev_url)
+        end
+
+        def download_up
+          update_download_selection(-1)
+        end
+
+        def download_down
+          update_download_selection(1)
+        end
+
+        def download_confirm
+          book = selected_download_book
+          return unless book
+
+          state_controller.download_book(book)
         end
 
         def switch_to_edit_annotation(_annotation, _book_path)
@@ -226,12 +258,33 @@ module EbookReader
           state.dispatch(menu_action(search_query: before + after, search_cursor: prev))
         end
 
-        def handle_file_backspace
-          file_input = (selectors.file_input(state) || '').to_s
-          return unless file_input.length.positive?
+        def reset_download_state
+          state.dispatch(menu_action(
+                           download_query: '',
+                           download_cursor: 0,
+                           download_selected: 0,
+                           download_results: [],
+                           download_count: 0,
+                           download_next: nil,
+                           download_prev: nil,
+                           download_status: :idle,
+                           download_message: '',
+                           download_progress: 0.0
+                         ))
+        end
 
-          new_val = file_input[0...-1]
-          state.dispatch(menu_action(file_input: new_val))
+        def update_download_selection(delta)
+          results = Array(state.get(%i[menu download_results]))
+          max_index = [results.length - 1, 0].max
+          current = (state.get(%i[menu download_selected]) || 0).to_i
+          new_val = (current + delta).clamp(0, max_index)
+          state.dispatch(menu_action(download_selected: new_val))
+        end
+
+        def selected_download_book
+          results = Array(state.get(%i[menu download_results]))
+          index = (state.get(%i[menu download_selected]) || 0).to_i
+          results[index]
         end
 
         def selected_library_item

@@ -155,13 +155,13 @@ module EbookReader
         @flags.defer_page_map = false
       end
 
-      def submit_background_job(&block)
+      def submit_background_job(&)
         worker = background_worker
         if worker
-          worker.submit(&block)
+          worker.submit(&)
         else
           Thread.new do
-            block.call
+            yield
           rescue StandardError
             # ignore background failures
           end
@@ -181,9 +181,9 @@ module EbookReader
 
         @flags.pending_initial_calculation = false
         @flags.defer_page_map = true
-        if deps.page_calculator && deps.page_calculator.total_pages.to_i.positive?
-          @flags.defer_page_map = false
-        end
+        return unless deps.page_calculator && deps.page_calculator.total_pages.to_i.positive?
+
+        @flags.defer_page_map = false
       end
 
       def apply_invalidate_message(result)

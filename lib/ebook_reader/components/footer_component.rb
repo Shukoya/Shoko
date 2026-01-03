@@ -43,7 +43,7 @@ module EbookReader
       end
 
       def renderable_page_info?(view_model)
-        disallowed_modes = %i[help toc bookmarks]
+        disallowed_modes = %i[help]
         return false if view_model.respond_to?(:mode) && disallowed_modes.include?(view_model.mode)
         return false unless view_model.respond_to?(:show_page_numbers) && view_model.show_page_numbers
 

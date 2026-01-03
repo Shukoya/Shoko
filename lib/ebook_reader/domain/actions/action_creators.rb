@@ -15,18 +15,6 @@ module EbookReader
           UpdateReaderModeAction.new(:help)
         end
 
-        def self.switch_to_toc_mode
-          UpdateReaderModeAction.new(:toc)
-        end
-
-        def self.switch_to_bookmarks_mode
-          UpdateReaderModeAction.new(:bookmarks)
-        end
-
-        def self.switch_to_annotations_mode
-          UpdateReaderModeAction.new(:annotations)
-        end
-
         # Page navigation actions
         def self.go_to_page(page_index)
           UpdatePageAction.new(current_page_index: page_index)

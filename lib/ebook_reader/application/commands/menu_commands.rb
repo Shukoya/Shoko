@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
+require_relative 'base_command'
+
 module EbookReader
-  module Domain
+  module Application
     module Commands
       # Menu commands for top-level and browse screens
       class MenuCommand < BaseCommand

@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe EbookReader::Domain::Commands::MenuCommand do
+RSpec.describe EbookReader::Application::Commands::MenuCommand do
   let(:state) { EbookReader::Infrastructure::ObserverStateStore.new(EbookReader::Infrastructure::EventBus.new) }
 
   # Minimal fake annotations screen

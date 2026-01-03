@@ -19,9 +19,9 @@ module EbookReader
 
         TABS = %i[toc annotations bookmarks].freeze
         TAB_INFO = {
-          toc: { label: 'Contents', icon: '◉', key: 'g' },
-          annotations: { label: 'Notes', icon: '◈', key: 'a' },
-          bookmarks: { label: 'Bookmarks', icon: '◆', key: 'b' },
+          toc: { label: 'Contents', icon: '◉', key: 'T' },
+          annotations: { label: 'Notes', icon: '◈', key: 'A' },
+          bookmarks: { label: 'Bookmarks', icon: '◆', key: 'B' },
         }.freeze
 
         def initialize(state)
@@ -33,6 +33,26 @@ module EbookReader
           target = RenderTarget.new(surface: surface, bounds: bounds)
           draw_separator(target)
           render_tab_navigation(target)
+        end
+
+        def tab_for_point(bounds, col, row)
+          return nil unless bounds
+
+          local_row = row.to_i - bounds.y + 1
+          local_col = col.to_i - bounds.x + 1
+          return nil unless local_row.between?(2, 3)
+          return nil unless local_col.between?(1, bounds.width)
+
+          tab_width = (bounds.width - 2) / TABS.length
+          return nil if tab_width <= 0
+
+          offset = local_col - 2
+          return nil if offset.negative?
+
+          max_tabs_width = tab_width * TABS.length
+          return nil if offset >= max_tabs_width
+
+          TABS[offset / tab_width]
         end
 
         # Internal context for rendering a single tab button.

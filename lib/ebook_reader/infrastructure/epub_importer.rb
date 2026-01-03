@@ -28,7 +28,7 @@ module EbookReader
 
       def initialize(formatting_service: nil, extract_resources: false, progress_reporter: nil)
         @formatting_service = formatting_service
-        @extract_resources = !!extract_resources
+        @extract_resources = !extract_resources.nil?
         @progress_reporter = progress_reporter
       end
 
@@ -41,9 +41,9 @@ module EbookReader
           report('Reading container.xml...', progress: 0.0)
           container_xml = read_container(zip)
           report('Locating OPF package...', progress: 0.0)
-          opf_path      = locate_opf_path(zip, container_xml)
+          opf_path = locate_opf_path(zip, container_xml)
           report('Parsing OPF metadata...', progress: 0.0)
-          processor     = Helpers::OPFProcessor.new(opf_path, zip: zip)
+          processor = Helpers::OPFProcessor.new(opf_path, zip: zip)
 
           metadata = processor.extract_metadata
           report('Building manifest...', progress: 0.0)
@@ -59,7 +59,7 @@ module EbookReader
           report('Building table of contents...', progress: 0.0)
           toc_entries = build_toc_entries(chapters, processor.toc_entries, chapter_hrefs, opf_path)
           report('Extracting resources...', progress: 0.0) if @extract_resources
-          resources   = @extract_resources ? extract_resources(zip, opf_path, manifest) : {}
+          resources = @extract_resources ? extract_resources(zip, opf_path, manifest) : {}
 
           EpubCache::BookData.new(
             title: metadata[:title] || fallback_title(@epub_path),

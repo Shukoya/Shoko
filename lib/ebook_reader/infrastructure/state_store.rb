@@ -186,8 +186,6 @@ module EbookReader
           reader: {
             # Position state
             current_chapter: 0,
-            # Compatibility alias (legacy tests expect this under :reader)
-            view_mode: :split,
             left_page: 0,
             right_page: 0,
             single_page: 0,
@@ -200,8 +198,6 @@ module EbookReader
             running: true,
 
             # Lists and selections
-            toc_selected: 0,
-            bookmark_selected: 0,
             bookmarks: [],
             annotations: [],
 
@@ -231,7 +227,6 @@ module EbookReader
             # Sidebar state
             sidebar_visible: false,
             sidebar_active_tab: :toc,
-            sidebar_width_percent: 30,
             sidebar_toc_selected: 0,
             sidebar_annotations_selected: 0,
             sidebar_bookmarks_selected: 0,
@@ -241,15 +236,22 @@ module EbookReader
 
           menu: {
             selected: 0,
-            # Compatibility alias (legacy tests expect selected_index)
-            selected_index: 0,
             mode: :menu,
             browse_selected: 0,
             settings_selected: 1,
             search_query: '',
             search_cursor: 0,
-            file_input: '',
             search_active: false,
+            download_query: '',
+            download_cursor: 0,
+            download_selected: 0,
+            download_results: [],
+            download_count: 0,
+            download_next: nil,
+            download_prev: nil,
+            download_status: :idle,
+            download_message: '',
+            download_progress: 0.0,
           },
 
           config: {
@@ -267,7 +269,6 @@ module EbookReader
           ui: {
             terminal_width: 80,
             terminal_height: 24,
-            needs_redraw: true,
           },
         }
       end
@@ -301,7 +302,7 @@ module EbookReader
         case path_array
         when %i[reader current_chapter]
           raise ArgumentError, 'current_chapter must be non-negative' if value.negative?
-        when %i[reader view_mode], %i[config view_mode]
+        when %i[config view_mode]
           raise ArgumentError, 'invalid view_mode' unless %i[single split].include?(value)
         when %i[config kitty_images]
           raise ArgumentError, 'kitty_images must be boolean' unless [true, false].include?(value)

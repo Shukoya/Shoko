@@ -46,35 +46,32 @@ module EbookReader
       end
 
       def add_bookmark
-        # Basic bookmark functionality - store current position
-        current_chapter = @state.get(%i[reader current_chapter])
-        current_page_index = @state.get(%i[reader current_page_index])
-        bookmark_data = { chapter: current_chapter, page: current_page_index, timestamp: Time.now }
-
-        # Persist and refresh list
-        canonical = canonical_path_for_doc
-        view_mode = Domain::Selectors::ConfigSelectors.view_mode(@state)
-        line_offset = view_mode == :split ? @state.get(%i[reader left_page]) : @state.get(%i[reader single_page])
-        text_snippet = ''
-        begin
-          @bookmark_repository.add_for_book(canonical,
-                                            chapter_index: bookmark_data[:chapter],
-                                            line_offset: line_offset,
-                                            text_snippet: text_snippet)
-          bookmarks = @bookmark_repository.find_by_book_path(canonical)
-        rescue StandardError
-          bookmarks = @state.get(%i[reader bookmarks]) || []
+        bookmark_service = resolve_bookmark_service
+        if bookmark_service
+          bookmark_service.add_bookmark
+        else
+          position = current_bookmark_position
+          canonical = canonical_path_for_doc
+          begin
+            @bookmark_repository.add_for_book(canonical,
+                                              chapter_index: position[:chapter],
+                                              line_offset: position[:line_offset],
+                                              text_snippet: '')
+            bookmarks = @bookmark_repository.find_by_book_path(canonical)
+          rescue StandardError
+            bookmarks = @state.get(%i[reader bookmarks]) || []
+          end
+          @state.dispatch(EbookReader::Domain::Actions::UpdateBookmarksAction.new(bookmarks))
         end
-        @state.dispatch(EbookReader::Domain::Actions::UpdateBookmarksAction.new(bookmarks))
 
-        curr_ch = current_chapter
-        curr_page = @state.get(%i[reader current_page])
+        curr_ch = @state.get(%i[reader current_chapter]) || 0
+        curr_page = current_page_label
         set_message("Bookmark added at Chapter #{curr_ch + 1}, Page #{curr_page}")
       end
 
       def jump_to_bookmark
         bookmarks = bookmarks_list
-        selected_idx = @state.get(%i[reader bookmark_selected])
+        selected_idx = @state.get(%i[reader sidebar_bookmarks_selected]) || 0
         bookmark = bookmarks[selected_idx]
         return unless bookmark
 
@@ -91,10 +88,11 @@ module EbookReader
         end
 
         offset = bookmark.line_offset.to_i
+        stride = split_stride_for_state
         payload = {
           single_page: offset,
           left_page: offset,
-          right_page: offset + 1,
+          right_page: offset + stride,
           current_page: offset,
         }
 
@@ -112,7 +110,7 @@ module EbookReader
 
       def delete_selected_bookmark
         bookmarks = bookmarks_list
-        selected_idx = @state.get(%i[reader bookmark_selected])
+        selected_idx = @state.get(%i[reader sidebar_bookmarks_selected]) || 0
         bookmark = bookmarks[selected_idx]
         return unless bookmark
 
@@ -120,10 +118,14 @@ module EbookReader
         @bookmark_repository.delete_for_book(canonical, bookmark)
         load_bookmarks
         current_bookmarks = bookmarks_list
-        if current_bookmarks.any?
-          max_selected = [selected_idx, current_bookmarks.length - 1].min
-          @state.dispatch(EbookReader::Domain::Actions::UpdateSelectionsAction.new(bookmark_selected: max_selected))
-        end
+        max_selected = if current_bookmarks.any?
+                         [selected_idx, current_bookmarks.length - 1].min
+                       else
+                         0
+                       end
+        @state.dispatch(
+          EbookReader::Domain::Actions::UpdateSidebarAction.new(bookmarks_selected: max_selected)
+        )
         set_message(Constants::Messages::BOOKMARK_DELETED)
       end
 
@@ -143,6 +145,74 @@ module EbookReader
         ensure
           @state.dispatch(Domain::Actions::UpdateAnnotationsAction.new(annotations))
         end
+      end
+
+      def split_stride_for_state
+        return 1 unless @dependencies.respond_to?(:registered?) && @dependencies.registered?(:layout_service)
+
+        layout_service = @dependencies.resolve(:layout_service)
+        width = @state.get(%i[ui terminal_width])
+        height = @state.get(%i[ui terminal_height])
+        if (!width || !height) && @dependencies.registered?(:terminal_service)
+          height, width = @dependencies.resolve(:terminal_service).size
+        end
+        width = width.to_i
+        height = height.to_i
+        width = 80 if width <= 0
+        height = 24 if height <= 0
+
+        _, content_height = layout_service.calculate_metrics(width, height, :split)
+        spacing = @state.get(%i[config line_spacing]) || EbookReader::Constants::DEFAULT_LINE_SPACING
+        stride = layout_service.adjust_for_line_spacing(content_height, spacing)
+        stride = 1 if stride.to_i <= 0
+        stride
+      rescue StandardError
+        1
+      end
+
+      def resolve_bookmark_service
+        return nil unless @dependencies.respond_to?(:registered?) && @dependencies.registered?(:bookmark_service)
+
+        @dependencies.resolve(:bookmark_service)
+      rescue StandardError
+        nil
+      end
+
+      def current_bookmark_position
+        chapter = @state.get(%i[reader current_chapter]) || 0
+        if dynamic_page_numbering? &&
+           @dependencies.respond_to?(:registered?) &&
+           @dependencies.registered?(:page_calculator)
+          page_index = @state.get(%i[reader current_page_index]) || 0
+          page = @dependencies.resolve(:page_calculator)&.get_page(page_index)
+          if page
+            chapter = page[:chapter_index] || chapter
+            line = page[:start_line] || page['start_line']
+            return { chapter: chapter, line_offset: line.to_i }
+          end
+        end
+
+        view_mode = Domain::Selectors::ConfigSelectors.view_mode(@state)
+        line_offset = view_mode == :split ? @state.get(%i[reader left_page]) : @state.get(%i[reader single_page])
+        { chapter: chapter, line_offset: line_offset || 0 }
+      rescue StandardError
+        { chapter: chapter, line_offset: 0 }
+      end
+
+      def current_page_label
+        if dynamic_page_numbering?
+          ((@state.get(%i[reader current_page_index]) || 0).to_i + 1)
+        else
+          @state.get(%i[reader current_page]) || 0
+        end
+      rescue StandardError
+        0
+      end
+
+      def dynamic_page_numbering?
+        Domain::Selectors::ConfigSelectors.page_numbering_mode(@state) == :dynamic
+      rescue StandardError
+        false
       end
 
       def jump_to_annotation(annotation)
@@ -201,6 +271,8 @@ module EbookReader
       end
 
       private
+
+      private :split_stride_for_state
 
       def canonical_path_for_doc
         @doc.respond_to?(:canonical_path) ? @doc.canonical_path : @path
