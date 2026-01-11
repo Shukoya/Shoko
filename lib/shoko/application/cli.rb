@@ -29,7 +29,7 @@ module Shoko
       end
 
       def configure_parser(parser, options)
-        parser.banner = 'Usage: start [options] [file]'
+        parser.banner = 'Usage: shoko [options] [file]'
         parser.on('-d', '--debug', 'Enable debug logging') { options[:debug] = true }
         parser.on('--log PATH', 'Write JSON logs to PATH instead of discarding output') do |path|
           options[:log_path] = path
