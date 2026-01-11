@@ -1,5 +1,5 @@
 # frozen_string_literal: true
 
 module Shoko
-  VERSION = '0.9.212'
+  VERSION = '0.1.0'
 end
