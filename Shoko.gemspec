@@ -20,7 +20,9 @@ Gem::Specification.new do |spec|
   # Specify which files should be added to the gem
   spec.files = Dir.chdir(__dir__) do
     `git ls-files -z`.split("\x0").reject do |f|
-      (f == __FILE__) || f.match(%r{\A(?:(?:bin|test|spec|features)/|\.(?:git|circleci)|appveyor)})
+      f.end_with?('.gem') ||
+        (f == __FILE__) ||
+        f.match(%r{\A(?:(?:bin|test|spec|features)/|\.(?:git|circleci)|appveyor)})
     end.select { |f| File.file?(f) }
   end
   spec.bindir = 'bin'
