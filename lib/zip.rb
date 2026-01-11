@@ -271,17 +271,17 @@ module Zip
     def initialize(max_entry_uncompressed:, max_entry_compressed:, max_total_uncompressed:)
       @max_entry_uncompressed = LimitResolver.resolve(
         max_entry_uncompressed,
-        env: 'READER_ZIP_MAX_ENTRY_BYTES',
+        env: 'SHOKO_ZIP_MAX_ENTRY_BYTES',
         default: Limits::MAX_ENTRY_UNCOMPRESSED
       )
       @max_entry_compressed = LimitResolver.resolve(
         max_entry_compressed,
-        env: 'READER_ZIP_MAX_ENTRY_COMPRESSED_BYTES',
+        env: 'SHOKO_ZIP_MAX_ENTRY_COMPRESSED_BYTES',
         default: Limits::MAX_ENTRY_COMPRESSED
       )
       @max_total_uncompressed = LimitResolver.resolve(
         max_total_uncompressed,
-        env: 'READER_ZIP_MAX_TOTAL_BYTES',
+        env: 'SHOKO_ZIP_MAX_TOTAL_BYTES',
         default: Limits::MAX_TOTAL_UNCOMPRESSED
       )
       @total_uncompressed_bytes = 0

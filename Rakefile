@@ -23,7 +23,7 @@ end
 desc 'Console with library loaded'
 task :console do
   require 'irb'
-  require 'ebook_reader'
+  require 'shoko'
   ARGV.clear
   IRB.start
 end

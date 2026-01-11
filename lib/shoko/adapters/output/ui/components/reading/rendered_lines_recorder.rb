@@ -1,0 +1,64 @@
+# frozen_string_literal: true
+
+module Shoko
+  module Adapters::Output::Ui::Components
+    module Reading
+      # Records per-line geometry into the state buffer so selection/overlays can
+      # use the exact rendered layout.
+      class RenderedLinesRecorder
+        def initialize(buffer:, dependencies:)
+          @buffer = buffer
+          @dependencies = dependencies
+        end
+
+        def record(geometry)
+          return unless @buffer.is_a?(Hash)
+          return if skip_geometry?(geometry)
+
+          width = geometry.visible_width
+          @buffer[geometry.key] = entry_for(geometry, width)
+
+          dump_geometry(geometry) if geometry_debug_enabled?
+        end
+
+        private
+
+        def skip_geometry?(geometry)
+          width = geometry.visible_width
+          width <= 0 && geometry.plain_text.to_s.empty?
+        end
+
+        def entry_for(geometry, width)
+          end_col = geometry.column_origin + width - 1
+          {
+            row: geometry.row,
+            col: geometry.column_origin,
+            col_end: end_col,
+            text: geometry.plain_text,
+            width: width,
+            geometry: geometry,
+          }
+        end
+
+        def geometry_debug_enabled?
+          primary = ENV.fetch('SHOKO_DEBUG_GEOMETRY', '').to_s.strip
+          primary == '1'
+        end
+
+        def dump_geometry(geometry)
+          payload = geometry.to_h
+          logger = resolve_logger
+          return logger.debug('geometry.line', payload) if logger
+
+          warn("[geometry] #{payload}")
+        end
+
+        def resolve_logger
+          @dependencies.resolve(:logger)
+        rescue StandardError
+          nil
+        end
+      end
+    end
+  end
+end

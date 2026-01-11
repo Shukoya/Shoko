@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-require_relative 'lib/ebook_reader/version'
+require_relative 'lib/shoko/shared/version'
 
 Gem::Specification.new do |spec|
-  spec.name = 'reader'
-  spec.version = EbookReader::VERSION
+spec.name = 'shoko'
+spec.version = Shoko::VERSION
   spec.authors = ['Your Name']
   spec.email = ['your.email@example.com']
 
@@ -27,7 +27,7 @@ Gem::Specification.new do |spec|
     end
   end
   spec.bindir = 'bin'
-  spec.executables = ['ebook_reader']
+spec.executables = ['start']
   spec.require_paths = ['lib']
 
   # Runtime dependencies
